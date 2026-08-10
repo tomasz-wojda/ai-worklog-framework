@@ -48,6 +48,7 @@
       "items": {
         "type": "object",
         "properties": {
+          "controller": { "type": "string" },
           "job": { "type": "string" },
           "number": { "type": "integer" },
           "result": { "type": "string", "enum": ["success", "failure", "running", "unknown"] },

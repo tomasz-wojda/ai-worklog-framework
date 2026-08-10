@@ -140,6 +140,19 @@ def build_parser() -> argparse.ArgumentParser:
     closeout_report = closeout_sub.add_parser("report", help="Generate close-out report")
     closeout_report.add_argument("key", help="JIRA ticket key")
 
+    reconcile_parser = subparsers.add_parser(
+        "reconcile", help="Cross-system read-only reconciliation", parents=[parent_parser]
+    )
+    reconcile_sub = reconcile_parser.add_subparsers(dest="reconcile_action")
+    reconcile_status = reconcile_sub.add_parser("status", help="Reconcile ticket state with external systems")
+    reconcile_status.add_argument("key", help="JIRA ticket key")
+    reconcile_status.add_argument(
+        "--system",
+        action="append",
+        help="Limit reconciliation to specific systems",
+    )
+    reconcile_status.add_argument("--json", action="store_true", help="Print structured JSON report")
+
     # diagnostics
     diag_parser = subparsers.add_parser("diag", help="Diagnostic packs", parents=[parent_parser])
     diag_sub = diag_parser.add_subparsers(dest="diag_action")
@@ -162,6 +175,35 @@ def build_parser() -> argparse.ArgumentParser:
     toolchain_sub.add_parser("list", help="List tools and resolved environments", parents=[parent_parser])
     toolchain_env = toolchain_sub.add_parser("env", help="Print shell exports for a tool", parents=[parent_parser])
     toolchain_env.add_argument("tool", help="Tool name (e.g. jira-cli, newrelic-cli)")
+
+    jenkins_parser = subparsers.add_parser("jenkins", help="Jenkins operator", parents=[parent_parser])
+    jenkins_sub = jenkins_parser.add_subparsers(dest="jenkins_action")
+    jenkins_controllers = jenkins_sub.add_parser("controllers", help="List configured controllers")
+    jenkins_controllers.add_argument("--json", action="store_true")
+    jenkins_health = jenkins_sub.add_parser("health", help="Controller health")
+    jenkins_health.add_argument("controller", nargs="?")
+    jenkins_health.add_argument("--json", action="store_true")
+    jenkins_job = jenkins_sub.add_parser("job", help="Inspect a job")
+    jenkins_job.add_argument("controller", nargs="?")
+    jenkins_job.add_argument("job", nargs="?")
+    jenkins_job.add_argument("--builds", type=int)
+    jenkins_job.add_argument("--parameters", action="store_true")
+    jenkins_job.add_argument("--json", action="store_true")
+    jenkins_plugins = jenkins_sub.add_parser("plugins", help="Installed plugins")
+    jenkins_plugins.add_argument("controller", nargs="?")
+    jenkins_plugins.add_argument("--require", action="append", default=[])
+    jenkins_plugins.add_argument("--json", action="store_true")
+    jenkins_credentials = jenkins_sub.add_parser("credentials", help="Credential metadata")
+    jenkins_credentials.add_argument("controller", nargs="?")
+    jenkins_credentials.add_argument("--domain")
+    jenkins_credentials.add_argument("--json", action="store_true")
+    jenkins_seed = jenkins_sub.add_parser("seed", help="Seed job status")
+    jenkins_seed.add_argument("controller", nargs="?")
+    jenkins_seed.add_argument("job", nargs="?")
+    jenkins_seed.add_argument("--json", action="store_true")
+    jenkins_syntax = jenkins_sub.add_parser("syntax-check", help="Validate pipeline syntax")
+    jenkins_syntax.add_argument("file", nargs="*")
+    jenkins_syntax.add_argument("--json", action="store_true")
 
     return parser
 
@@ -224,6 +266,10 @@ def dispatch(args: argparse.Namespace) -> int:
         from ai_worklog_framework.reports import closeout
         return closeout.run(args)
 
+    if args.command == "reconcile":
+        from ai_worklog_framework.reconciliation import commands as reconcile_cmds
+        return reconcile_cmds.run(args)
+
     if args.command == "diag":
         from ai_worklog_framework.diagnostics import commands as diag_cmds
         return diag_cmds.run(args)
@@ -231,6 +277,10 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "toolchain":
         from ai_worklog_framework.toolchain import commands as toolchain_cmds
         return toolchain_cmds.run(args)
+
+    if args.command == "jenkins":
+        from ai_worklog_framework.jenkins import commands as jenkins_cmds
+        return jenkins_cmds.run(args)
 
     build_parser().print_help()
     return EXIT_USER_ERROR

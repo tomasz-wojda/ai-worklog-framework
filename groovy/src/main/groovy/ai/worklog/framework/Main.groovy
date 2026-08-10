@@ -6,7 +6,9 @@ import ai.worklog.framework.commands.CloseoutCommands
 import ai.worklog.framework.commands.DailyCommands
 import ai.worklog.framework.commands.DeliveryCommands
 import ai.worklog.framework.commands.DiagnosticsCommands
+import ai.worklog.framework.commands.JenkinsCommands
 import ai.worklog.framework.commands.PreflightCommands
+import ai.worklog.framework.commands.ReconciliationCommands
 import ai.worklog.framework.commands.StateCommands
 import ai.worklog.framework.commands.TicketCommands
 import ai.worklog.framework.commands.ToolchainCommands
@@ -17,7 +19,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.StateManager
 
 class Main {
-    static final String VERSION = '0.2.0'
+    static final String VERSION = '0.4.0'
 
     static void main(String[] input) {
         int code
@@ -82,6 +84,12 @@ class Main {
                 return DiagnosticsCommands.run(action, args, frameworkRoot, paths)
             case 'toolchain':
                 return ToolchainCommands.run(action, args, frameworkRoot, config)
+            case 'reconcile':
+                return ReconciliationCommands.run(
+                    action, args, frameworkRoot, paths, config, catalog, states
+                )
+            case 'jenkins':
+                return JenkinsCommands.run(action, args, frameworkRoot, paths, config)
             default:
                 help()
                 return exitCodes.userError
@@ -104,7 +112,7 @@ class Main {
 
     static void help() {
         println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [--version]'
-        println '                  {workspace,catalog,ticket,state,preflight,day,delivery,closeout,diag,toolchain} ...'
+        println '                  {workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
         println()
         println 'DevOps daily workflow automation framework'
         println()
@@ -114,6 +122,8 @@ class Main {
         println '  ticket       Ticket preparation'
         println '  state        Structured ticket state'
         println '  preflight    Environment preflight checks'
+        println '  reconcile    Cross-system read-only reconciliation'
+        println '  jenkins      Read-only Jenkins operator'
         println '  day          Daily routines'
         println '  delivery     Delivery state tracking'
         println '  closeout     Close-out and handover'

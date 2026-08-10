@@ -14,7 +14,11 @@ from typing import Any
 def framework_root() -> Path:
     current = Path(__file__).resolve().parent
     for candidate in (current, *current.parents):
-        if (candidate / "shared").is_dir() and (candidate / "pyproject.toml").is_file():
+        if (
+            (candidate / "shared").is_dir()
+            and (candidate / "groovy").is_dir()
+            and (candidate / "bin" / "ai-worklog").is_file()
+        ):
             return candidate
     return Path(__file__).resolve().parents[3]
 

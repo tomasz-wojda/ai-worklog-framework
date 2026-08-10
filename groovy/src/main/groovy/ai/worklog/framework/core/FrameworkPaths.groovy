@@ -88,7 +88,7 @@ class FrameworkPaths {
         for (int i = 0; i < 20; i++) {
             if (new File(current, 'shared').isDirectory() &&
                 new File(current, 'groovy').isDirectory() &&
-                new File(current, 'pyproject.toml').isFile()) {
+                new File(current, 'bin/ai-worklog').isFile()) {
                 return current
             }
             if (current.parentFile == null || current.parentFile == current) {

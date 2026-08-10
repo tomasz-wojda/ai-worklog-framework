@@ -26,6 +26,42 @@
     "adapters": {
       "type": "object",
       "description": "Adapter-specific configuration",
+      "properties": {
+        "reconciliation": {
+          "type": "object",
+          "properties": {
+            "enabled_systems": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["jira", "git", "github", "jenkins", "argocd", "tempo"]
+              },
+              "uniqueItems": true
+            },
+            "http_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+            "process_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+            "repositories_root": {"type": "string"},
+            "jenkins_max_builds": {"type": "integer", "minimum": 1, "maximum": 100}
+          },
+          "additionalProperties": false
+        },
+        "jenkins": {
+          "type": "object",
+          "properties": {
+            "ai_vault_root": {"type": "string"},
+            "syntax_check_script": {"type": "string"},
+            "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+            "max_builds": {"type": "integer", "minimum": 1, "maximum": 100},
+            "required_plugins": {
+              "type": "array",
+              "items": {"type": "string"},
+              "uniqueItems": true
+            },
+            "credential_domain": {"type": "string"}
+          },
+          "additionalProperties": false
+        }
+      },
       "additionalProperties": true
     },
     "preflight": {

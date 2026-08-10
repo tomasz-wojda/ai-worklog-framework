@@ -1,0 +1,25 @@
+{
+  "timeouts": {
+    "http_seconds": 10,
+    "process_seconds": 15
+  },
+  "max_builds": 5,
+  "credential_domain": "_",
+  "required_plugins": [],
+  "sensitive_parameter_patterns": [
+    "password",
+    "secret",
+    "token",
+    "credential",
+    "key",
+    "auth"
+  ],
+  "seed_failure_results": ["FAILURE", "UNSTABLE", "ABORTED"],
+  "api_trees": {
+    "health": "mode,quietingDown,numExecutors,nodeDescription",
+    "job": "name,url,color,buildable,inQueue,lastBuild[number,result,timestamp,duration,building],builds[number,result,timestamp,duration,building]",
+    "job_parameters": "name,url,color,buildable,inQueue,actions[parameterDefinitions[name]],lastBuild[number,result,timestamp,duration,building,actions[parameters[name,value]]],builds[number,result,timestamp,duration,building]",
+    "plugins": "plugins[shortName,version,active,enabled]",
+    "credentials": "credentials[id,typeName,displayName,description]"
+  }
+}

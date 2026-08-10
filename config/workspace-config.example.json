@@ -1,6 +1,21 @@
 {
   "catalog_path": "catalog",
   "interface_path": "worklog/interface",
+  "adapters": {
+    "reconciliation": {
+      "enabled_systems": ["jira", "git", "github", "jenkins", "argocd", "tempo"],
+      "http_timeout_seconds": 10,
+      "process_timeout_seconds": 15,
+      "repositories_root": "repos",
+      "jenkins_max_builds": 5
+    },
+    "jenkins": {
+      "timeout_seconds": 10,
+      "max_builds": 5,
+      "required_plugins": [],
+      "credential_domain": "_"
+    }
+  },
   "toolchain": {
     "java": {
       "17": "/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home",

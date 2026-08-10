@@ -32,6 +32,15 @@ case "${TOOL}" in
     newrelic-cli)
         GROOVY_SCRIPT="${AI_WORKLOG_WORKSPACE}/newrelic/newrelic-info.groovy"
         ;;
+    jenkins-syntax-check)
+        AI_VAULT_ROOT="${AI_VAULT_ROOT:-${AI_WORKLOG_WORKSPACE}/repos/ai-vault}"
+        SYNTAX_CHECK_SCRIPT="${AI_VAULT_ROOT}/skills/jenkins-pipeline-architect/scripts/syntax_check.sh"
+        if [ ! -f "${SYNTAX_CHECK_SCRIPT}" ]; then
+            echo "Jenkins syntax-check script not found: ${SYNTAX_CHECK_SCRIPT}" >&2
+            exit 1
+        fi
+        exec "${SYNTAX_CHECK_SCRIPT}" "$@"
+        ;;
     *)
         echo "Unknown tool mapping: ${TOOL}" >&2
         exit 1

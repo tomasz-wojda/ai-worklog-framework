@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Reconciliation Report",
+  "type": "object",
+  "required": ["ticket_key", "timestamp", "overall_status", "observations", "contradictions"],
+  "properties": {
+    "ticket_key": {"type": "string"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "overall_status": {
+      "type": "string",
+      "enum": ["ready", "degraded", "blocked", "error", "unknown"]
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["system", "source", "status", "message", "details"],
+        "properties": {
+          "system": {"type": "string"},
+          "source": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["ready", "degraded", "blocked", "error", "unknown"]
+          },
+          "message": {"type": "string"},
+          "details": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "contradictions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "system", "severity", "expected", "observed", "source", "message"],
+        "properties": {
+          "code": {"type": "string"},
+          "system": {"type": "string"},
+          "severity": {
+            "type": "string",
+            "enum": ["ready", "degraded", "blocked", "error", "unknown"]
+          },
+          "expected": {"type": "string"},
+          "observed": {"type": "string"},
+          "source": {"type": "string"},
+          "message": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

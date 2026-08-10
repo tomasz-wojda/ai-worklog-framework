@@ -1,4 +1,5 @@
 import json
+import os
 import platform
 import re
 import subprocess
@@ -20,6 +21,29 @@ def run(runtime: str | None, *arguments: str) -> subprocess.CompletedProcess[str
     return subprocess.run(command, capture_output=True, text=True, timeout=30)
 
 
+def run_in_workspace(
+    runtime: str,
+    workspace: Path,
+    *arguments: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        str(CLI),
+        "--runtime",
+        runtime,
+        "--workspace",
+        str(workspace),
+        *arguments,
+    ]
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=env,
+    )
+
+
 def normalize(value: str) -> str:
     return re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", "<TIMESTAMP>", value)
 
@@ -37,12 +61,12 @@ def test_runtime_versions_are_explicit() -> None:
     assert groovy.returncode == 0
     assert python.returncode == 0
     assert re.fullmatch(
-        r"ai-worklog 0\.2\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
+        r"ai-worklog 0\.4\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
         groovy.stdout.strip(),
     )
     assert (
         python.stdout.strip()
-        == f"ai-worklog 0.2.0 (python {platform.python_version()})"
+        == f"ai-worklog 0.4.0 (python {platform.python_version()})"
     )
 
 
@@ -142,3 +166,147 @@ def test_user_error_matches() -> None:
     groovy = run("groovy", "catalog", "search", "does-not-exist")
     assert groovy.returncode == python.returncode == 1
     assert groovy.stdout == python.stdout
+
+
+def test_reconciliation_human_output_matches() -> None:
+    arguments = ("reconcile", "status", "TEST-1", "--system", "git")
+    python = run("python", *arguments)
+    groovy = run("groovy", *arguments)
+    assert python.returncode == groovy.returncode == 0
+    assert normalize(python.stdout) == normalize(groovy.stdout)
+
+
+def test_reconciliation_json_matches() -> None:
+    arguments = ("reconcile", "status", "TEST-1", "--json")
+    python = run("python", *arguments)
+    groovy = run("groovy", *arguments)
+    assert python.returncode == groovy.returncode == 0
+    python_payload = json.loads(python.stdout)
+    groovy_payload = json.loads(groovy.stdout)
+    python_payload["timestamp"] = "<TIMESTAMP>"
+    groovy_payload["timestamp"] = "<TIMESTAMP>"
+    for payload in (python_payload, groovy_payload):
+        for observation in payload["observations"]:
+            if "fetched_at" in observation["details"]:
+                observation["details"]["fetched_at"] = "<TIMESTAMP>"
+    assert python_payload == groovy_payload
+
+
+def test_reconciliation_user_errors_match() -> None:
+    for arguments in (
+        ("reconcile", "status", "TEST-999"),
+        ("reconcile", "status", "TEST-1", "--system", "invalid"),
+    ):
+        python = run("python", *arguments)
+        groovy = run("groovy", *arguments)
+        assert python.returncode == groovy.returncode == 1
+        assert python.stdout == groovy.stdout
+
+
+def test_reconciliation_blocking_contradiction_matches(tmp_path) -> None:
+    state_dir = tmp_path / ".ai-worklog" / "state"
+    state_dir.mkdir(parents=True)
+    state = json.loads(
+        (WORKSPACE / ".ai-worklog" / "state" / "TEST-1.json").read_text()
+    )
+    state["repositories"] = ["missing-repository"]
+    (state_dir / "TEST-1.json").write_text(json.dumps(state))
+    arguments = (
+        "reconcile", "status", "TEST-1", "--system", "git", "--json",
+    )
+    python = run_in_workspace("python", tmp_path, *arguments)
+    groovy = run_in_workspace("groovy", tmp_path, *arguments)
+    assert python.returncode == groovy.returncode == 3
+    python_payload = json.loads(python.stdout)
+    groovy_payload = json.loads(groovy.stdout)
+    python_payload["timestamp"] = "<TIMESTAMP>"
+    groovy_payload["timestamp"] = "<TIMESTAMP>"
+    assert python_payload == groovy_payload
+    assert python_payload["contradictions"][0]["code"] == "repo_missing"
+
+
+def test_reconciliation_malformed_adapter_response_matches(tmp_path) -> None:
+    state_dir = tmp_path / ".ai-worklog" / "state"
+    catalog_dir = tmp_path / ".ai-worklog" / "catalog"
+    fake_bin = tmp_path / "bin"
+    state_dir.mkdir(parents=True)
+    catalog_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    state = json.loads(
+        (WORKSPACE / ".ai-worklog" / "state" / "TEST-1.json").read_text()
+    )
+    state["services"] = ["fixture-service"]
+    (state_dir / "TEST-1.json").write_text(json.dumps(state))
+    catalog = [{
+        "id": "fixture-service",
+        "name": "Fixture Service",
+        "type": "application",
+        "repositories": [{
+            "url": "https://github.com/example-org/fixture-service",
+            "local_dir": "fixture-service",
+        }],
+    }]
+    (catalog_dir / "fixture.json").write_text(json.dumps(catalog))
+    gh = fake_bin / "gh"
+    gh.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--version\" ]; then exit 0; fi\n"
+        "printf 'not-json'\n"
+    )
+    gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    arguments = (
+        "reconcile", "status", "TEST-1", "--system", "github", "--json",
+    )
+    python = run_in_workspace("python", tmp_path, *arguments, env=env)
+    groovy = run_in_workspace("groovy", tmp_path, *arguments, env=env)
+    assert python.returncode == groovy.returncode == 2
+    python_payload = json.loads(python.stdout)
+    groovy_payload = json.loads(groovy.stdout)
+    python_payload["timestamp"] = "<TIMESTAMP>"
+    groovy_payload["timestamp"] = "<TIMESTAMP>"
+    assert python_payload == groovy_payload
+
+
+def test_reconciliation_redacts_adapter_payloads(tmp_path) -> None:
+    state_dir = tmp_path / ".ai-worklog" / "state"
+    catalog_dir = tmp_path / ".ai-worklog" / "catalog"
+    fake_bin = tmp_path / "bin"
+    state_dir.mkdir(parents=True)
+    catalog_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    state = json.loads(
+        (WORKSPACE / ".ai-worklog" / "state" / "TEST-1.json").read_text()
+    )
+    state["services"] = ["fixture-service"]
+    (state_dir / "TEST-1.json").write_text(json.dumps(state))
+    catalog = [{
+        "id": "fixture-service",
+        "name": "Fixture Service",
+        "type": "application",
+        "repositories": [{
+            "url": "https://github.com/example-org/fixture-service",
+            "local_dir": "fixture-service",
+        }],
+    }]
+    (catalog_dir / "fixture.json").write_text(json.dumps(catalog))
+    gh = fake_bin / "gh"
+    gh.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--version\" ]; then exit 0; fi\n"
+        "printf '[{\"number\":1,\"state\":\"OPEN\",\"isDraft\":false,"
+        "\"url\":\"https://github.com/example-org/fixture-service/pull/1\","
+        "\"title\":\"token=secret-value\"}]'\n"
+    )
+    gh.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    arguments = (
+        "reconcile", "status", "TEST-1", "--system", "github", "--json",
+    )
+    python = run_in_workspace("python", tmp_path, *arguments, env=env)
+    groovy = run_in_workspace("groovy", tmp_path, *arguments, env=env)
+    assert python.returncode == groovy.returncode == 0
+    assert "secret-value" not in python.stdout
+    assert "secret-value" not in groovy.stdout

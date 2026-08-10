@@ -16,7 +16,7 @@ ai-worklog-framework/
 │   ├── ai-worklog-groovy               <- Direct Groovy launcher
 │   └── ai-worklog-python               <- Direct Python launcher
 ├── catalog/
-│   └── services.json                 <- Versioned service and delivery metadata
+│   └── examples.json                 <- Fictional service and delivery examples
 ├── config/
 │   └── workspace-config.example.json <- Java/Groovy and workspace example
 ├── schemas/
@@ -28,14 +28,16 @@ ai-worklog-framework/
 │   ├── src/main/groovy/              <- Groovy CLI and command implementation
 │   ├── src/test/groovy/              <- Groovy unit tests
 │   └── build.gradle
-├── python/src/ai_worklog_framework/
-│   ├── adapters/                     <- Read-only external service adapters
-│   ├── catalog/                      <- Catalog and ticket preparation
-│   ├── delivery/                     <- Delivery lifecycle reporting
-│   ├── diagnostics/                  <- Reusable diagnostic packs
-│   ├── reports/                      <- Daily and close-out reports
-│   ├── state/                        <- Structured ticket state
-│   └── toolchain/                    <- Python, Java, and Groovy routing
+├── python/
+│   ├── pyproject.toml                  <- Python package and editable install
+│   └── src/ai_worklog_framework/
+│       ├── adapters/                   <- Read-only external service adapters
+│       ├── catalog/                    <- Catalog and ticket preparation
+│       ├── delivery/                   <- Delivery lifecycle reporting
+│       ├── diagnostics/                <- Reusable diagnostic packs
+│       ├── reports/                    <- Daily and close-out reports
+│       ├── state/                      <- Structured ticket state
+│       └── toolchain/                  <- Python, Java, and Groovy routing
 ├── scripts/
 │   ├── bootstrap.sh                  <- Safe workspace interface setup
 │   └── run-groovy-tool.sh            <- Per-tool Java/Groovy launcher
@@ -44,7 +46,6 @@ ai-worklog-framework/
 │   ├── parity/                       <- Python/Groovy contract tests
 │   └── unit/                         <- Python unit tests
 ├── .gitignore
-├── pyproject.toml
 └── README.md
 ```
 
@@ -103,7 +104,7 @@ fallback and test environment with:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -e .
+python3 -m pip install -e python/
 ```
 
 Select a runtime explicitly when needed:
@@ -274,6 +275,32 @@ ai-worklog state show PROJ-1234
 State writes are dry-runs unless `--apply` is present. Values may be strings or
 JSON literals, and every update is validated before an atomic file replacement.
 
+### Read-only Reconciliation
+
+```bash
+ai-worklog reconcile status PROJ-1234
+ai-worklog reconcile status PROJ-1234 --system jenkins --json
+```
+
+Reconciliation compares structured ticket state with Jira, Git, GitHub,
+Jenkins, Argo CD, and Tempo without modifying local or external state.
+
+### Jenkins Operator
+
+```bash
+ai-worklog jenkins controllers
+ai-worklog jenkins health primary
+ai-worklog jenkins job primary folder/job --builds 5 --parameters
+ai-worklog jenkins plugins primary --require workflow-job
+ai-worklog jenkins credentials primary --domain _
+ai-worklog jenkins seed primary seed-job
+ai-worklog jenkins syntax-check Jenkinsfile
+```
+
+Jenkins operations are read-only. Credential output is limited to identifiers
+and descriptive metadata, build parameters omit values, and syntax validation
+delegates to the configured `ai-vault` validator.
+
 ### Daily Routines
 
 ```bash
@@ -350,13 +377,14 @@ Install test dependencies in the virtual environment:
 
 ```bash
 source .venv/bin/activate
+python3 -m pip install -e python/
 python3 -m pip install pytest
 ```
 
 Run the test suite:
 
 ```bash
-python3 -m pytest tests/ -q
+python3 -m pytest -c python/pyproject.toml tests/ -q
 JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle -p groovy test
 ```
 
@@ -394,4 +422,4 @@ Changes to commands or state schemas may require matching updates to the
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).

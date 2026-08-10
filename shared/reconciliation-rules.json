@@ -1,0 +1,49 @@
+{
+  "systems": ["jira", "git", "github", "jenkins", "argocd", "tempo"],
+  "timeouts": {
+    "http_seconds": 10,
+    "process_seconds": 15
+  },
+  "repositories_root": "repos",
+  "jenkins_max_builds": 5,
+  "jira": {
+    "complete_categories": ["done"],
+    "active_categories": ["indeterminate", "new"],
+    "fields": "summary,status,assignee,created,updated"
+  },
+  "jenkins": {
+    "success_results": ["SUCCESS"],
+    "failure_results": ["FAILURE", "UNSTABLE", "ABORTED"]
+  },
+  "argocd": {
+    "synced_states": ["Synced", "synced"],
+    "out_of_sync_states": ["OutOfSync", "out_of_sync"]
+  },
+  "tempo": {
+    "api_path": "/rest/tempo-timesheets/3/worklogs",
+    "seconds_tolerance": 0
+  },
+  "contradiction_codes": {
+    "jira_summary_mismatch": {"severity": "degraded"},
+    "jira_complete_impl_incomplete": {"severity": "blocked"},
+    "closeout_complete_jira_active": {"severity": "blocked"},
+    "repo_missing": {"severity": "blocked"},
+    "uncommitted_mismatch": {"severity": "degraded"},
+    "unpushed_commits": {"severity": "degraded"},
+    "pr_missing_external": {"severity": "blocked"},
+    "pr_state_mismatch": {"severity": "degraded"},
+    "pr_discovered_not_recorded": {"severity": "degraded"},
+    "pr_url_mismatch": {"severity": "degraded"},
+    "build_missing": {"severity": "blocked"},
+    "build_result_mismatch": {"severity": "blocked"},
+    "merged_pr_no_build": {"severity": "degraded"},
+    "jenkins_job_unresolved": {"severity": "degraded"},
+    "sync_state_mismatch": {"severity": "blocked"},
+    "revision_mismatch": {"severity": "blocked"},
+    "argocd_app_mismatch": {"severity": "degraded"},
+    "deployment_complete_not_synced": {"severity": "blocked"},
+    "tempo_logged_zero": {"severity": "blocked"},
+    "tempo_seconds_mismatch": {"severity": "degraded"},
+    "tempo_unlogged_has_time": {"severity": "degraded"}
+  }
+}
