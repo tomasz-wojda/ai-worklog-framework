@@ -21,6 +21,11 @@ _ALLOWED_REPORT_KEYS = frozenset({
     "message",
     "domain",
     "required",
+    "folder",
+    "query",
+    "view",
+    "job",
+    "build_selector",
 })
 _ALLOWED_REQUIRED_KEYS = frozenset({"requested", "missing", "inactive"})
 
@@ -69,10 +74,20 @@ def _emit_error(operation: str, message: str, json_output: bool, controller: Opt
         print(message)
 
 
-def _render_human(report: JenkinsReport) -> None:
+def _render_human(report: JenkinsReport, payload: Optional[dict] = None) -> None:
+    payload = payload or {}
     print(f"Jenkins {report.operation}")
     if report.controller:
         print(f"  Controller: {report.controller}")
+    for key, label in (
+        ("folder", "Folder"),
+        ("query", "Query"),
+        ("view", "View"),
+        ("job", "Job"),
+        ("build_selector", "Build selector"),
+    ):
+        if payload.get(key):
+            print(f"  {label}: {payload[key]}")
     print(f"  Fetched: {report.fetched_at}")
     print(f"  Status: {report.status.value}")
     if report.message:
@@ -90,7 +105,7 @@ def _require(value: Optional[str], label: str) -> str:
 def run(args) -> int:
     json_output = bool(getattr(args, "json", False))
     if not args.jenkins_action:
-        message = "Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check}"
+        message = "Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check|nodes|queue|jobs|artifacts|views|whoami|credential-domains}"
         if json_output:
             print(jenkins_adapter.report_to_json(_error_payload("controllers", message)))
         else:
@@ -103,6 +118,8 @@ def run(args) -> int:
     )
     paths = WorkspacePaths(workspace)
     config = jenkins_adapter.jenkins_adapter_config(paths)
+    rules = jenkins_adapter.load_operator_rules()
+    limits = rules.get("limits", {})
     http_timeout = config["http_timeout_seconds"]
     process_timeout = config["process_timeout_seconds"]
     max_builds = config["max_builds"]
@@ -163,6 +180,54 @@ def run(args) -> int:
                 files,
                 timeout=process_timeout,
             )
+        elif operation == "nodes":
+            controller = _require(getattr(args, "controller", None), "controller")
+            payload = jenkins_adapter.operator_nodes(paths, controller, http_timeout)
+        elif operation == "queue":
+            controller = _require(getattr(args, "controller", None), "controller")
+            limit = args.limit if args.limit is not None else int(limits.get("queue_default", 50))
+            payload = jenkins_adapter.operator_queue(
+                paths,
+                controller,
+                limit=limit,
+                timeout=http_timeout,
+            )
+        elif operation == "jobs":
+            controller = _require(getattr(args, "controller", None), "controller")
+            limit = args.limit if args.limit is not None else int(limits.get("jobs_default", 100))
+            payload = jenkins_adapter.operator_jobs(
+                paths,
+                controller,
+                folder=getattr(args, "folder", None),
+                query=getattr(args, "query", None),
+                limit=limit,
+                timeout=http_timeout,
+            )
+        elif operation == "artifacts":
+            controller = _require(getattr(args, "controller", None), "controller")
+            job = _require(getattr(args, "job", None), "job")
+            build_selector = _require(getattr(args, "build_selector", None), "build selector")
+            payload = jenkins_adapter.operator_artifacts(
+                paths,
+                controller,
+                job,
+                build_selector,
+                timeout=http_timeout,
+            )
+        elif operation == "views":
+            controller = _require(getattr(args, "controller", None), "controller")
+            payload = jenkins_adapter.operator_views(
+                paths,
+                controller,
+                view_name=getattr(args, "view", None),
+                timeout=http_timeout,
+            )
+        elif operation == "whoami":
+            controller = _require(getattr(args, "controller", None), "controller")
+            payload = jenkins_adapter.operator_whoami(paths, controller, http_timeout)
+        elif operation == "credential-domains":
+            controller = _require(getattr(args, "controller", None), "controller")
+            payload = jenkins_adapter.operator_credential_domains(paths, controller, http_timeout)
         else:
             message = f"Unknown jenkins action: {operation}"
             _emit_error(operation, message, json_output)
@@ -175,7 +240,7 @@ def run(args) -> int:
     if json_output:
         print(jenkins_adapter.report_to_json(payload))
     else:
-        _render_human(report)
+        _render_human(report, payload)
     return _exit_code(report)
 
 

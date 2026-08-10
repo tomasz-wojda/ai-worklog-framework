@@ -364,6 +364,292 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(1, code)
     }
 
+    void testOperatorNodesProjection() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            assert url.contains('/computer/api/json')
+            [code: 200, body: '''
+            {
+              "computer": [{
+                "displayName": "agent-1",
+                "description": "Linux agent",
+                "numExecutors": 2,
+                "idle": false,
+                "offline": false,
+                "temporarilyOffline": false,
+                "busyExecutors": 1,
+                "assignedLabels": [{"name": "linux"}, {"name": "docker"}],
+                "monitorData": {"secret": "must-not-appear"},
+                "executors": [{"currentExecutable": {"secret": "hidden"}}]
+              }]
+            }
+            ''', error: '']
+        }
+        Map report = adapter.operatorNodes('primary', 5)
+        Map item = report.items[0]
+        assertEquals(['display_name', 'description', 'num_executors', 'idle', 'offline', 'temporarily_offline', 'busy_executors', 'assigned_labels'] as Set, item.keySet())
+        assertEquals(['docker', 'linux'], item.assigned_labels)
+        assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('must-not-appear')
+        assertEquals(Status.READY, report.status)
+    }
+
+    void testOperatorQueueLimitAndSort() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            assert url.contains('/queue/api/json')
+            [code: 200, body: '''
+            {
+              "items": [
+                {"id": 2, "why": "Waiting", "stuck": false, "inQueueSince": 200, "blocked": false, "buildable": true,
+                 "task": {"name": "Beta", "url": "https://jenkins.example/job/Beta/", "color": "blue"},
+                 "actions": [{"parameters": [{"name": "TOKEN", "value": "secret"}]}]},
+                {"id": 1, "why": "Blocked", "stuck": true, "inQueueSince": 100, "blocked": true, "buildable": false,
+                 "task": {"name": "Alpha", "url": "https://jenkins.example/job/Alpha/", "color": "red"}}
+              ]
+            }
+            ''', error: '']
+        }
+        Map report = adapter.operatorQueue('primary', 1, 5)
+        assertEquals(1, report.items.size())
+        assertEquals(1, report.items[0].id)
+        assertEquals(Status.DEGRADED, report.status)
+        assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('secret')
+    }
+
+    void testOperatorQueueEmptyReady() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [code: 200, body: '{"items": []}', error: '']
+        }
+        Map report = adapter.operatorQueue('primary', 50, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals([], report.items)
+        assertEquals(0, exitCode(report))
+    }
+
+    void testOperatorJobsBrowseAndQuery() {
+        writeProperties(defaultProperties())
+        List<String> captured = []
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            captured << url
+            if (url.contains('/api/json?tree=') && !url.contains('/job/')) {
+                return [code: 200, body: '''
+                {
+                  "jobs": [
+                    {"name": "Alpha", "url": "https://jenkins.example/job/Alpha/", "color": "blue", "buildable": true, "inQueue": false, "_class": "hudson.model.FreeStyleProject"},
+                    {"name": "folder", "url": "https://jenkins.example/job/folder/", "color": "blue", "buildable": true, "inQueue": false, "_class": "com.cloudbees.hudson.plugins.folder.Folder"}
+                  ]
+                }
+                ''', error: '']
+            }
+            if (url.contains('/job/folder/api/json')) {
+                return [code: 200, body: '''
+                {
+                  "jobs": [
+                    {"name": "Nested", "url": "https://jenkins.example/job/folder/job/Nested/", "color": "blue", "buildable": true, "inQueue": false, "_class": "hudson.model.FreeStyleProject"}
+                  ]
+                }
+                ''', error: '']
+            }
+            [code: 404, body: '{}', error: '']
+        }
+        Map browse = adapter.operatorJobs('primary', null, null, 100, 5)
+        assertEquals(['Alpha', 'folder/Nested'] as Set, browse.items.collect { it.full_path } as Set)
+        Map filtered = adapter.operatorJobs('primary', null, 'nested', 100, 5)
+        assertEquals(['folder/Nested'], filtered.items.collect { it.full_path })
+        assertEquals('jobs', filtered.operation)
+        assertEquals('nested', filtered.query)
+    }
+
+    void testOperatorJobsFolderNotFound() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [code: 404, body: '{}', error: '']
+        }
+        Map report = adapter.operatorJobs('primary', 'missing', null, 100, 5)
+        assertEquals(Status.ERROR, report.status)
+        assertTrue report.message.contains("Folder 'missing' not found")
+        assertEquals(1, exitCode(report))
+    }
+
+    void testOperatorJobsInvalidQuery() {
+        writeProperties(defaultProperties())
+        shouldFail(IllegalArgumentException) {
+            adapterWithMocks([:]).operatorJobs('primary', null, 'a' * 129, 100, 5)
+        }
+    }
+
+    void testOperatorArtifactsSelectors() {
+        writeProperties(defaultProperties())
+        List<String> captured = []
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            captured << url
+            [code: 200, body: '''
+            {
+              "number": 7,
+              "url": "https://jenkins.example/job/Demo/7/",
+              "result": "SUCCESS",
+              "artifacts": [
+                {"fileName": "report.txt", "relativePath": "out/report.txt", "content": "secret-content"}
+              ]
+            }
+            ''', error: '']
+        }
+        Map byNumber = adapter.operatorArtifacts('primary', 'Demo', '7', 5)
+        assertTrue captured[0].contains('/job/Demo/7/api/json')
+        assertEquals(7, byNumber.items[0].resolved_build_number)
+        assertEquals('7', byNumber.build_selector)
+        Map alias = adapter.operatorArtifacts('primary', 'Demo', 'last-successful', 5)
+        assertTrue captured[1].contains('/lastSuccessfulBuild/api/json')
+        assertFalse JenkinsOperatorReport.fromPayload(byNumber).renderJson(new Redaction(repository)).contains('secret-content')
+    }
+
+    void testOperatorArtifactsTruncated() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            List artifacts = (1..201).collect { idx ->
+                [fileName: "file-${idx}.txt", relativePath: "out/file-${idx}.txt"]
+            }
+            [code: 200, body: groovy.json.JsonOutput.toJson([
+                number: 1, url: 'https://jenkins.example/job/Demo/1/', result: 'SUCCESS', artifacts: artifacts
+            ]), error: '']
+        }
+        Map report = adapter.operatorArtifacts('primary', 'Demo', '1', 5)
+        assertEquals(Status.DEGRADED, report.status)
+        assertEquals(200, report.items[0].artifacts.size())
+        assertTrue report.items[0].truncated
+        assertEquals(201, report.items[0].artifact_count)
+    }
+
+    void testOperatorViewsListAndDetail() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            if (url.contains('/view/All/api/json')) {
+                return [code: 200, body: '''
+                {
+                  "name": "All",
+                  "url": "https://jenkins.example/view/All/",
+                  "description": "All jobs",
+                  "jobs": [{"name": "Demo", "url": "https://jenkins.example/job/Demo/", "color": "blue", "buildable": true, "inQueue": false}]
+                }
+                ''', error: '']
+            }
+            [code: 200, body: '''
+            {
+              "views": [
+                {"name": "All", "url": "https://jenkins.example/view/All/", "description": "All jobs"}
+              ]
+            }
+            ''', error: '']
+        }
+        Map listed = adapter.operatorViews('primary', null, 5)
+        assertEquals('All', listed.items[0].name)
+        Map detail = adapter.operatorViews('primary', 'All', 5)
+        assertEquals('All', detail.view)
+        assertEquals('Demo', detail.items[0].jobs[0].name)
+    }
+
+    void testOperatorWhoamiIdentityOnly() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            assert url.contains('/whoAmI/api/json')
+            [code: 200, body: '''
+            {
+              "name": "bot",
+              "authenticated": true,
+              "authorities": ["admin"],
+              "anonymous": false
+            }
+            ''', error: '']
+        }
+        Map report = adapter.operatorWhoami('primary', 5)
+        assertEquals(['name', 'authenticated'] as Set, report.items[0].keySet())
+        assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('admin')
+    }
+
+    void testOperatorCredentialDomainsMetadataOnly() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            assert url.contains('/credentials/store/system/api/json')
+            [code: 200, body: '''
+            {
+              "domains": [{
+                "domainName": "_",
+                "displayName": "Global",
+                "description": "Global domain",
+                "url": "https://jenkins.example/credentials/store/system/domain/_/",
+                "credentials": [{"id": "secret-id", "secretValue": "must-not-appear"}]
+              }]
+            }
+            ''', error: '']
+        }
+        Map report = adapter.operatorCredentialDomains('primary', 5)
+        assertEquals(['domain_name', 'display_name', 'description', 'url'] as Set, report.items[0].keySet())
+        assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('must-not-appear')
+    }
+
+    void testOperatorNodesAccessBlocked() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout -> [code: 401, body: '', error: ''] }
+        Map report = adapter.operatorNodes('primary', 5)
+        assertEquals(Status.BLOCKED, report.status)
+        assertEquals(3, exitCode(report))
+    }
+
+    void testOperatorNodesMalformed() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout -> [code: 200, body: '[]', error: ''] }
+        Map report = adapter.operatorNodes('primary', 5)
+        assertEquals(Status.ERROR, report.status)
+        assertEquals(2, exitCode(report))
+    }
+
+    void testCliMissingControllerJson() {
+        int code = JenkinsCommands.run('nodes', ['--json'], repository, new FrameworkPaths(workspace), ConfigLoader.load(workspace))
+        assertEquals(1, code)
+    }
+
+    void testCliArtifactsInvalidSelector() {
+        writeProperties(defaultProperties())
+        int code = JenkinsCommands.run('artifacts', ['primary', 'Demo', 'bad-selector', '--json'], repository, new FrameworkPaths(workspace), ConfigLoader.load(workspace))
+        assertEquals(1, code)
+    }
+
+    void testValidateBuildSelector() {
+        JenkinsAdapter.validateBuildSelector('42')
+        JenkinsAdapter.validateBuildSelector('last-successful')
+        JenkinsAdapter.validateBuildSelector('last-completed')
+        shouldFail(IllegalArgumentException) {
+            JenkinsAdapter.validateBuildSelector('0')
+        }
+        shouldFail(IllegalArgumentException) {
+            JenkinsAdapter.validateBuildSelector('latest')
+        }
+    }
+
+    void testExitCodeMissingInput() {
+        Map payload = [
+            operation: 'health',
+            fetched_at: '2026-01-01T00:00:00Z',
+            status: Status.ERROR,
+            message: 'Missing controller',
+            items: []
+        ]
+        assertEquals(1, exitCode(payload))
+    }
+
     private JenkinsAdapter adapterWithMocks(Map config) {
         new JenkinsAdapter(
             new FrameworkPaths(workspace),

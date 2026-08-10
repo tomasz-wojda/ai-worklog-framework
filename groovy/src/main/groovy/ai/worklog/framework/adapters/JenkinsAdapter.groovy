@@ -345,6 +345,460 @@ class JenkinsAdapter {
         ]
     }
 
+    Map operatorCredentialDomains(String controller, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('credential-domains', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('credential-domains', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        String tree = operatorRules.api_trees?.credential_domains?.toString() ?:
+            'domains[domainName,displayName,description,url]'
+        List response = jenkinsGet(
+            controller,
+            "/credentials/store/system/api/json?tree=${tree}",
+            timeout
+        )
+        return handleOperatorResponse('credential-domains', controller, fetchedAt, response) { Map body ->
+            List<Map> items = []
+            ((List) (body.domains ?: [])).each { entry ->
+                if (entry instanceof Map) {
+                    items << [
+                        domain_name: entry.domainName,
+                        display_name: entry.displayName,
+                        description: entry.description,
+                        url: entry.url
+                    ]
+                }
+            }
+            items.sort { a, b ->
+                (a.domain_name ?: '').toString().toLowerCase() <=> (b.domain_name ?: '').toString().toLowerCase()
+            }
+            [
+                operation: 'credential-domains',
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: items ? 'Credential domains fetched' : 'No credential domains found',
+                items: items
+            ]
+        }
+    }
+
+    Map operatorWhoami(String controller, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('whoami', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('whoami', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        String tree = operatorRules.api_trees?.whoami?.toString() ?: 'name,authenticated'
+        List response = jenkinsGet(controller, "/whoAmI/api/json?tree=${tree}", timeout)
+        return handleOperatorResponse('whoami', controller, fetchedAt, response) { Map body ->
+            [
+                operation: 'whoami',
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: 'Identity fetched',
+                items: [[
+                    name: body.name,
+                    authenticated: body.authenticated
+                ]]
+            ]
+        }
+    }
+
+    Map operatorViews(String controller, String viewName, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('views', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('views', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        if (viewName) {
+            validateViewName(viewName)
+            String tree = operatorRules.api_trees?.view_detail?.toString() ?:
+                'name,url,description,jobs[name,url,color,buildable,inQueue]'
+            String encoded = URLEncoder.encode(viewName, 'UTF-8').replace('+', '%20')
+            List response = jenkinsGet(controller, "/view/${encoded}/api/json?tree=${tree}", timeout)
+            int statusCode = response[0] as int
+            Object payload = response[1]
+            if (accessBlocked(statusCode)) {
+                return blockedReport('views', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+            }
+            if (statusCode == 404) {
+                return errorReport('views', controller, fetchedAt, "View '${viewName}' not found")
+            }
+            if (statusCode == 0 || payload == null) {
+                return errorReport('views', controller, fetchedAt, 'Jenkins query failed')
+            }
+            if (!(payload instanceof Map)) {
+                return errorReport('views', controller, fetchedAt, 'Malformed Jenkins response')
+            }
+            if (statusCode >= 400) {
+                return degradedReport('views', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+            }
+            Map body = (Map) payload
+            List<Map> jobs = projectViewJobs((List) (body.jobs ?: []))
+            return [
+                operation: 'views',
+                controller: controller,
+                view: viewName,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: 'View fetched',
+                items: [[
+                    name: body.name,
+                    url: body.url,
+                    description: body.description,
+                    jobs: jobs
+                ]]
+            ]
+        }
+        String tree = operatorRules.api_trees?.views?.toString() ?: 'views[name,url,description]'
+        List response = jenkinsGet(controller, "/api/json?tree=${tree}", timeout)
+        return handleOperatorResponse('views', controller, fetchedAt, response) { Map body ->
+            List<Map> items = []
+            ((List) (body.views ?: [])).each { entry ->
+                if (entry instanceof Map && entry.name) {
+                    items << [
+                        name: entry.name,
+                        url: entry.url,
+                        description: entry.description
+                    ]
+                }
+            }
+            items.sort { a, b ->
+                (a.name ?: '').toString().toLowerCase() <=> (b.name ?: '').toString().toLowerCase()
+            }
+            [
+                operation: 'views',
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: items ? 'Views fetched' : 'No views found',
+                items: items
+            ]
+        }
+    }
+
+    Map operatorArtifacts(String controller, String jobName, String buildSelector, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        validateJobName(jobName)
+        validateJobName(jobName)
+        List selectorParts = resolveBuildSelector(buildSelector)
+        String requestedSelector = selectorParts[0]
+        String apiSegment = selectorParts[1]
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('artifacts', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('artifacts', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        String tree = operatorRules.api_trees?.artifacts?.toString() ?:
+            'number,url,result,artifacts[fileName,relativePath]'
+        List response = jenkinsGet(
+            controller,
+            "/${encodeJobPath(jobName)}/${apiSegment}/api/json?tree=${tree}",
+            timeout
+        )
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (accessBlocked(statusCode)) {
+            return blockedReport('artifacts', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        if (statusCode == 404) {
+            String notFoundMessage
+            if (apiSegment in ['lastSuccessfulBuild', 'lastCompletedBuild']) {
+                String label = apiSegment == 'lastSuccessfulBuild' ? 'last successful build' : 'last completed build'
+                notFoundMessage = "${label} not found for job '${jobName}'"
+            } else {
+                notFoundMessage = "Build '${buildSelector}' not found for job '${jobName}'"
+            }
+            return errorReport('artifacts', controller, fetchedAt, notFoundMessage)
+        }
+        if (statusCode == 0 || payload == null) {
+            return errorReport('artifacts', controller, fetchedAt, 'Jenkins query failed')
+        }
+        if (!(payload instanceof Map)) {
+            return errorReport('artifacts', controller, fetchedAt, 'Malformed Jenkins response')
+        }
+        if (statusCode >= 400) {
+            return degradedReport('artifacts', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        Map body = (Map) payload
+        int artifactsMax = operatorLimits().artifacts_max as int
+        List<Map> rawArtifacts = []
+        ((List) (body.artifacts ?: [])).each { entry ->
+            if (entry instanceof Map) {
+                rawArtifacts << [
+                    file_name: entry.fileName,
+                    relative_path: entry.relativePath
+                ]
+            }
+        }
+        rawArtifacts.sort { a, b ->
+            (a.relative_path ?: '').toString().toLowerCase() <=> (b.relative_path ?: '').toString().toLowerCase()
+        }
+        boolean truncated = rawArtifacts.size() > artifactsMax
+        List<Map> artifacts = truncated ? rawArtifacts.take(artifactsMax) : rawArtifacts
+        Status status = truncated ? Status.DEGRADED : Status.READY
+        String message = 'Artifact metadata fetched'
+        if (truncated) {
+            message = "Artifact metadata fetched; truncated to ${artifactsMax} items"
+        } else if (!artifacts) {
+            message = 'No artifacts found'
+        }
+        [
+            operation: 'artifacts',
+            controller: controller,
+            job: jobName,
+            build_selector: requestedSelector,
+            fetched_at: fetchedAt,
+            status: status,
+            message: message,
+            items: [[
+                build_selector: requestedSelector,
+                resolved_build_number: body.number,
+                url: body.url,
+                result: body.result,
+                artifact_count: rawArtifacts.size(),
+                truncated: truncated,
+                artifacts: artifacts
+            ]]
+        ]
+    }
+
+    Map operatorJobs(String controller, String folder, String query, int limit, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        String effectiveFolder = folder ?: ''
+        if (effectiveFolder) {
+            validateJobName(effectiveFolder)
+        }
+        String effectiveQuery = query ?: ''
+        if (effectiveQuery) {
+            validateJobQuery(effectiveQuery)
+        }
+        Map limits = operatorLimits()
+        int effectiveLimit = validateLimit(limit, 'limit', limits.jobs_default as int, limits.jobs_max as int)
+        int maxDepth = limits.jobs_max_depth as int
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('jobs', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('jobs', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        if (effectiveFolder) {
+            List folderResponse = jenkinsGet(
+                controller,
+                "/${encodeJobPath(effectiveFolder)}/api/json",
+                timeout
+            )
+            int folderStatus = folderResponse[0] as int
+            Object folderPayload = folderResponse[1]
+            if (accessBlocked(folderStatus)) {
+                return blockedReport('jobs', controller, fetchedAt, "Jenkins returned HTTP ${folderStatus}")
+            }
+            if (folderStatus == 404) {
+                return errorReport('jobs', controller, fetchedAt, "Folder '${effectiveFolder}' not found")
+            }
+            if (folderStatus != 200 || !(folderPayload instanceof Map)) {
+                return operatorHttpError('jobs', controller, fetchedAt, folderStatus)
+            }
+        } else {
+            String tree = operatorRules.api_trees?.jobs?.toString() ?:
+                'jobs[name,url,color,buildable,inQueue,_class]'
+            List rootResponse = jenkinsGet(
+                controller,
+                "/api/json?tree=${tree}",
+                timeout
+            )
+            int rootStatus = rootResponse[0] as int
+            Object rootPayload = rootResponse[1]
+            if (rootStatus != 200 || !(rootPayload instanceof Map)) {
+                return operatorHttpError('jobs', controller, fetchedAt, rootStatus)
+            }
+        }
+        List<Map> collected = collectJobsRecursive(controller, effectiveFolder, 0, maxDepth, timeout)
+        if (effectiveQuery) {
+            String needle = effectiveQuery.toLowerCase()
+            collected = collected.findAll { item ->
+                (item.full_path ?: '').toString().toLowerCase().contains(needle)
+            }
+        }
+        collected.sort { a, b ->
+            (a.full_path ?: '').toString().toLowerCase() <=> (b.full_path ?: '').toString().toLowerCase()
+        }
+        boolean truncated = collected.size() > effectiveLimit
+        if (truncated) {
+            collected = collected.take(effectiveLimit)
+        }
+        Status status = truncated ? Status.DEGRADED : Status.READY
+        String message
+        if (truncated) {
+            message = "Jobs fetched; truncated to ${effectiveLimit} items"
+        } else if (collected) {
+            message = 'Jobs fetched'
+        } else {
+            message = 'No jobs found'
+        }
+        Map report = [
+            operation: 'jobs',
+            controller: controller,
+            fetched_at: fetchedAt,
+            status: status,
+            message: message,
+            items: collected
+        ]
+        if (effectiveFolder) {
+            report.folder = effectiveFolder
+        }
+        if (effectiveQuery) {
+            report.query = effectiveQuery
+        }
+        report
+    }
+
+    Map operatorQueue(String controller, int limit, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map limits = operatorLimits()
+        int effectiveLimit = validateLimit(limit, 'limit', limits.queue_default as int, limits.queue_max as int)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('queue', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('queue', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        String tree = operatorRules.api_trees?.queue?.toString() ?:
+            'items[id,why,stuck,inQueueSince,blocked,buildable,task[name,url,color]]'
+        List response = jenkinsGet(controller, "/queue/api/json?tree=${tree}", timeout)
+        return handleOperatorResponse('queue', controller, fetchedAt, response) { Map body ->
+            List<Map> items = []
+            ((List) (body.items ?: [])).each { entry ->
+                if (entry instanceof Map) {
+                    Map task = entry.task instanceof Map ? (Map) entry.task : [:]
+                    items << [
+                        id: entry.id,
+                        why: entry.why,
+                        stuck: entry.stuck,
+                        in_queue_since: entry.inQueueSince,
+                        blocked: entry.blocked,
+                        buildable: entry.buildable,
+                        task_name: task.name,
+                        task_url: task.url,
+                        task_color: task.color
+                    ]
+                }
+            }
+            items.sort { a, b -> (a.id ?: 0) <=> (b.id ?: 0) }
+            boolean truncated = items.size() > effectiveLimit
+            if (truncated) {
+                items = items.take(effectiveLimit)
+            }
+            Status status = truncated ? Status.DEGRADED : Status.READY
+            String message = 'Queue fetched'
+            if (truncated) {
+                message = "Queue fetched; truncated to ${effectiveLimit} items"
+            } else if (!items) {
+                message = 'Queue is empty'
+            }
+            [
+                operation: 'queue',
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: status,
+                message: message,
+                items: items
+            ]
+        }
+    }
+
+    Map operatorNodes(String controller, int timeout) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport('nodes', controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport('nodes', controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        String tree = operatorRules.api_trees?.nodes?.toString() ?:
+            'computer[displayName,description,numExecutors,idle,offline,temporarilyOffline,busyExecutors,assignedLabels[name]]'
+        List response = jenkinsGet(controller, "/computer/api/json?tree=${tree}", timeout)
+        return handleOperatorResponse('nodes', controller, fetchedAt, response) { Map body ->
+            List<Map> items = []
+            ((List) (body.computer ?: [])).each { entry ->
+                if (entry instanceof Map) {
+                    List labels = []
+                    ((List) (entry.assignedLabels ?: [])).each { label ->
+                        if (label instanceof Map && label.name) {
+                            labels << label.name.toString()
+                        }
+                    }
+                    labels.sort()
+                    items << [
+                        display_name: entry.displayName,
+                        description: entry.description,
+                        num_executors: entry.numExecutors,
+                        idle: entry.idle,
+                        offline: entry.offline,
+                        temporarily_offline: entry.temporarilyOffline,
+                        busy_executors: entry.busyExecutors,
+                        assigned_labels: labels
+                    ]
+                }
+            }
+            items.sort { a, b ->
+                (a.display_name ?: '').toString().toLowerCase() <=> (b.display_name ?: '').toString().toLowerCase()
+            }
+            [
+                operation: 'nodes',
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: items ? 'Nodes fetched' : 'No nodes found',
+                items: items
+            ]
+        }
+    }
+
+    Map operatorLimits() {
+        Map limits = operatorRules.limits instanceof Map ? (Map) operatorRules.limits : [:]
+        [
+            queue_default: (limits.queue_default ?: 50) as int,
+            queue_max: (limits.queue_max ?: 50) as int,
+            jobs_default: (limits.jobs_default ?: 100) as int,
+            jobs_max: (limits.jobs_max ?: 100) as int,
+            jobs_max_depth: (limits.jobs_max_depth ?: limits.jobs_depth_max ?: 2) as int,
+            jobs_query_max_length: (limits.jobs_query_max_length ?: limits.query_max_length ?: 128) as int,
+            artifacts_max: (limits.artifacts_max ?: 200) as int
+        ]
+    }
+
     Map operatorSeed(String controller, String jobName, int timeout, int maxBuilds) {
         String fetchedAt = utcNow()
         Map jobReport = operatorJob(controller, jobName, maxBuilds, false, timeout)
@@ -584,6 +1038,47 @@ class JenkinsAdapter {
         file
     }
 
+    static void validateViewName(String viewName) {
+        if (!viewName || viewName in ['.', '..']) {
+            throw new IllegalArgumentException("Invalid view: ${viewName}")
+        }
+        if (!JOB_NAME_PART.matcher(viewName).matches()) {
+            throw new IllegalArgumentException("Invalid view: ${viewName}")
+        }
+    }
+
+    static void validateJobQuery(String query) {
+        if (!query) {
+            return
+        }
+        int maxLength = 128
+        if (query.length() > maxLength) {
+            throw new IllegalArgumentException("Invalid query: exceeds ${maxLength} characters")
+        }
+        query.each { ch ->
+            if (Character.isISOControl(ch as char)) {
+                throw new IllegalArgumentException('Invalid query: control characters are not allowed')
+            }
+        }
+    }
+
+    static List resolveBuildSelector(String selector) {
+        if (selector == 'last-successful') {
+            return [selector, 'lastSuccessfulBuild']
+        }
+        if (selector == 'last-completed') {
+            return [selector, 'lastCompletedBuild']
+        }
+        if (selector ==~ /[1-9]\d*/) {
+            return [selector, selector]
+        }
+        throw new IllegalArgumentException("Invalid build selector: ${selector}")
+    }
+
+    static void validateBuildSelector(String selector) {
+        resolveBuildSelector(selector)
+    }
+
     static String encodeJobPath(String jobName) {
         validateJobName(jobName)
         'job/' + jobName.split('/').collect {
@@ -605,12 +1100,29 @@ class JenkinsAdapter {
             required_plugins: [],
             sensitive_parameter_patterns: ['password', 'secret', 'token', 'credential', 'key', 'auth'],
             seed_failure_results: ['FAILURE', 'failure', 'UNSTABLE', 'unstable'],
+            limits: [
+                queue_default: 50,
+                queue_max: 50,
+                jobs_default: 100,
+                jobs_max: 100,
+                jobs_max_depth: 2,
+                jobs_query_max_length: 128,
+                artifacts_max: 200
+            ],
             api_trees: [
                 health: 'mode,quietingDown,numExecutors,nodeDescription',
                 job: 'name,url,color,buildable,inQueue,lastBuild[number,result,timestamp,duration,building],builds[number,result,timestamp,duration,building]',
                 job_parameters: 'name,url,color,buildable,inQueue,actions[parameterDefinitions[name]],lastBuild[number,result,timestamp,duration,building,actions[parameters[name,value]]],builds[number,result,timestamp,duration,building]',
                 plugins: 'plugins[shortName,version,active,enabled]',
-                credentials: 'credentials[id,typeName,displayName,description]'
+                credentials: 'credentials[id,typeName,displayName,description]',
+                nodes: 'computer[displayName,description,numExecutors,idle,offline,temporarilyOffline,busyExecutors,assignedLabels[name]]',
+                queue: 'items[id,why,stuck,inQueueSince,blocked,buildable,task[name,url,color]]',
+                jobs: 'jobs[name,url,color,buildable,inQueue,_class]',
+                artifacts: 'number,url,result,artifacts[fileName,relativePath]',
+                views: 'views[name,url,description]',
+                view_detail: 'name,url,description,jobs[name,url,color,buildable,inQueue]',
+                whoami: 'name,authenticated',
+                credential_domains: 'domains[domainName,displayName,description,url]'
             ]
         ]
         JsonFiles.deepMerge(defaults, JsonFiles.read(new File(frameworkRoot, 'shared/jenkins-operator-rules.json'), [:]))
@@ -782,6 +1294,118 @@ class JenkinsAdapter {
             Authorization: "Basic ${Base64.encoder.encodeToString("${user}:${token}".bytes)}",
             Accept: 'application/json'
         ]
+    }
+
+    private static int validateLimit(int value, String label, int defaultValue, int maximum) {
+        if (value < 1) {
+            throw new IllegalArgumentException("Invalid ${label}: ${value}")
+        }
+        Math.min(value, maximum)
+    }
+
+    private Map operatorHttpError(String operation, String controller, String fetchedAt, int statusCode, String notFoundMessage = null) {
+        if (accessBlocked(statusCode)) {
+            return blockedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        if (statusCode == 404 && notFoundMessage) {
+            return errorReport(operation, controller, fetchedAt, notFoundMessage)
+        }
+        if (statusCode == 0) {
+            return errorReport(operation, controller, fetchedAt, 'Jenkins query failed')
+        }
+        if (statusCode >= 400) {
+            return degradedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        errorReport(operation, controller, fetchedAt, 'Malformed Jenkins response')
+    }
+
+    private Map handleOperatorResponse(
+        String operation,
+        String controller,
+        String fetchedAt,
+        List response,
+        Closure<Map> onSuccess
+    ) {
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (statusCode != 200 || !(payload instanceof Map)) {
+            return operatorHttpError(operation, controller, fetchedAt, statusCode)
+        }
+        onSuccess((Map) payload)
+    }
+
+    private List<Map> collectJobsRecursive(
+        String controller,
+        String folderPath,
+        int currentDepth,
+        int maxDepth,
+        int timeout
+    ) {
+        String tree = operatorRules.api_trees?.jobs?.toString() ?:
+            'jobs[name,url,color,buildable,inQueue,_class]'
+        String apiPath = folderPath ?
+            "/${encodeJobPath(folderPath)}/api/json?tree=${tree}" :
+            "/api/json?tree=${tree}"
+        List response = jenkinsGet(controller, apiPath, timeout)
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (statusCode != 200 || !(payload instanceof Map)) {
+            return []
+        }
+        List<Map> collected = []
+        ((List) (((Map) payload).jobs ?: [])).each { entry ->
+            if (!(entry instanceof Map) || !entry.name) {
+                return
+            }
+            String name = entry.name.toString()
+            String fullPath = folderPath ? "${folderPath}/${name}" : name
+            if (isFolderJob(entry)) {
+                if (currentDepth < maxDepth) {
+                    collected.addAll(collectJobsRecursive(
+                        controller,
+                        fullPath,
+                        currentDepth + 1,
+                        maxDepth,
+                        timeout
+                    ))
+                }
+                return
+            }
+            collected << [
+                name: entry.name ?: name,
+                full_path: fullPath,
+                url: entry.url,
+                color: entry.color,
+                buildable: entry.buildable,
+                in_queue: entry.inQueue,
+                job_class: entry._class
+            ]
+        }
+        collected
+    }
+
+    private static boolean isFolderJob(Map entry) {
+        String jobClass = entry._class?.toString() ?: ''
+        jobClass.toLowerCase().contains('folder')
+    }
+
+    private static List<Map> projectViewJobs(List jobs) {
+        List<Map> items = []
+        jobs.each { entry ->
+            if (entry instanceof Map && entry.name) {
+                items << [
+                    name: entry.name,
+                    url: entry.url,
+                    color: entry.color,
+                    buildable: entry.buildable,
+                    in_queue: entry.inQueue
+                ]
+            }
+        }
+        items.sort { a, b ->
+            (a.name ?: '').toString().toLowerCase() <=> (b.name ?: '').toString().toLowerCase()
+        }
+        items
     }
 
     private int timeout() {

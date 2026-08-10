@@ -6,7 +6,22 @@
   "properties": {
     "operation": {
       "type": "string",
-      "enum": ["controllers", "health", "job", "plugins", "credentials", "seed", "syntax-check"]
+      "enum": [
+        "controllers",
+        "health",
+        "job",
+        "plugins",
+        "credentials",
+        "seed",
+        "syntax-check",
+        "nodes",
+        "queue",
+        "jobs",
+        "artifacts",
+        "views",
+        "whoami",
+        "credential-domains"
+      ]
     },
     "fetched_at": {"type": "string", "format": "date-time"},
     "status": {
@@ -16,6 +31,11 @@
     "controller": {"type": "string"},
     "message": {"type": "string"},
     "domain": {"type": "string"},
+    "folder": {"type": "string"},
+    "query": {"type": "string"},
+    "view": {"type": "string"},
+    "job": {"type": "string"},
+    "build_selector": {"type": "string"},
     "required": {
       "type": "object",
       "properties": {

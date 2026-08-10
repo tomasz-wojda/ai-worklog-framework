@@ -15,11 +15,28 @@
     "auth"
   ],
   "seed_failure_results": ["FAILURE", "UNSTABLE", "ABORTED"],
+  "limits": {
+    "queue_default": 50,
+    "queue_max": 50,
+    "jobs_default": 100,
+    "jobs_max": 100,
+    "jobs_max_depth": 2,
+    "jobs_query_max_length": 128,
+    "artifacts_max": 200
+  },
   "api_trees": {
     "health": "mode,quietingDown,numExecutors,nodeDescription",
     "job": "name,url,color,buildable,inQueue,lastBuild[number,result,timestamp,duration,building],builds[number,result,timestamp,duration,building]",
     "job_parameters": "name,url,color,buildable,inQueue,actions[parameterDefinitions[name]],lastBuild[number,result,timestamp,duration,building,actions[parameters[name,value]]],builds[number,result,timestamp,duration,building]",
     "plugins": "plugins[shortName,version,active,enabled]",
-    "credentials": "credentials[id,typeName,displayName,description]"
+    "credentials": "credentials[id,typeName,displayName,description]",
+    "nodes": "computer[displayName,description,numExecutors,idle,offline,temporarilyOffline,busyExecutors,assignedLabels[name]]",
+    "queue": "items[id,why,stuck,inQueueSince,blocked,buildable,task[name,url,color]]",
+    "jobs": "jobs[name,url,color,buildable,inQueue,_class]",
+    "artifacts": "number,url,result,artifacts[fileName,relativePath]",
+    "views": "views[name,url,description]",
+    "view_detail": "name,url,description,jobs[name,url,color,buildable,inQueue]",
+    "whoami": "name,authenticated",
+    "credential_domains": "domains[domainName,displayName,description,url]"
   }
 }

@@ -543,3 +543,589 @@ def test_report_to_json_redacts_secrets(tmp_path):
     rendered = jenkins.report_to_json(payload)
     assert "abc123-secret-value" not in rendered
     jenkins_commands.validate_report_shape(json.loads(rendered))
+
+
+def _default_properties():
+    return "primary.url=https://jenkins.example\nprimary.user=bot\nprimary.token=secret\n"
+
+
+def _setup_controller(tmp_path, monkeypatch=None):
+    _write_properties(tmp_path, _default_properties())
+    return WorkspacePaths(tmp_path)
+
+
+def test_operator_nodes_happy_path(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+
+    def _fake_get(_paths, _controller, path, timeout=10):
+        assert "/computer/api/json" in path
+        return 200, {
+            "computer": [
+                {
+                    "displayName": "built-in",
+                    "description": "controller",
+                    "numExecutors": 2,
+                    "idle": True,
+                    "offline": False,
+                    "temporarilyOffline": False,
+                    "busyExecutors": 0,
+                    "assignedLabels": [{"name": "linux"}, {"name": "docker"}],
+                    "secretToken": "must-not-appear",
+                },
+                {
+                    "displayName": "agent-a",
+                    "description": "",
+                    "numExecutors": 1,
+                    "idle": False,
+                    "offline": True,
+                    "temporarilyOffline": True,
+                    "busyExecutors": 1,
+                    "assignedLabels": [],
+                },
+            ],
+        }
+
+    monkeypatch.setattr(jenkins, "_jenkins_get", _fake_get)
+    report = jenkins.operator_nodes(paths, "primary", timeout=5)
+    assert report["status"] == Status.READY
+    assert [item["display_name"] for item in report["items"]] == ["agent-a", "built-in"]
+    assert report["items"][1]["assigned_labels"] == ["docker", "linux"]
+    rendered = jenkins.report_to_json(report)
+    assert "must-not-appear" not in rendered
+    jenkins_commands.validate_report_shape(json.loads(rendered))
+
+
+def test_operator_nodes_empty(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (200, {"computer": []}))
+    report = jenkins.operator_nodes(paths, "primary", timeout=5)
+    assert report["status"] == Status.READY
+    assert report["items"] == []
+
+
+def test_operator_nodes_access_blocked(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (401, None))
+    report = jenkins.operator_nodes(paths, "primary", timeout=5)
+    assert report["status"] == Status.BLOCKED
+
+
+def test_operator_nodes_malformed(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (200, []))
+    report = jenkins.operator_nodes(paths, "primary", timeout=5)
+    assert report["status"] == Status.ERROR
+
+
+def test_operator_queue_sort_and_limit(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+
+    def _fake_get(_paths, _controller, path, timeout=10):
+        assert "/queue/api/json" in path
+        return 200, {
+            "items": [
+                {
+                    "id": 20,
+                    "why": "Waiting",
+                    "stuck": False,
+                    "inQueueSince": 2,
+                    "blocked": False,
+                    "buildable": True,
+                    "task": {"name": "Beta", "url": "https://jenkins.example/job/Beta/", "color": "blue"},
+                    "actions": [{"causes": [{"secret": "x"}]}],
+                },
+                {
+                    "id": 10,
+                    "why": "Waiting",
+                    "stuck": True,
+                    "inQueueSince": 1,
+                    "blocked": True,
+                    "buildable": False,
+                    "task": {"name": "Alpha", "url": "https://jenkins.example/job/Alpha/", "color": "red"},
+                },
+            ],
+        }
+
+    monkeypatch.setattr(jenkins, "_jenkins_get", _fake_get)
+    report = jenkins.operator_queue(paths, "primary", limit=1, timeout=5)
+    assert report["status"] == Status.DEGRADED
+    assert len(report["items"]) == 1
+    assert report["items"][0]["id"] == 10
+    assert report["items"][0]["task_name"] == "Alpha"
+    assert "actions" not in json.dumps(report["items"])
+
+
+def test_operator_queue_empty(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (200, {"items": []}))
+    report = jenkins.operator_queue(paths, "primary", limit=50, timeout=5)
+    assert report["status"] == Status.READY
+    assert report["items"] == []
+
+
+def test_operator_queue_network_error(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (0, None))
+    report = jenkins.operator_queue(paths, "primary", limit=50, timeout=5)
+    assert report["status"] == Status.ERROR
+
+
+def test_operator_jobs_browse_and_query(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    responses = {
+        "/api/json": {
+            "jobs": [
+                {
+                    "name": "folder",
+                    "url": "https://jenkins.example/job/folder/",
+                    "color": None,
+                    "buildable": False,
+                    "inQueue": False,
+                    "_class": "com.cloudbees.hudson.plugins.folder.Folder",
+                },
+                {
+                    "name": "RootJob",
+                    "url": "https://jenkins.example/job/RootJob/",
+                    "color": "blue",
+                    "buildable": True,
+                    "inQueue": False,
+                    "_class": "hudson.model.FreeStyleProject",
+                },
+            ],
+        },
+        "/job/folder/": {
+            "jobs": [
+                {
+                    "name": "Nested",
+                    "url": "https://jenkins.example/job/folder/job/Nested/",
+                    "color": "red",
+                    "buildable": True,
+                    "inQueue": True,
+                    "_class": "hudson.model.FreeStyleProject",
+                },
+            ],
+        },
+    }
+
+    def _fake_get(_paths, _controller, path, timeout=10):
+        if "/job/folder/api/json" in path:
+            return 200, responses["/job/folder/"]
+        if path.startswith("/api/json"):
+            return 200, responses["/api/json"]
+        return 404, None
+
+    monkeypatch.setattr(jenkins, "_jenkins_get", _fake_get)
+    report = jenkins.operator_jobs(
+        paths,
+        "primary",
+        folder=None,
+        query="root",
+        limit=100,
+        timeout=5,
+    )
+    assert report["status"] == Status.READY
+    assert report["query"] == "root"
+    assert [item["full_path"] for item in report["items"]] == ["RootJob"]
+    assert set(report["items"][0]) >= {"name", "full_path", "url", "color", "buildable", "in_queue", "job_class"}
+
+
+def test_operator_jobs_folder_not_found(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (404, {"error": "missing"}))
+    report = jenkins.operator_jobs(
+        paths,
+        "primary",
+        folder="missing",
+        query=None,
+        limit=100,
+        timeout=5,
+    )
+    assert report["status"] == Status.ERROR
+    assert "not found" in report["message"]
+
+
+def test_operator_jobs_invalid_query(tmp_path):
+    paths = _setup_controller(tmp_path)
+    with pytest.raises(ValueError, match="Invalid query"):
+        jenkins.operator_jobs(
+            paths,
+            "primary",
+            folder=None,
+            query="a" * 129,
+            limit=100,
+            timeout=5,
+        )
+
+
+def test_operator_jobs_truncation(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    jobs = [
+        {
+            "name": f"Job{i}",
+            "url": f"https://jenkins.example/job/Job{i}/",
+            "color": "blue",
+            "buildable": True,
+            "inQueue": False,
+            "_class": "hudson.model.FreeStyleProject",
+        }
+        for i in range(3)
+    ]
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {"jobs": jobs}),
+    )
+    report = jenkins.operator_jobs(
+        paths,
+        "primary",
+        folder=None,
+        query=None,
+        limit=2,
+        timeout=5,
+    )
+    assert report["status"] == Status.DEGRADED
+    assert len(report["items"]) == 2
+
+
+def test_operator_artifacts_numeric_and_alias(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    captured = []
+
+    def _fake_get(_paths, _controller, path, timeout=10):
+        captured.append(path)
+        if "lastSuccessfulBuild" in path:
+            return 200, {
+                "number": 7,
+                "url": "https://jenkins.example/job/Demo/7/",
+                "result": "SUCCESS",
+                "artifacts": [
+                    {"fileName": "b.txt", "relativePath": "b.txt", "secret": "no"},
+                    {"fileName": "a.txt", "relativePath": "a.txt"},
+                ],
+            }
+        return 200, {
+            "number": 3,
+            "url": "https://jenkins.example/job/Demo/3/",
+            "result": "FAILURE",
+            "artifacts": [],
+        }
+
+    monkeypatch.setattr(jenkins, "_jenkins_get", _fake_get)
+    numeric = jenkins.operator_artifacts(paths, "primary", "Demo", "3", timeout=5)
+    assert numeric["build_selector"] == "3"
+    assert numeric["items"][0]["resolved_build_number"] == 3
+    alias = jenkins.operator_artifacts(paths, "primary", "Demo", "last-successful", timeout=5)
+    assert alias["items"][0]["build_selector"] == "last-successful"
+    assert [item["relative_path"] for item in alias["items"][0]["artifacts"]] == ["a.txt", "b.txt"]
+    rendered = jenkins.report_to_json(alias)
+    assert "no" not in rendered or "***REDACTED***" in rendered
+    assert "lastSuccessfulBuild" in captured[1]
+
+
+def test_operator_artifacts_invalid_selector(tmp_path):
+    paths = _setup_controller(tmp_path)
+    with pytest.raises(ValueError, match="Invalid build selector"):
+        jenkins.operator_artifacts(paths, "primary", "Demo", "0", timeout=5)
+
+
+def test_operator_artifacts_not_found(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (404, {"error": "missing"}))
+    report = jenkins.operator_artifacts(paths, "primary", "Demo", "99", timeout=5)
+    assert report["status"] == Status.ERROR
+
+
+def test_operator_artifacts_truncation(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    artifacts = [
+        {"fileName": f"f{i}.txt", "relativePath": f"f{i}.txt"}
+        for i in range(201)
+    ]
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {"number": 1, "url": "u", "result": "SUCCESS", "artifacts": artifacts}),
+    )
+    report = jenkins.operator_artifacts(paths, "primary", "Demo", "1", timeout=5)
+    assert report["status"] == Status.DEGRADED
+    assert report["items"][0]["truncated"] is True
+    assert len(report["items"][0]["artifacts"]) == 200
+
+
+def test_operator_views_list_and_detail(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+
+    def _fake_get(_paths, _controller, path, timeout=10):
+        if "/view/All/api/json" in path:
+            return 200, {
+                "name": "All",
+                "url": "https://jenkins.example/view/All/",
+                "description": "default",
+                "jobs": [
+                    {"name": "Beta", "url": "u2", "color": "blue", "buildable": True, "inQueue": False},
+                    {"name": "Alpha", "url": "u1", "color": "red", "buildable": False, "inQueue": True},
+                ],
+            }
+        return 200, {
+            "views": [
+                {"name": "BetaView", "url": "u2", "description": "b"},
+                {"name": "AlphaView", "url": "u1", "description": "a"},
+            ],
+        }
+
+    monkeypatch.setattr(jenkins, "_jenkins_get", _fake_get)
+    listed = jenkins.operator_views(paths, "primary", view_name=None, timeout=5)
+    assert [item["name"] for item in listed["items"]] == ["AlphaView", "BetaView"]
+    detail = jenkins.operator_views(paths, "primary", view_name="All", timeout=5)
+    assert detail["view"] == "All"
+    assert [job["name"] for job in detail["items"][0]["jobs"]] == ["Alpha", "Beta"]
+
+
+def test_operator_views_not_found(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(jenkins, "_jenkins_get", lambda *_a, **_k: (404, {"error": "missing"}))
+    report = jenkins.operator_views(paths, "primary", view_name="Missing", timeout=5)
+    assert report["status"] == Status.ERROR
+
+
+def test_operator_whoami_identity_only(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {
+            "name": "bot",
+            "authenticated": True,
+            "authorities": [{"authority": "admin"}],
+        }),
+    )
+    report = jenkins.operator_whoami(paths, "primary", timeout=5)
+    item = report["items"][0]
+    assert set(item) == {"name", "authenticated"}
+    assert item["authenticated"] is True
+    rendered = jenkins.report_to_json(report)
+    assert "admin" not in rendered
+
+
+def test_operator_credential_domains_metadata_only(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {
+            "domains": [
+                {
+                    "domainName": "global",
+                    "displayName": "Global",
+                    "description": "default",
+                    "url": "https://jenkins.example/credentials/store/system/domain/_/",
+                    "credentials": [{"id": "secret-id", "secretValue": "nope"}],
+                },
+                {
+                    "domainName": "custom",
+                    "displayName": "Custom",
+                    "description": "",
+                    "url": "https://jenkins.example/credentials/store/system/domain/custom/",
+                },
+            ],
+        }),
+    )
+    report = jenkins.operator_credential_domains(paths, "primary", timeout=5)
+    assert [item["domain_name"] for item in report["items"]] == ["custom", "global"]
+    assert set(report["items"][0]) == {"domain_name", "display_name", "description", "url"}
+    rendered = jenkins.report_to_json(report)
+    assert "secret-id" not in rendered
+    assert "nope" not in rendered
+
+
+def test_operator_blocked_without_credentials(tmp_path):
+    _write_properties(tmp_path, "primary.url=https://jenkins.example\n")
+    report = jenkins.operator_whoami(WorkspacePaths(tmp_path), "primary", timeout=5)
+    assert report["status"] == Status.BLOCKED
+
+
+def test_cli_nodes_json(tmp_path, monkeypatch, capsys):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "operator_nodes",
+        lambda paths, controller, timeout: {
+            "operation": "nodes",
+            "controller": controller,
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "status": Status.READY,
+            "items": [],
+        },
+    )
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="nodes",
+        controller="primary",
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    payload = json.loads(capsys.readouterr().out)
+    jenkins_commands.validate_report_shape(payload)
+    assert code == EXIT_SUCCESS
+
+
+def test_cli_artifacts_missing_selector(tmp_path, capsys):
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="artifacts",
+        controller="primary",
+        job="Demo",
+        build_selector=None,
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    payload = json.loads(capsys.readouterr().out)
+    jenkins_commands.validate_report_shape(payload)
+    assert code == EXIT_USER_ERROR
+    assert payload["message"] == "Missing build selector"
+
+
+def test_cli_jobs_invalid_folder_exit_code(tmp_path, capsys):
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="jobs",
+        controller="primary",
+        folder="../bad",
+        query=None,
+        limit=None,
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    payload = json.loads(capsys.readouterr().out)
+    jenkins_commands.validate_report_shape(payload)
+    assert code == EXIT_USER_ERROR
+
+
+def test_cli_queue_degraded_exit_code(tmp_path, monkeypatch, capsys):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "operator_queue",
+        lambda *_a, **_k: {
+            "operation": "queue",
+            "controller": "primary",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "status": Status.DEGRADED,
+            "message": "truncated",
+            "items": [{"id": 1}],
+        },
+    )
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="queue",
+        controller="primary",
+        limit=1,
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    assert code == EXIT_SUCCESS
+
+
+def test_cli_artifacts_not_found_exit_code(tmp_path, monkeypatch, capsys):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "operator_artifacts",
+        lambda *_a, **_k: {
+            "operation": "artifacts",
+            "controller": "primary",
+            "job": "Demo",
+            "build_selector": "9",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "status": Status.ERROR,
+            "message": "Build '9' not found for job 'Demo'",
+            "items": [],
+        },
+    )
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="artifacts",
+        controller="primary",
+        job="Demo",
+        build_selector="9",
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    assert code == EXIT_USER_ERROR
+
+
+def test_cli_artifacts_blocked_exit_code(tmp_path, monkeypatch, capsys):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "operator_artifacts",
+        lambda *_a, **_k: {
+            "operation": "artifacts",
+            "controller": "primary",
+            "job": "Demo",
+            "build_selector": "1",
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "status": Status.BLOCKED,
+            "message": "Jenkins returned HTTP 403",
+            "items": [],
+        },
+    )
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="artifacts",
+        controller="primary",
+        job="Demo",
+        build_selector="1",
+        json=True,
+        workspace=str(tmp_path),
+    ))
+    assert code == EXIT_BLOCKED
+
+
+def test_validate_build_selector_aliases():
+    assert jenkins._validate_build_selector("last-successful") == ("last-successful", "lastSuccessfulBuild")
+    assert jenkins._validate_build_selector("last-completed") == ("last-completed", "lastCompletedBuild")
+    assert jenkins._validate_build_selector("42") == ("42", "42")
+
+
+def test_operator_job_regression_unchanged(tmp_path, monkeypatch):
+    _write_properties(tmp_path, _default_properties())
+    paths = WorkspacePaths(tmp_path)
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {
+            "name": "Demo",
+            "url": "https://jenkins.example/job/Demo/",
+            "color": "blue",
+            "buildable": True,
+            "inQueue": False,
+            "lastBuild": {"number": 1, "result": "SUCCESS", "timestamp": 1, "duration": 2, "building": False},
+            "builds": [],
+        }),
+    )
+    report = jenkins.operator_job(
+        paths,
+        "primary",
+        "Demo",
+        builds=5,
+        include_parameters=False,
+        timeout=5,
+    )
+    assert report["status"] == Status.READY
+    assert report["items"][0]["job"] == "Demo"
+
+
+def test_operator_credentials_regression_unchanged(tmp_path, monkeypatch):
+    _write_properties(tmp_path, _default_properties())
+    paths = WorkspacePaths(tmp_path)
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {
+            "credentials": [{
+                "id": "id",
+                "typeName": "StringCredentialsImpl",
+                "displayName": "id",
+                "description": "desc",
+            }],
+        }),
+    )
+    report = jenkins.operator_credentials(paths, "primary", domain="_", timeout=5)
+    assert report["status"] == Status.READY
+    assert report["domain"] == "_"
+    assert report["items"][0]["id"] == "id"

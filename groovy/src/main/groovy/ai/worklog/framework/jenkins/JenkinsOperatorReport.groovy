@@ -12,6 +12,11 @@ class JenkinsOperatorReport {
     String controller
     String message
     String domain
+    String folder
+    String query
+    String view
+    String job
+    String buildSelector
     Map required
     List<Map> items = []
 
@@ -25,6 +30,11 @@ class JenkinsOperatorReport {
             controller: payload.controller?.toString(),
             message: payload.message?.toString() ?: '',
             domain: payload.domain?.toString(),
+            folder: payload.folder?.toString(),
+            query: payload.query?.toString(),
+            view: payload.view?.toString(),
+            job: payload.job?.toString(),
+            buildSelector: payload.build_selector?.toString(),
             required: payload.required instanceof Map ? (Map) payload.required : null,
             items: (payload.items ?: []).collect { it instanceof Map ? new LinkedHashMap(it) : [:] }
         )
@@ -46,6 +56,21 @@ class JenkinsOperatorReport {
         if (domain) {
             payload.domain = domain
         }
+        if (folder) {
+            payload.folder = folder
+        }
+        if (query) {
+            payload.query = query
+        }
+        if (view) {
+            payload.view = view
+        }
+        if (job) {
+            payload.job = job
+        }
+        if (buildSelector) {
+            payload.build_selector = buildSelector
+        }
         if (required) {
             payload.required = required
         }
@@ -61,6 +86,21 @@ class JenkinsOperatorReport {
         output.append("Jenkins ${operation}").append(System.lineSeparator())
         if (controller) {
             output.append("  Controller: ${controller}").append(System.lineSeparator())
+        }
+        if (folder) {
+            output.append("  Folder: ${folder}").append(System.lineSeparator())
+        }
+        if (query) {
+            output.append("  Query: ${query}").append(System.lineSeparator())
+        }
+        if (view) {
+            output.append("  View: ${view}").append(System.lineSeparator())
+        }
+        if (job) {
+            output.append("  Job: ${job}").append(System.lineSeparator())
+        }
+        if (buildSelector) {
+            output.append("  Build selector: ${buildSelector}").append(System.lineSeparator())
         }
         output.append("  Fetched: ${fetchedAt}").append(System.lineSeparator())
         output.append("  Status: ${status.value}").append(System.lineSeparator())
@@ -110,7 +150,8 @@ class JenkinsOperatorReport {
         }
         if (report.status == Status.ERROR) {
             String lower = report.message?.toLowerCase() ?: ''
-            if (lower.contains('not found') || lower.contains('invalid') || lower.contains('no files')) {
+            if (lower.contains('not found') || lower.contains('invalid') ||
+                lower.contains('no files') || lower.contains('missing')) {
                 return exitCodes.userError
             }
             return exitCodes.systemError
@@ -121,7 +162,8 @@ class JenkinsOperatorReport {
     private static Map redactItem(Map item, Redaction redaction) {
         Map redacted = (Map) redaction.redact(item)
         ['has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
-         'building', 'recent_failure', 'available'].each { key ->
+         'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
+         'stuck', 'blocked', 'truncated', 'authenticated'].each { key ->
             if (item.containsKey(key)) {
                 redacted[key] = item[key]
             }

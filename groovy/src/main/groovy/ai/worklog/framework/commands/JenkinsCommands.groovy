@@ -19,7 +19,7 @@ class JenkinsCommands {
     ) {
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
         if (!action) {
-            println 'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check} ...'
+            println 'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check|nodes|queue|jobs|artifacts|views|whoami|credential-domains} ...'
             return exitCodes.userError
         }
         List<String> remaining = new ArrayList<>(args)
@@ -110,9 +110,51 @@ class JenkinsCommands {
                 )
             case 'syntax-check':
                 return adapter.operatorSyntaxCheck(parseFiles(remaining, action), settings.process_timeout_seconds as int)
+            case 'nodes':
+                return adapter.operatorNodes(
+                    requireArg(remaining, 'controller', action),
+                    settings.timeout_seconds as int
+                )
+            case 'queue':
+                return adapter.operatorQueue(
+                    requireArg(remaining, 'controller', action),
+                    parseLimit(remaining, '--limit', adapter.operatorLimits().queue_default as int),
+                    settings.timeout_seconds as int
+                )
+            case 'jobs':
+                return adapter.operatorJobs(
+                    requireArg(remaining, 'controller', action),
+                    parseOptionalValue(remaining, '--folder'),
+                    parseOptionalValue(remaining, '--query'),
+                    parseLimit(remaining, '--limit', adapter.operatorLimits().jobs_default as int),
+                    settings.timeout_seconds as int
+                )
+            case 'artifacts':
+                return adapter.operatorArtifacts(
+                    requireArg(remaining, 'controller', action),
+                    requireArg(remaining, 'job', action),
+                    requireArg(remaining, 'build selector', action),
+                    settings.timeout_seconds as int
+                )
+            case 'views':
+                return adapter.operatorViews(
+                    requireArg(remaining, 'controller', action),
+                    parseOptionalValue(remaining, '--view'),
+                    settings.timeout_seconds as int
+                )
+            case 'whoami':
+                return adapter.operatorWhoami(
+                    requireArg(remaining, 'controller', action),
+                    settings.timeout_seconds as int
+                )
+            case 'credential-domains':
+                return adapter.operatorCredentialDomains(
+                    requireArg(remaining, 'controller', action),
+                    settings.timeout_seconds as int
+                )
             default:
                 throw new IllegalArgumentException(
-                    'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check}'
+                    'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check|nodes|queue|jobs|artifacts|views|whoami|credential-domains}'
                 )
         }
     }
@@ -140,6 +182,37 @@ class JenkinsCommands {
         }
         args.removeAll(files)
         files
+    }
+
+    private static int parseLimit(List<String> args, String flag, int defaultValue) {
+        int index = args.indexOf(flag)
+        if (index < 0) {
+            return defaultValue
+        }
+        if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
+            throw new IllegalArgumentException("Missing value for ${flag}")
+        }
+        int value = args[index + 1] as int
+        if (value < 1) {
+            throw new IllegalArgumentException("Invalid ${flag}: ${value}")
+        }
+        args.remove(index + 1)
+        args.remove(index)
+        value
+    }
+
+    private static String parseOptionalValue(List<String> args, String flag) {
+        int index = args.indexOf(flag)
+        if (index < 0) {
+            return null
+        }
+        if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
+            throw new IllegalArgumentException("Missing value for ${flag}")
+        }
+        String value = args[index + 1]
+        args.remove(index + 1)
+        args.remove(index)
+        value
     }
 
     private static int parseBuilds(List<String> args, int defaultBuilds) {

@@ -20,7 +20,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.StateManager
 
 class Main {
-    static final String VERSION = '0.5.0'
+    static final String VERSION = '0.6.0'
 
     static void main(String[] input) {
         int code
