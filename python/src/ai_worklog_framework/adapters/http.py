@@ -5,6 +5,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from ai_worklog_framework.adapters.internal_ssl import https_context_for
+
 
 def http_request(
     url: str,
@@ -19,8 +21,12 @@ def http_request(
     request = Request(url, data=body, method=method.upper())
     for key, value in (headers or {}).items():
         request.add_header(key, value)
+    context = https_context_for(url)
     try:
-        with urlopen(request, timeout=timeout) as response:
+        kwargs = {"timeout": timeout}
+        if context is not None:
+            kwargs["context"] = context
+        with urlopen(request, **kwargs) as response:
             return response.status, response.read().decode("utf-8", errors="replace")
     except HTTPError as exc:
         payload = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
