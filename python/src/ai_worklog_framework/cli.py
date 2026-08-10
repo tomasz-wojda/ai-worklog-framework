@@ -10,11 +10,16 @@ import argparse
 import platform
 from typing import List, Optional
 
+from ai_worklog_framework.shared import load_shared
 
-EXIT_SUCCESS = 0
-EXIT_USER_ERROR = 1
-EXIT_SYSTEM_ERROR = 2
-EXIT_BLOCKED = 3
+_EXIT_CODES = load_shared(
+    "exit-codes.json",
+    {"success": 0, "user_error": 1, "system_error": 2, "blocked": 3},
+)
+EXIT_SUCCESS = _EXIT_CODES["success"]
+EXIT_USER_ERROR = _EXIT_CODES["user_error"]
+EXIT_SYSTEM_ERROR = _EXIT_CODES["system_error"]
+EXIT_BLOCKED = _EXIT_CODES["blocked"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
+    workspace_parser = subparsers.add_parser("workspace", help="Workspace setup operations")
+    workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
+    for action in ("init", "revert"):
+        workspace_action = workspace_sub.add_parser(action)
+        workspace_action.add_argument("path", help="Workspace root")
+        workspace_action.add_argument("--apply", action="store_true", help="Apply planned changes")
+
     # catalog
     catalog_parser = subparsers.add_parser("catalog", help="Service catalog operations", parents=[parent_parser])
     catalog_sub = catalog_parser.add_subparsers(dest="catalog_action")
@@ -55,6 +67,51 @@ def build_parser() -> argparse.ArgumentParser:
     ticket_sub = ticket_parser.add_subparsers(dest="ticket_action")
     ticket_prepare = ticket_sub.add_parser("prepare", help="Generate preparation report")
     ticket_prepare.add_argument("key", help="JIRA ticket key")
+
+    state_parser = subparsers.add_parser("state", help="Structured ticket state", parents=[parent_parser])
+    state_sub = state_parser.add_subparsers(dest="state_action")
+    state_sub.add_parser("list", help="List ticket state files")
+    state_show = state_sub.add_parser("show", help="Show ticket state")
+    state_show.add_argument("key")
+    state_init = state_sub.add_parser("init", help="Initialize ticket state")
+    state_init.add_argument("key")
+    state_init.add_argument("--summary")
+    state_init.add_argument("--service", action="append")
+    state_init.add_argument(
+        "--governance-mode",
+        choices=["research", "innovate", "plan", "execute"],
+        default="research",
+    )
+    state_init.add_argument("--apply", action="store_true")
+    state_set = state_sub.add_parser("set", help="Set a validated state path")
+    state_set.add_argument("key")
+    state_set.add_argument("--path", required=True)
+    state_set.add_argument("--value", required=True)
+    state_set.add_argument("--apply", action="store_true")
+    state_blocker = state_sub.add_parser("blocker", help="Manage blockers")
+    state_blocker_sub = state_blocker.add_subparsers(dest="state_operation")
+    blocker_add = state_blocker_sub.add_parser("add")
+    blocker_add.add_argument("key")
+    blocker_add.add_argument("--description", required=True)
+    blocker_add.add_argument("--owner")
+    blocker_add.add_argument("--apply", action="store_true")
+    blocker_resolve = state_blocker_sub.add_parser("resolve")
+    blocker_resolve.add_argument("key")
+    blocker_resolve.add_argument("--index", required=True, type=int)
+    blocker_resolve.add_argument("--apply", action="store_true")
+    state_decision = state_sub.add_parser("decision", help="Manage decisions")
+    state_decision_sub = state_decision.add_subparsers(dest="state_operation")
+    decision_add = state_decision_sub.add_parser("add")
+    decision_add.add_argument("key")
+    decision_add.add_argument("--id", required=True)
+    decision_add.add_argument("--description", required=True)
+    decision_add.add_argument("--owner")
+    decision_add.add_argument("--apply", action="store_true")
+    decision_resolve = state_decision_sub.add_parser("resolve")
+    decision_resolve.add_argument("key")
+    decision_resolve.add_argument("--id", required=True)
+    decision_resolve.add_argument("--resolution", required=True)
+    decision_resolve.add_argument("--apply", action="store_true")
 
     # preflight
     preflight_parser = subparsers.add_parser("preflight", help="Environment preflight checks", parents=[parent_parser])
@@ -91,6 +148,10 @@ def build_parser() -> argparse.ArgumentParser:
     diag_run.add_argument("pack", help="Pack identifier")
     diag_run.add_argument("--namespace", type=str, help="Kubernetes namespace")
     diag_run.add_argument("--app", type=str, help="Application or service name")
+    diag_run.add_argument("--service", type=str, help="Catalog service identifier")
+    diag_run.add_argument("--param", action="append", help="Pack parameter as key=value")
+    diag_run.add_argument("--output", type=str, help="Evidence output path")
+    diag_run.add_argument("--json", action="store_true", help="Print evidence JSON")
 
     # toolchain
     toolchain_parser = subparsers.add_parser(
@@ -129,9 +190,23 @@ def dispatch(args: argparse.Namespace) -> int:
         from ai_worklog_framework.catalog import commands as catalog_cmds
         return catalog_cmds.run(args)
 
+    if args.command == "workspace":
+        if not args.workspace_action:
+            print("Usage: ai-worklog workspace {init|revert} <path> [--apply]")
+            return EXIT_USER_ERROR
+        from ai_worklog_framework.workspace import commands as workspace_cmds
+        return workspace_cmds.run(args)
+
     if args.command == "ticket":
         from ai_worklog_framework.catalog import ticket as ticket_cmds
         return ticket_cmds.run(args)
+
+    if args.command == "state":
+        if not args.state_action:
+            print("Usage: ai-worklog state {list|init|show|set|blocker|decision}")
+            return EXIT_USER_ERROR
+        from ai_worklog_framework.state import commands as state_cmds
+        return state_cmds.run(args)
 
     if args.command == "preflight":
         from ai_worklog_framework.adapters import preflight as preflight_mod
@@ -170,7 +245,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     """
     parser = build_parser()
     args = parser.parse_args(argv)
-    code = dispatch(args)
+    try:
+        code = dispatch(args)
+    except ValueError as exc:
+        print(str(exc))
+        code = EXIT_USER_ERROR
     sys.exit(code)
 
 

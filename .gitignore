@@ -22,23 +22,23 @@ ENV/
 **/token
 **/server-id
 
-worklog/
-prompt.log
+/worklog/
+/prompt.log
 *.log.bak
 
-aws/
-eks/
-ssh/
-snow/
-argocd/
-datadog/
+/aws/
+/eks/
+/ssh/
+/snow/
+/argocd/
+/datadog/
 
-tmp/
-repos/
+/tmp/
+/repos/
 *.tfstate
 *.tfstate.backup
 
-.ai-worklog/state/
+/.ai-worklog/state/
 
 .DS_Store
 Thumbs.db
@@ -48,4 +48,4 @@ Thumbs.db
 htmlcov/
 
 .gradle/
-groovy/build/
+/groovy/build/

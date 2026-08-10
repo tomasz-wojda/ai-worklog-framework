@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ai_worklog_framework.config import load_config
 from ai_worklog_framework.paths import WorkspacePaths
 from ai_worklog_framework.shared import framework_root, load_shared
 
@@ -46,7 +47,10 @@ def load_catalog(paths: WorkspacePaths) -> Dict[str, Dict[str, Any]]:
     """
     catalog: Dict[str, Dict[str, Any]] = {}
 
-    catalog_dirs = [paths.catalog_dir]
+    configured_catalog = load_config(paths.root).catalog_path
+    catalog_dirs = [configured_catalog]
+    if paths.catalog_dir not in catalog_dirs:
+        catalog_dirs.append(paths.catalog_dir)
 
     framework_catalog = framework_root() / "catalog"
     if framework_catalog.is_dir() and framework_catalog != paths.catalog_dir:

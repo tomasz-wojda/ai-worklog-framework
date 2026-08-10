@@ -1,0 +1,28 @@
+{
+  "directories": [
+    ".ai-worklog",
+    ".ai-worklog/state",
+    ".ai-worklog/catalog",
+    ".ai-worklog/evidence",
+    "worklog",
+    "worklog/done",
+    "worklog/interface"
+  ],
+  "config_template": "config/workspace-config.example.json",
+  "config_target": ".ai-worklog/config.json",
+  "services": [
+    "jira",
+    "newrelic",
+    "aws",
+    "eks",
+    "jenkins",
+    "github",
+    "argocd",
+    "artifactory",
+    "ssh",
+    "snow",
+    "datadog"
+  ],
+  "interface_path": "worklog/interface",
+  "managed_marker": ".managed-by-ai-worklog-framework"
+}

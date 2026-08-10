@@ -1,0 +1,27 @@
+{
+  "ticket_key": "TEST-1",
+  "summary": "Parity fixture",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "governance_mode": "research",
+  "investigation": {"state": "not_started", "hypotheses": [], "findings": [], "evidence_refs": []},
+  "implementation": {"state": "not_started", "local_changes": [], "uncommitted": false},
+  "pull_requests": [],
+  "builds": [],
+  "gitops": {"state": "not_applicable", "changes": []},
+  "synchronization": {"state": "unknown", "manual_actions": []},
+  "verification": {"state": "not_started", "checks": []},
+  "closeout": {
+    "implementation_complete": false,
+    "deployment_complete": false,
+    "tempo_logged": false,
+    "tempo_seconds": 0,
+    "worklog_archived": false,
+    "handover_generated": false
+  },
+  "decisions": [],
+  "blockers": [],
+  "next_action": "Review parity",
+  "services": [],
+  "repositories": []
+}

@@ -18,11 +18,13 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from ai_worklog_framework.cli import EXIT_SUCCESS, EXIT_USER_ERROR
+from ai_worklog_framework.adapters.preflight_scope import resolve_scope
+from ai_worklog_framework.cli import EXIT_BLOCKED, EXIT_SUCCESS, EXIT_USER_ERROR
 from ai_worklog_framework.config import load_config
 from ai_worklog_framework.paths import resolve_workspace, WorkspacePaths
 from ai_worklog_framework.result import Result, ResultSet, Status
 from ai_worklog_framework.toolchain.resolver import check_toolchain
+from ai_worklog_framework.shared import load_shared
 
 
 def run(args) -> int:
@@ -39,7 +41,12 @@ def run(args) -> int:
     paths = WorkspacePaths(workspace)
     config = load_config(workspace)
 
-    results = execute_preflight(paths, config, services=getattr(args, "service", None))
+    results = execute_preflight(
+        paths,
+        config,
+        services=getattr(args, "service", None),
+        ticket=getattr(args, "ticket", None),
+    )
     print(results.summary())
     print()
 
@@ -47,16 +54,16 @@ def run(args) -> int:
     if overall == Status.READY:
         print(f"Preflight: READY")
         return EXIT_SUCCESS
-    else:
-        actionable = results.filter_actionable()
-        print(f"Preflight: {overall.value.upper()} ({len(actionable)} issue(s))")
-        return EXIT_USER_ERROR
+    actionable = results.filter_actionable()
+    print(f"Preflight: {overall.value.upper()} ({len(actionable)} issue(s))")
+    return EXIT_BLOCKED if overall == Status.BLOCKED else EXIT_USER_ERROR
 
 
 def execute_preflight(
     paths: WorkspacePaths,
     config: "Config",
     services: Optional[List[str]] = None,
+    ticket: Optional[str] = None,
 ) -> ResultSet:
     """
     Runs all preflight checks and returns aggregated results.
@@ -70,18 +77,106 @@ def execute_preflight(
         ResultSet with all check outcomes.
     """
     results = ResultSet()
+    scope = resolve_scope(paths, ticket, services)
+    checks = scope.checks
 
-    results.add(_check_workspace_structure(paths))
-    _check_binaries(results, config)
-    _check_jira(results, paths)
-    _check_git(results)
-    _check_github(results)
-    _check_aws(results, paths)
-    _check_kubectl(results)
-    _check_servicenow(results, paths)
-    _check_toolchain(results, config)
+    def selected(check: str) -> bool:
+        return checks is None or check in checks
+
+    if selected("workspace"):
+        results.add(_check_workspace_structure(paths))
+    if checks is None:
+        _check_binaries(results, config)
+    if selected("jira"):
+        _check_jira(results, paths)
+    if selected("git"):
+        _check_git(results)
+    if selected("github"):
+        _check_github(results)
+    if selected("aws"):
+        _check_aws(results, paths)
+    if selected("kubectl"):
+        _check_kubectl(results)
+    if selected("servicenow"):
+        _check_servicenow(results, paths)
+    if selected("jenkins"):
+        _check_service_properties(results, paths, "jenkins", "jenkins.properties")
+    if selected("argocd"):
+        _check_binary(results, "argocd")
+    if selected("newrelic"):
+        _check_service_directory(results, paths, "newrelic")
+    if selected("datadog"):
+        _check_service_directory(results, paths, "datadog")
+    if selected("repositories"):
+        _check_repositories(results, paths, scope.service_ids, scope.catalog)
+    if selected("catalog_binaries"):
+        _check_catalog_binaries(results, scope.service_ids, scope.catalog)
+    if selected("toolchain"):
+        _check_toolchain(results, config)
 
     return results
+
+
+def _check_binary(results: ResultSet, binary: str) -> None:
+    status = Status.READY if shutil.which(binary) else Status.BLOCKED
+    message = "Found" if status == Status.READY else "Not found"
+    results.add(Result(status=status, source=f"bin:{binary}", message=message))
+
+
+def _check_service_directory(
+    results: ResultSet, paths: WorkspacePaths, service: str
+) -> None:
+    directory = paths.service_dir(service)
+    status = Status.READY if directory.is_dir() else Status.BLOCKED
+    message = "Directory present" if directory.is_dir() else "Directory not found"
+    results.add(Result(status=status, source=service, message=message))
+
+
+def _check_service_properties(
+    results: ResultSet,
+    paths: WorkspacePaths,
+    service: str,
+    filename: str,
+) -> None:
+    file = paths.service_dir(service) / filename
+    status = Status.READY if file.is_file() else Status.BLOCKED
+    message = f"{filename} present" if file.is_file() else f"{filename} missing"
+    results.add(Result(status=status, source=service, message=message))
+
+
+def _check_repositories(
+    results: ResultSet,
+    paths: WorkspacePaths,
+    service_ids: List[str],
+    catalog: dict,
+) -> None:
+    repositories = set()
+    for service_id in service_ids:
+        for repository in catalog.get(service_id, {}).get("repositories", []):
+            if repository.get("local_dir"):
+                repositories.add(repository["local_dir"])
+    for repository in sorted(repositories):
+        present = (paths.root / "repos" / repository).is_dir()
+        results.add(Result(
+            status=Status.READY if present else Status.BLOCKED,
+            source=f"repo:{repository}",
+            message="Present" if present else "Not cloned",
+        ))
+
+
+def _check_catalog_binaries(
+    results: ResultSet,
+    service_ids: List[str],
+    catalog: dict,
+) -> None:
+    packs = load_shared("diagnostic-packs.json", {})
+    binaries = set()
+    for service_id in service_ids:
+        pack_ids = catalog.get(service_id, {}).get("monitoring", {}).get("diagnostic_packs", [])
+        for pack_id in pack_ids:
+            binaries.update(packs.get(pack_id, {}).get("prerequisites", []))
+    for binary in sorted(binaries):
+        _check_binary(results, binary)
 
 
 def _check_toolchain(results: ResultSet, config) -> None:

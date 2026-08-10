@@ -120,29 +120,30 @@ runtime selection. The Python package installs the fallback command as
 
 ## Workspace Setup
 
-The bootstrap script creates service links under
-`worklog/interface/`. It never reads credential contents and refuses to
-overwrite existing targets.
+Workspace initialization creates the runtime directories, seeds configuration,
+and links existing service directories under `worklog/interface/`. It never
+reads credential contents or overwrites existing targets.
 
 Preview all operations:
 
 ```bash
-./scripts/bootstrap.sh /absolute/path/to/workspace --dry-run
+ai-worklog workspace init /absolute/path/to/workspace
 ```
 
 Create links:
 
 ```bash
-./scripts/bootstrap.sh /absolute/path/to/workspace --link
+ai-worklog workspace init /absolute/path/to/workspace --apply
 ```
 
 Remove links created by the framework:
 
 ```bash
-./scripts/bootstrap.sh /absolute/path/to/workspace --revert
+ai-worklog workspace revert /absolute/path/to/workspace --apply
 ```
 
-The following service interfaces are supported:
+The legacy `scripts/bootstrap.sh` interface remains available as a compatibility
+wrapper. The following service interfaces are supported:
 
 ```
 jira newrelic aws eks jenkins github argocd artifactory ssh snow datadog
@@ -150,13 +151,7 @@ jira newrelic aws eks jenkins github argocd artifactory ssh snow datadog
 
 ## Configuration
 
-Create a workspace-local configuration:
-
-```bash
-mkdir -p /absolute/path/to/workspace/.ai-worklog
-cp config/workspace-config.example.json \
-  /absolute/path/to/workspace/.ai-worklog/config.json
-```
+Workspace initialization creates `.ai-worklog/config.json` when it is absent.
 
 Configuration is loaded in this order:
 
@@ -259,6 +254,20 @@ The preparation report discovers active and archived worklogs, catalog matches,
 local repositories, relevant pull requests, known delivery paths, readiness,
 and preparation gaps.
 
+### Structured Ticket State
+
+```bash
+ai-worklog state init PROJ-1234 --service example-eks-platform
+ai-worklog state init PROJ-1234 --service example-eks-platform --apply
+ai-worklog state set PROJ-1234 --path implementation.state --value in_progress
+ai-worklog state set PROJ-1234 --path implementation.state --value in_progress --apply
+ai-worklog state blocker add PROJ-1234 --description "Waiting for access" --apply
+ai-worklog state show PROJ-1234
+```
+
+State writes are dry-runs unless `--apply` is present. Values may be strings or
+JSON literals, and every update is validated before an atomic file replacement.
+
 ### Daily Routines
 
 ```bash
@@ -290,8 +299,9 @@ ai-worklog diag run k8s-workload --namespace example --app example
 
 Registered packs cover Kubernetes workloads, OOM investigations, Argo CD sync,
 New Relic telemetry, Jenkins builds, host parity, and Automox policy evidence.
-Pack execution is read-only; packs that are not yet implemented report their
-stub status explicitly.
+Pack execution is read-only. Each run validates prerequisites and parameters,
+redacts captured output, and writes an evidence bundle under
+`.ai-worklog/evidence/`. Generic parameters use `--param key=value`.
 
 ## Runtime State
 

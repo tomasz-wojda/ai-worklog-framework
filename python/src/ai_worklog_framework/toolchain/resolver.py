@@ -132,8 +132,8 @@ def detect_java_runtimes(config: Dict[str, Any]) -> List[JavaRuntime]:
             found[major] = runtime
 
     if shutil.which("/usr/libexec/java_home"):
-        code, out, _ = _run(["/usr/libexec/java_home", "-V"])
-        combined = out
+        code, out, err = _run(["/usr/libexec/java_home", "-V"])
+        combined = out + err
         for line in combined.splitlines():
             match = re.search(r"(\d+)(?:\.\d+)*.*\((.+)\)", line)
             if not match:

@@ -13,6 +13,8 @@ Outputs:
 """
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -130,8 +132,25 @@ def save_state(paths: WorkspacePaths, state: TicketState) -> None:
     """
     state_file = paths.ticket_state_file(state.ticket_key)
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(state.data, f, indent=2, ensure_ascii=False)
+    state.data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{state_file.name}.",
+        suffix=".tmp",
+        dir=state_file.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(state.data, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, state_file)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def list_active_tickets(paths: WorkspacePaths) -> List[str]:

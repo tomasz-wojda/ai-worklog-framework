@@ -6,6 +6,7 @@
     "AKIA[A-Z0-9]{16}",
     "ghp_[A-Za-z0-9]{36,}",
     "glpat-[A-Za-z0-9\\-_]{20,}",
-    "xox[bps]-[A-Za-z0-9\\-]+"
+    "xox[bps]-[A-Za-z0-9\\-]+",
+    "(?i)(token|api_key|apikey|password|secret)=[^&\\s]+"
   ]
 }

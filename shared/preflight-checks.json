@@ -1,0 +1,17 @@
+{
+  "global_checks": ["workspace", "git", "toolchain"],
+  "service_checks": {
+    "jira": ["jira"],
+    "jenkins": ["jenkins"],
+    "github": ["github"],
+    "aws": ["aws"],
+    "eks": ["aws", "kubectl"],
+    "kubectl": ["kubectl"],
+    "argocd": ["kubectl", "argocd"],
+    "snow": ["servicenow"],
+    "servicenow": ["servicenow"],
+    "newrelic": ["newrelic"],
+    "datadog": ["datadog"]
+  },
+  "derived_checks": ["repositories", "catalog_binaries"]
+}

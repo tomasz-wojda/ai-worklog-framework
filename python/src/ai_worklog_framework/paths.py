@@ -12,6 +12,7 @@ Outputs:
 """
 
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +24,13 @@ _PATH_RULES = load_shared(
 )
 WORKSPACE_MARKERS = _PATH_RULES["markers"]
 MAX_PARENT_DEPTH = _PATH_RULES["max_parent_depth"]
+SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _validate_component(value: str, label: str) -> str:
+    if not SAFE_COMPONENT.fullmatch(value) or value in (".", ".."):
+        raise ValueError(f"Invalid {label}: {value}")
+    return value
 
 
 def find_workspace_root(start: Optional[Path] = None) -> Optional[Path]:
@@ -120,6 +128,7 @@ class WorkspacePaths:
         Returns:
             Path to the service directory.
         """
+        service = _validate_component(service, "service")
         interface = self.interface_dir / service
         if interface.exists():
             return interface
@@ -138,4 +147,5 @@ class WorkspacePaths:
         Returns:
             Path to the ticket's state JSON file.
         """
+        ticket_key = _validate_component(ticket_key, "ticket key")
         return self.state_dir / f"{ticket_key}.json"

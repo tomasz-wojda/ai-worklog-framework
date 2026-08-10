@@ -37,12 +37,12 @@ def test_runtime_versions_are_explicit() -> None:
     assert groovy.returncode == 0
     assert python.returncode == 0
     assert re.fullmatch(
-        r"ai-worklog 0\.1\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
+        r"ai-worklog 0\.2\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
         groovy.stdout.strip(),
     )
     assert (
         python.stdout.strip()
-        == f"ai-worklog 0.1.0 (python {platform.python_version()})"
+        == f"ai-worklog 0.2.0 (python {platform.python_version()})"
     )
 
 
@@ -52,7 +52,7 @@ def test_runtime_versions_are_explicit() -> None:
         ("catalog", "validate"),
         ("catalog", "search", "example"),
         ("diag", "list"),
-        ("diag", "run", "k8s-workload", "--namespace", "test"),
+        ("state", "list"),
     ],
 )
 def test_stable_command_output_matches(arguments: tuple[str, ...]) -> None:
@@ -68,6 +68,57 @@ def test_catalog_json_matches() -> None:
     groovy = run("groovy", "catalog", "show", "example-eks-platform")
     assert python.returncode == groovy.returncode == 0
     assert json.loads(python.stdout) == json.loads(groovy.stdout)
+
+
+def test_state_json_matches() -> None:
+    python = run("python", "state", "show", "TEST-1")
+    groovy = run("groovy", "state", "show", "TEST-1")
+    assert python.returncode == groovy.returncode == 0
+    assert json.loads(python.stdout) == json.loads(groovy.stdout)
+
+
+def test_workspace_init_dry_run_matches(tmp_path) -> None:
+    def execute(runtime: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(CLI), "--runtime", runtime, "workspace", "init", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+    python = execute("python")
+    groovy = execute("groovy")
+    assert python.returncode == groovy.returncode == 0
+    assert python.stdout == groovy.stdout
+
+
+def test_diagnostic_blocked_output_matches(tmp_path) -> None:
+    output = tmp_path / "evidence.json"
+    arguments = (
+        "diag", "run", "k8s-workload", "--namespace", "test",
+        "--output", str(output),
+    )
+    python = run("python", *arguments)
+    groovy = run("groovy", *arguments)
+    assert python.returncode == groovy.returncode == 3
+    assert python.stdout == groovy.stdout
+
+
+def test_scoped_preflight_status_matches() -> None:
+    python = run("python", "preflight", "--service", "jira")
+    groovy = run("groovy", "preflight", "--service", "jira")
+    assert python.returncode == groovy.returncode
+    python_statuses = sorted(
+        line.strip().split(" ", 2)[:2]
+        for line in python.stdout.splitlines()
+        if line.strip().startswith("[")
+    )
+    groovy_statuses = sorted(
+        line.strip().split(" ", 2)[:2]
+        for line in groovy.stdout.splitlines()
+        if line.strip().startswith("[")
+    )
+    assert python_statuses == groovy_statuses
 
 
 @pytest.mark.parametrize(

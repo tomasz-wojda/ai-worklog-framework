@@ -14,22 +14,20 @@ Outputs:
 import re
 from typing import Any, Dict, List, Union
 
+from ai_worklog_framework.shared import load_shared
 
-REDACTED = "***REDACTED***"
-
+_REDACTION_RULES = load_shared("redaction-patterns.json", {})
+REDACTED = _REDACTION_RULES.get("redacted", "***REDACTED***")
 SENSITIVE_KEY_PATTERNS = re.compile(
-    r"(token|password|passwd|secret|cookie|api_key|apikey|auth|bearer|"
-    r"aws_secret_access_key|aws_session_token|session_id|jsessionid|"
-    r"private_key|client_secret)",
+    _REDACTION_RULES.get(
+        "sensitive_key_pattern",
+        r"(token|password|secret|cookie|auth)",
+    ),
     re.IGNORECASE,
 )
-
 SENSITIVE_VALUE_PATTERNS = [
-    re.compile(r"(Bearer\s+)\S+", re.IGNORECASE),
-    re.compile(r"(AKIA[A-Z0-9]{16})"),
-    re.compile(r"(ghp_[A-Za-z0-9]{36,})"),
-    re.compile(r"(glpat-[A-Za-z0-9\-_]{20,})"),
-    re.compile(r"(xox[bps]-[A-Za-z0-9\-]+)"),
+    re.compile(pattern)
+    for pattern in _REDACTION_RULES.get("sensitive_value_patterns", [])
 ]
 
 

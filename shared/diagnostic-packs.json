@@ -2,43 +2,76 @@
   "argocd-sync": {
     "name": "ArgoCD Sync Verification",
     "description": "Compares desired revision against live resource state",
-    "prerequisites": ["kubectl", "argocd"],
-    "read_only": true
+    "prerequisites": ["argocd"],
+    "read_only": true,
+    "required_parameters": ["app"],
+    "steps": [
+      {"id": "application", "command": ["argocd", "app", "get", "{app}", "-o", "json"], "timeout_seconds": 30}
+    ]
   },
   "automox-policy": {
     "name": "Automox Policy Execution Evidence",
     "description": "Queries policy run events and group membership from Automox API",
     "prerequisites": ["curl"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["url"],
+    "steps": [
+      {"id": "policy", "command": ["curl", "--fail", "--silent", "--show-error", "--request", "GET", "{url}"], "timeout_seconds": 30}
+    ]
   },
   "host-parity": {
     "name": "Host Configuration Parity",
-    "description": "Compares installed packages and config across hosts via SSH",
+    "description": "Collects read-only system identity from hosts via SSH",
     "prerequisites": ["ssh"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["host"],
+    "steps": [
+      {"id": "system", "command": ["ssh", "{host}", "uname", "-a"], "timeout_seconds": 30},
+      {"id": "disk", "command": ["ssh", "{host}", "df", "-h"], "timeout_seconds": 30}
+    ]
   },
   "jenkins-build": {
     "name": "Jenkins Build Evidence",
-    "description": "Retrieves recent build status, parameters, and failure logs",
+    "description": "Retrieves build data from a Jenkins JSON endpoint",
     "prerequisites": ["curl"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["url"],
+    "steps": [
+      {"id": "build", "command": ["curl", "--fail", "--silent", "--show-error", "--request", "GET", "{url}"], "timeout_seconds": 30}
+    ]
   },
   "k8s-oom": {
     "name": "Kubernetes OOM Investigation",
-    "description": "Identifies OOMKilled containers, memory limits, and resource consumption",
+    "description": "Identifies OOMKilled containers, memory limits, and warning events",
     "prerequisites": ["kubectl"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["namespace"],
+    "steps": [
+      {"id": "pods", "command": ["kubectl", "get", "pods", "-n", "{namespace}", "-o", "json"], "timeout_seconds": 30},
+      {"id": "events", "command": ["kubectl", "get", "events", "-n", "{namespace}", "--field-selector", "type=Warning"], "timeout_seconds": 30}
+    ]
   },
   "k8s-workload": {
     "name": "Kubernetes Workload Health",
-    "description": "Checks pod status, restarts, OOM events, resources, and HPA",
+    "description": "Checks pod status, deployment, resources, events, and HPA",
     "prerequisites": ["kubectl"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["namespace", "app"],
+    "steps": [
+      {"id": "pods", "command": ["kubectl", "get", "pods", "-n", "{namespace}", "-l", "app={app}", "-o", "wide"], "timeout_seconds": 30},
+      {"id": "deployment", "command": ["kubectl", "get", "deployment", "{app}", "-n", "{namespace}", "-o", "yaml"], "timeout_seconds": 30},
+      {"id": "hpa", "command": ["kubectl", "get", "hpa", "{app}", "-n", "{namespace}"], "timeout_seconds": 30},
+      {"id": "events", "command": ["kubectl", "get", "events", "-n", "{namespace}", "--field-selector", "type=Warning"], "timeout_seconds": 30}
+    ]
   },
   "nr-telemetry": {
     "name": "New Relic Telemetry Verification",
-    "description": "Checks for missing metrics, log forwarding, and agent connectivity",
+    "description": "Retrieves telemetry data from a configured read-only endpoint",
     "prerequisites": ["curl"],
-    "read_only": true
+    "read_only": true,
+    "required_parameters": ["url"],
+    "steps": [
+      {"id": "telemetry", "command": ["curl", "--fail", "--silent", "--show-error", "--request", "GET", "{url}"], "timeout_seconds": 30}
+    ]
   }
 }
