@@ -18,15 +18,15 @@ def plan_init(workspace: Path) -> List[Dict[str, Any]]:
             "reason": "already exists" if target.is_dir() else "",
         })
 
-    config_target = workspace / rules["config_target"]
-    config_source = framework_root() / rules["config_template"]
-    actions.append({
-        "kind": "copy",
-        "source": config_source,
-        "target": config_target,
-        "skip": config_target.exists(),
-        "reason": "already exists" if config_target.exists() else "",
-    })
+    for managed_file in rules.get("files", []):
+        target = workspace / managed_file["target"]
+        actions.append({
+            "kind": "copy",
+            "source": framework_root() / managed_file["source"],
+            "target": target,
+            "skip": target.exists(),
+            "reason": "already exists" if target.exists() else "",
+        })
 
     interface = workspace / rules["interface_path"]
     for service in rules.get("services", []):

@@ -28,14 +28,16 @@ class WorkspacePlanner {
             ]
         }
 
-        File configTarget = new File(workspace, rules.config_target.toString())
-        actions << [
-            kind: 'copy',
-            source: new File(frameworkRoot, rules.config_template.toString()),
-            target: configTarget,
-            skip: configTarget.exists(),
-            reason: configTarget.exists() ? 'already exists' : ''
-        ]
+        ((List) rules.files).each { managedFile ->
+            File target = new File(workspace, managedFile.target.toString())
+            actions << [
+                kind: 'copy',
+                source: new File(frameworkRoot, managedFile.source.toString()),
+                target: target,
+                skip: target.exists(),
+                reason: target.exists() ? 'already exists' : ''
+            ]
+        }
 
         File interfaceDir = new File(workspace, rules.interface_path.toString())
         ((List) rules.services).each { service ->

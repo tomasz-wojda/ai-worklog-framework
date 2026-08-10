@@ -16,6 +16,7 @@ def test_workspace_init_is_idempotent(tmp_path):
     assert (tmp_path / ".ai-worklog/evidence").is_dir()
     assert (tmp_path / "worklog/done").is_dir()
     assert (tmp_path / ".ai-worklog/config.json").is_file()
+    assert (tmp_path / ".ai-worklog/.gitignore").read_text() == "*\n!.gitignore\n"
     assert (tmp_path / "worklog/interface/jira").is_symlink()
     assert all(action["skip"] for action in plan_init(tmp_path))
 

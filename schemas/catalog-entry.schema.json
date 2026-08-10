@@ -6,7 +6,7 @@
   "properties": {
     "id": {
       "type": "string",
-      "description": "Unique service identifier (e.g., 'example-api', 'example-waiter')"
+      "description": "Unique service identifier (e.g., 'example-api', 'example-worker')"
     },
     "name": {
       "type": "string",

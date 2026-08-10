@@ -22,10 +22,10 @@ def catalog_workspace(tmp_path):
     entries = [
         {"id": "svc-alpha", "name": "Alpha Service", "type": "application",
          "jira": {"project": "PROJ", "components": ["alpha"]},
-         "repositories": [{"local_dir": "EXAMPLE-alpha", "url": "https://github.com/org/alpha"}]},
+         "repositories": [{"local_dir": "example-alpha", "url": "https://github.com/example-org/alpha"}]},
         {"id": "svc-beta", "name": "Beta Platform", "type": "infrastructure",
          "jira": {"project": "APP", "components": ["beta"]},
-         "repositories": [{"local_dir": "EXAMPLE-beta", "url": "https://github.com/org/beta"}]},
+         "repositories": [{"local_dir": "example-beta", "url": "https://github.com/example-org/beta"}]},
     ]
     (catalog_dir / "services.json").write_text(json.dumps(entries))
     return tmp_path

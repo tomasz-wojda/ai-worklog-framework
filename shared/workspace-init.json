@@ -8,8 +8,16 @@
     "worklog/done",
     "worklog/interface"
   ],
-  "config_template": "config/workspace-config.example.json",
-  "config_target": ".ai-worklog/config.json",
+  "files": [
+    {
+      "source": "config/workspace-config.example.json",
+      "target": ".ai-worklog/config.json"
+    },
+    {
+      "source": "config/workspace.gitignore",
+      "target": ".ai-worklog/.gitignore"
+    }
+  ],
   "services": [
     "jira",
     "newrelic",

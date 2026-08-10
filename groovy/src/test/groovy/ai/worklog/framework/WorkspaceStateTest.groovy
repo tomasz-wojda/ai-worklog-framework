@@ -26,6 +26,10 @@ class WorkspaceStateTest extends GroovyTestCase {
         WorkspacePlanner.apply(planner.planInit(workspace))
         assertTrue(new File(workspace, '.ai-worklog/state').isDirectory())
         assertTrue(new File(workspace, '.ai-worklog/config.json').isFile())
+        assertEquals(
+            "*${System.lineSeparator()}!.gitignore${System.lineSeparator()}",
+            new File(workspace, '.ai-worklog/.gitignore').getText('UTF-8')
+        )
         assertTrue(
             java.nio.file.Files.isSymbolicLink(
                 new File(workspace, 'worklog/interface/jira').toPath()

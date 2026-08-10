@@ -1,0 +1,24 @@
+{
+  "allowed_github_owners": ["example-org", "tomasz-wojda"],
+  "allowed_ticket_prefixes": [
+    "APP",
+    "FLOW",
+    "LICENSE",
+    "OPS",
+    "OTHER",
+    "PROJ",
+    "TEST",
+    "UTF"
+  ],
+  "allowed_catalog_projects": ["APP", "OPS", "PROJ"],
+  "catalog_id_prefix": "example-",
+  "catalog_repository_prefix": "example-",
+  "forbidden_token_sha256": [
+    "14da5d70daaa665ecfedd7e76c13706bbf00cc8ba7dc361555a78ce0cecc334a",
+    "3251f230a0c199f8ec86d35d359274381e6005dd16e15a4603a050ecdc52b47d",
+    "3bb60fec2255953ab885342b164cb58473c39d6950fbada35ea3fd4ab46bc565",
+    "519334b707336bfdf4b83b77739027cb5fbb1383b2cfa2a01e4e256b317dedc2",
+    "cc5971612ba0352557e734af1000c5d5345e183a540825a86a4be31744389afe",
+    "f4cb42bb45d482ef9ebbd1decb860f4e1acd3ebd367a3e130412f615d6d028b9"
+  ]
+}

@@ -1,0 +1,144 @@
+[
+  {
+    "id": "example-metrics-exporter",
+    "name": "Example Metrics Exporter",
+    "type": "application",
+    "owners": ["platform-team"],
+    "jira": {
+      "project": "PROJ",
+      "components": ["platform", "monitoring"]
+    },
+    "repositories": [
+      {
+        "url": "https://github.com/example-org/example-jenkins",
+        "local_dir": "example-jenkins",
+        "default_branch": "main",
+        "role": "jenkins"
+      },
+      {
+        "url": "https://github.com/example-org/example-deploy-config",
+        "local_dir": "example-deploy-config",
+        "default_branch": "main",
+        "role": "deploy"
+      }
+    ],
+    "jenkins": {
+      "controller": "jenkins-primary",
+      "jobs": [
+        {"name": "Example_Build_MetricsExporter", "type": "build"},
+        {"name": "Example_Deploy_MetricsExporter", "type": "deploy"}
+      ]
+    },
+    "argocd": {
+      "applications": [
+        {"name": "example-metrics-exporter", "cluster": "example-uat", "namespace": "example", "environment": "uat"}
+      ]
+    },
+    "build": {
+      "artifact_type": "docker",
+      "registry": "container-registry",
+      "image_pattern": "example-metrics-exporter"
+    },
+    "monitoring": {
+      "prometheus_job": "example-metrics-exporter",
+      "diagnostic_packs": ["k8s-workload", "argocd-sync"]
+    },
+    "environments": [
+      {"name": "uat", "cluster": "example-uat", "namespace": "example", "aws_profile": "example-stage"},
+      {"name": "prod", "cluster": "example-prod", "namespace": "example", "aws_profile": "example-prod"}
+    ],
+    "delivery_path": ["PR application repo", "merge", "build image", "PR deploy-config repo", "merge", "ArgoCD sync", "verify live"]
+  },
+  {
+    "id": "example-eks-platform",
+    "name": "Example EKS Platform",
+    "type": "infrastructure",
+    "owners": ["platform-team"],
+    "jira": {
+      "project": "PROJ",
+      "components": ["platform", "eks"]
+    },
+    "repositories": [
+      {
+        "url": "https://github.com/example-org/example-platform-config",
+        "local_dir": "example-platform-config",
+        "default_branch": "main",
+        "role": "config"
+      },
+      {
+        "url": "https://github.com/example-org/example-platform-deployments",
+        "local_dir": "example-platform-deployments",
+        "default_branch": "main",
+        "role": "deploy"
+      },
+      {
+        "url": "https://github.com/example-org/example-helm-charts",
+        "local_dir": "example-helm-charts",
+        "default_branch": "main",
+        "role": "helm"
+      }
+    ],
+    "jenkins": {
+      "controller": "jenkins-primary",
+      "jobs": [
+        {"name": "Example_Platform_Build", "type": "build"},
+        {"name": "Example_Platform_Deploy", "type": "deploy"}
+      ]
+    },
+    "argocd": {
+      "applications": [
+        {"name": "platform-core", "cluster": "example-uat", "namespace": "argocd", "environment": "uat"},
+        {"name": "platform-core", "cluster": "example-prod", "namespace": "argocd", "environment": "prod"}
+      ]
+    },
+    "monitoring": {
+      "diagnostic_packs": ["k8s-workload", "argocd-sync", "k8s-oom"]
+    },
+    "environments": [
+      {"name": "uat", "cluster": "example-uat", "namespace": "example", "aws_profile": "example-stage"},
+      {"name": "prod", "cluster": "example-prod", "namespace": "example", "aws_profile": "example-prod"}
+    ],
+    "delivery_path": ["PR platform config", "merge", "ArgoCD sync", "verify live"]
+  },
+  {
+    "id": "example-worker",
+    "name": "Example Worker Service",
+    "type": "application",
+    "owners": ["application-team"],
+    "jira": {
+      "project": "APP",
+      "components": ["application", "worker"]
+    },
+    "repositories": [
+      {
+        "url": "https://github.com/example-org/example-worker",
+        "local_dir": "example-worker",
+        "default_branch": "main",
+        "role": "source"
+      },
+      {
+        "url": "https://github.com/example-org/example-worker-ci",
+        "local_dir": "example-worker-ci",
+        "default_branch": "main",
+        "role": "jenkins"
+      }
+    ],
+    "jenkins": {
+      "controller": "jenkins-secondary",
+      "jobs": [
+        {"name": "Example_Worker_Build", "type": "build"},
+        {"name": "Example_Worker_Deploy", "type": "deploy"}
+      ]
+    },
+    "monitoring": {
+      "newrelic_entity_name": "example-worker",
+      "diagnostic_packs": ["k8s-workload"]
+    },
+    "environments": [
+      {"name": "dev", "cluster": "example-dev", "namespace": "example", "aws_profile": "example-stage"},
+      {"name": "stage", "cluster": "example-stage", "namespace": "example", "aws_profile": "example-stage"},
+      {"name": "prod", "cluster": "example-prod", "namespace": "example", "aws_profile": "example-prod"}
+    ],
+    "delivery_path": ["PR source", "merge", "build", "deploy to dev", "deploy to stage", "deploy to prod"]
+  }
+]

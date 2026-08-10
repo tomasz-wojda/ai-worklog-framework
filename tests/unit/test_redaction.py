@@ -67,7 +67,7 @@ class TestRedactString:
         assert "ghp_" not in result
 
     def test_safe_string(self):
-        text = "hostname: jenkins-primary.example.com port: 8080"
+        text = "hostname: host-a.example.com port: 8080"
         assert redact_string(text) == text
 
 
@@ -90,6 +90,6 @@ class TestRedactDict:
         assert "my-token-here" not in result["config"]
 
     def test_safe_dict_unchanged(self):
-        data = {"host": "jenkins-primary", "port": 8080, "enabled": True}
+        data = {"host": "host-a", "port": 8080, "enabled": True}
         result = redact_dict(data)
         assert result == data

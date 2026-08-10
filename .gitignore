@@ -38,7 +38,7 @@ ENV/
 *.tfstate
 *.tfstate.backup
 
-/.ai-worklog/state/
+/.ai-worklog/
 
 .DS_Store
 Thumbs.db

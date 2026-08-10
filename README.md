@@ -242,6 +242,12 @@ Catalog entries can model repositories, owners, Jenkins jobs, Argo CD
 applications, environments, build artifacts, secret references, monitoring
 entities, and delivery paths.
 
+The bundled catalog contains fictional examples only. Store organization-specific
+entries in the workspace-local `.ai-worklog/catalog/` overlay. Workspace
+initialization protects the complete `.ai-worklog/` directory with a local
+ignore file so configuration, state, catalog overlays, and evidence are not
+committed accidentally.
+
 Secret references may contain names or paths only. Actual values are rejected.
 
 ### Ticket Preparation
@@ -294,7 +300,7 @@ eligible for archival.
 
 ```bash
 ai-worklog diag list
-ai-worklog diag run k8s-workload --namespace example --app example
+ai-worklog diag run k8s-workload --namespace example --app example-worker
 ```
 
 Registered packs cover Kubernetes workloads, OOM investigations, Argo CD sync,
