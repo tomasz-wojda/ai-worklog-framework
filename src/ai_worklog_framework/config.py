@@ -34,6 +34,7 @@ class Config:
     services: Dict[str, Any] = field(default_factory=dict)
     adapters: Dict[str, Any] = field(default_factory=dict)
     preflight: Dict[str, Any] = field(default_factory=dict)
+    toolchain: Dict[str, Any] = field(default_factory=dict)
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -91,6 +92,11 @@ def _framework_defaults() -> Dict[str, Any]:
             "required_binaries": ["python3", "git", "gh", "kubectl", "aws", "jq"],
             "optional_binaries": ["groovy", "java", "argocd", "helm"],
         },
+        "toolchain": {
+            "java": {},
+            "groovy": {},
+            "tools": {},
+        },
     }
 
 
@@ -130,4 +136,5 @@ def load_config(workspace_root: Path) -> Config:
         services=merged.get("services", {}),
         adapters=merged.get("adapters", {}),
         preflight=merged.get("preflight", {}),
+        toolchain=merged.get("toolchain", {}),
     )

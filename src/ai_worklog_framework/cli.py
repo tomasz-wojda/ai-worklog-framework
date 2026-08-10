@@ -91,6 +91,16 @@ def build_parser() -> argparse.ArgumentParser:
     diag_run.add_argument("--namespace", type=str, help="Kubernetes namespace")
     diag_run.add_argument("--app", type=str, help="Application or service name")
 
+    # toolchain
+    toolchain_parser = subparsers.add_parser(
+        "toolchain", help="Python/Java/Groovy version detection and routing", parents=[parent_parser]
+    )
+    toolchain_sub = toolchain_parser.add_subparsers(dest="toolchain_action")
+    toolchain_sub.add_parser("check", help="Detect runtimes and validate tool compatibility", parents=[parent_parser])
+    toolchain_sub.add_parser("list", help="List tools and resolved environments", parents=[parent_parser])
+    toolchain_env = toolchain_sub.add_parser("env", help="Print shell exports for a tool", parents=[parent_parser])
+    toolchain_env.add_argument("tool", help="Tool name (e.g. jira-cli, newrelic-cli)")
+
     return parser
 
 
@@ -141,6 +151,10 @@ def dispatch(args: argparse.Namespace) -> int:
     if args.command == "diag":
         from ai_worklog_framework.diagnostics import commands as diag_cmds
         return diag_cmds.run(args)
+
+    if args.command == "toolchain":
+        from ai_worklog_framework.toolchain import commands as toolchain_cmds
+        return toolchain_cmds.run(args)
 
     build_parser().print_help()
     return EXIT_USER_ERROR

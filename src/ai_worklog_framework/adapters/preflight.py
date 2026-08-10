@@ -22,6 +22,7 @@ from ai_worklog_framework.cli import EXIT_SUCCESS, EXIT_USER_ERROR
 from ai_worklog_framework.config import load_config
 from ai_worklog_framework.paths import resolve_workspace, WorkspacePaths
 from ai_worklog_framework.result import Result, ResultSet, Status
+from ai_worklog_framework.toolchain.resolver import check_toolchain
 
 
 def run(args) -> int:
@@ -78,8 +79,16 @@ def execute_preflight(
     _check_aws(results, paths)
     _check_kubectl(results)
     _check_servicenow(results, paths)
+    _check_toolchain(results, config)
 
     return results
+
+
+def _check_toolchain(results: ResultSet, config) -> None:
+    """Reports Python/Java/Groovy compatibility for legacy Groovy tools."""
+    toolchain_results = check_toolchain(config.toolchain)
+    for item in toolchain_results.results:
+        results.add(item)
 
 
 def _check_workspace_structure(paths: WorkspacePaths) -> Result:

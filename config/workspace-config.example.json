@@ -1,0 +1,19 @@
+{
+  "catalog_path": "catalog",
+  "interface_path": "worklog/interface",
+  "toolchain": {
+    "java": {
+      "17": "/Library/Java/JavaVirtualMachines/openjdk-17.jdk/Contents/Home",
+      "25": "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+    },
+    "groovy": {
+      "default": "/opt/homebrew/bin/groovy"
+    },
+    "tools": {
+      "jira-cli": { "java": 17, "groovy": 3 },
+      "newrelic-cli": { "java": 17, "groovy": 3 },
+      "jenkins-syntax-check": { "java": 17 },
+      "gradle-java25": { "java": 25 }
+    }
+  }
+}
