@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
-        "--workspace", type=str, default=None,
+        "--workspace", type=str, default=argparse.SUPPRESS,
         help="Override workspace root (default: auto-detect)"
     )
 

@@ -1,0 +1,28 @@
+plugins {
+    id 'groovy'
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation localGroovy()
+    testImplementation localGroovy()
+    testImplementation 'junit:junit:4.13.2'
+}
+
+application {
+    mainClass = 'ai.worklog.framework.Main'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnit()
+}

@@ -10,11 +10,11 @@ requires-python = ">=3.10"
 license = {text = "MIT"}
 
 [project.scripts]
-ai-worklog = "ai_worklog_framework.cli:main"
+ai-worklog-python = "ai_worklog_framework.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["python/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["python/src"]

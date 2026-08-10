@@ -15,13 +15,14 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from ai_worklog_framework.shared import load_shared
 
-WORKSPACE_MARKERS = [
-    ".ai-worklog",
-    "worklog",
-    "prompt.log",
-    "jira",
-]
+_PATH_RULES = load_shared(
+    "workspace-markers.json",
+    {"markers": [".ai-worklog", "worklog", "prompt.log", "jira"], "max_parent_depth": 20},
+)
+WORKSPACE_MARKERS = _PATH_RULES["markers"]
+MAX_PARENT_DEPTH = _PATH_RULES["max_parent_depth"]
 
 
 def find_workspace_root(start: Optional[Path] = None) -> Optional[Path]:
@@ -37,7 +38,7 @@ def find_workspace_root(start: Optional[Path] = None) -> Optional[Path]:
     current = start or Path.cwd()
     current = current.resolve()
 
-    for _ in range(20):
+    for _ in range(MAX_PARENT_DEPTH):
         for marker in WORKSPACE_MARKERS:
             if (current / marker).exists():
                 return current

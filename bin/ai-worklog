@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME="${AI_WORKLOG_RUNTIME:-groovy}"
+ARGS=()
+
+while (($#)); do
+  case "$1" in
+    --runtime)
+      if (($# < 2)); then
+        echo "Missing value for --runtime" >&2
+        exit 1
+      fi
+      RUNTIME="$2"
+      shift 2
+      ;;
+    --runtime=*)
+      RUNTIME="${1#*=}"
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+case "$RUNTIME" in
+  groovy)
+    exec "$ROOT/bin/ai-worklog-groovy" "${ARGS[@]}"
+    ;;
+  python)
+    exec "$ROOT/bin/ai-worklog-python" "${ARGS[@]}"
+    ;;
+  *)
+    echo "Unsupported runtime: $RUNTIME (expected groovy or python)" >&2
+    exit 1
+    ;;
+esac

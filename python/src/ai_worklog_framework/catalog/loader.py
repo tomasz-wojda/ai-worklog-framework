@@ -17,10 +17,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ai_worklog_framework.paths import WorkspacePaths
+from ai_worklog_framework.shared import framework_root, load_shared
 
 
-REQUIRED_FIELDS = ["id", "name", "type"]
-VALID_TYPES = ["application", "infrastructure", "library", "pipeline", "platform"]
+_CATALOG_RULES = load_shared("catalog-rules.json", {})
+REQUIRED_FIELDS = _CATALOG_RULES.get("required_fields", ["id", "name", "type"])
+VALID_TYPES = _CATALOG_RULES.get(
+    "valid_types", ["application", "infrastructure", "library", "pipeline", "platform"]
+)
+FORBIDDEN_SECRET_FIELDS = _CATALOG_RULES.get(
+    "forbidden_secret_fields", ["value", "password"]
+)
 
 
 def load_catalog(paths: WorkspacePaths) -> Dict[str, Dict[str, Any]]:
@@ -41,7 +48,7 @@ def load_catalog(paths: WorkspacePaths) -> Dict[str, Dict[str, Any]]:
 
     catalog_dirs = [paths.catalog_dir]
 
-    framework_catalog = Path(__file__).parent.parent.parent.parent / "catalog"
+    framework_catalog = framework_root() / "catalog"
     if framework_catalog.is_dir() and framework_catalog != paths.catalog_dir:
         catalog_dirs.insert(0, framework_catalog)
 
@@ -108,7 +115,7 @@ def validate_entry(entry: Dict[str, Any]) -> List[str]:
     else:
         for i, secret in enumerate(secrets):
             if isinstance(secret, dict):
-                if "value" in secret or "password" in secret:
+                if any(field in secret for field in FORBIDDEN_SECRET_FIELDS):
                     errors.append(f"secrets[{i}] must NOT contain actual secret values")
 
     return errors

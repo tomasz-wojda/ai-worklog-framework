@@ -1,0 +1,6 @@
+{
+  "success": 0,
+  "user_error": 1,
+  "system_error": 2,
+  "blocked": 3
+}

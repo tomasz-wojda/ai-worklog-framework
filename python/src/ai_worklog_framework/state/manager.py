@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ai_worklog_framework.paths import WorkspacePaths
+from ai_worklog_framework.shared import load_shared
 
 
 class TicketState:
@@ -35,33 +36,9 @@ class TicketState:
     @staticmethod
     def _default_state(ticket_key: str) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        return {
-            "ticket_key": ticket_key,
-            "summary": "",
-            "created_at": now,
-            "updated_at": now,
-            "governance_mode": "research",
-            "investigation": {"state": "not_started", "hypotheses": [], "findings": [], "evidence_refs": []},
-            "implementation": {"state": "not_started", "local_changes": [], "uncommitted": False},
-            "pull_requests": [],
-            "builds": [],
-            "gitops": {"state": "not_applicable", "changes": []},
-            "synchronization": {"state": "unknown", "manual_actions": []},
-            "verification": {"state": "not_started", "checks": []},
-            "closeout": {
-                "implementation_complete": False,
-                "deployment_complete": False,
-                "tempo_logged": False,
-                "tempo_seconds": 0,
-                "worklog_archived": False,
-                "handover_generated": False,
-            },
-            "decisions": [],
-            "blockers": [],
-            "next_action": "",
-            "services": [],
-            "repositories": [],
-        }
+        state = load_shared("ticket-state-defaults.json", {})
+        state.update({"ticket_key": ticket_key, "created_at": now, "updated_at": now})
+        return state
 
     @property
     def data(self) -> Dict[str, Any]:

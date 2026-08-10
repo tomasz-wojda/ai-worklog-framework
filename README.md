@@ -11,6 +11,10 @@ outside this repository.
 
 ```
 ai-worklog-framework/
+├── bin/
+│   ├── ai-worklog                      <- Groovy-default runtime dispatcher
+│   ├── ai-worklog-groovy               <- Direct Groovy launcher
+│   └── ai-worklog-python               <- Direct Python launcher
 ├── catalog/
 │   └── services.json                 <- Versioned service and delivery metadata
 ├── config/
@@ -20,23 +24,25 @@ ai-worklog-framework/
 │   ├── release-manifest.schema.json
 │   ├── ticket-state.schema.json
 │   └── workspace-config.schema.json
-├── scripts/
-│   ├── bootstrap.sh                  <- Safe workspace interface setup
-│   └── run-groovy-tool.sh            <- Per-tool Java/Groovy launcher
-├── src/ai_worklog_framework/
+├── groovy/
+│   ├── src/main/groovy/              <- Groovy CLI and command implementation
+│   ├── src/test/groovy/              <- Groovy unit tests
+│   └── build.gradle
+├── python/src/ai_worklog_framework/
 │   ├── adapters/                     <- Read-only external service adapters
 │   ├── catalog/                      <- Catalog and ticket preparation
 │   ├── delivery/                     <- Delivery lifecycle reporting
 │   ├── diagnostics/                  <- Reusable diagnostic packs
 │   ├── reports/                      <- Daily and close-out reports
 │   ├── state/                        <- Structured ticket state
-│   ├── toolchain/                    <- Python, Java, and Groovy routing
-│   ├── cli.py
-│   ├── config.py
-│   ├── paths.py
-│   ├── redaction.py
-│   └── result.py
+│   └── toolchain/                    <- Python, Java, and Groovy routing
+├── scripts/
+│   ├── bootstrap.sh                  <- Safe workspace interface setup
+│   └── run-groovy-tool.sh            <- Per-tool Java/Groovy launcher
+├── shared/                           <- Cross-runtime rules and defaults
 ├── tests/
+│   ├── parity/                       <- Python/Groovy contract tests
+│   └── unit/                         <- Python unit tests
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
@@ -61,39 +67,56 @@ The runtime workspace is not versioned by this repository. The framework reads
 existing service interfaces and stores runtime state under
 `<workspace>/.ai-worklog/`.
 
+The Groovy and Python implementations expose the same command tree and consume
+the same JSON contracts under `shared/`. Groovy is the operational default;
+Python remains a supported fallback and parity reference.
+
 ## Requirements
 
 - macOS or Linux
-- Python 3.10 or newer
+- Groovy 3, 4, or 5
+- Java 17 for Groovy 3/4, or Java 17–25 for Groovy 5
+- Python 3.10 or newer for the fallback runtime and parity tests
 - Git
 - Optional tools used by individual adapters:
   - GitHub CLI
   - AWS CLI
   - `kubectl`
   - Argo CD CLI
-  - Java 17 and/or Java 25
-  - Groovy 3, 4, or 5
+  - Additional Java or Groovy versions used by workspace tools
 
 ## Installation
 
-Create a virtual environment and install the package:
+Clone the repository and put its dispatcher on `PATH`:
 
 ```bash
 git clone https://github.com/tomasz-wojda/ai-worklog-framework.git
 cd ai-worklog-framework
+export PATH="$PWD/bin:$PATH"
+ai-worklog --version
+```
+
+Groovy is the default runtime. The launcher selects Java 17 on macOS when it is
+available, which keeps Groovy 3 and 4 compatible. Install the optional Python
+fallback and test environment with:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
 ```
 
-Verify the CLI:
+Select a runtime explicitly when needed:
 
 ```bash
-ai-worklog --version
+ai-worklog --runtime groovy --version
+ai-worklog --runtime python --version
+AI_WORKLOG_RUNTIME=python ai-worklog --version
 ```
 
-To use the command without manually activating the virtual environment, add
-`<repository>/.venv/bin` to `PATH`.
+`ai-worklog-groovy` and `ai-worklog-python` are also available for direct
+runtime selection. The Python package installs the fallback command as
+`ai-worklog-python`; it does not replace the Groovy-default dispatcher.
 
 ## Workspace Setup
 
@@ -167,6 +190,7 @@ each tool.
 | `newrelic-cli` | 17 | 3+ |
 | `jenkins-syntax-check` | 17 | Not required |
 | `gradle-java25` | 25 | Not required |
+| `framework-groovy` | 17 | 3+ |
 
 Compatibility policy:
 
@@ -317,7 +341,11 @@ Run the test suite:
 
 ```bash
 python3 -m pytest tests/ -q
+JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle -p groovy test
 ```
+
+The parity suite invokes both launchers and compares stable output, JSON
+payloads, report semantics, and exit codes.
 
 Validate the live workspace without changing it:
 

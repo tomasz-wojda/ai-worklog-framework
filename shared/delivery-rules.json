@@ -1,0 +1,12 @@
+{
+  "positive_statuses": ["complete", "merged", "success", "synced", "verified", "not_applicable"],
+  "negative_statuses": ["blocked", "failure", "failed", "forced_sync_required"],
+  "empty_statuses": ["not_started", "none", "unknown"],
+  "gap_messages": {
+    "uncommitted": "Implementation complete but changes uncommitted",
+    "merged_without_build": "PRs merged but no builds recorded",
+    "build_without_gitops": "Builds exist but GitOps state not tracked",
+    "forced_sync": "ArgoCD requires manual forced sync",
+    "unverified_merge": "PRs merged but no live verification recorded"
+  }
+}

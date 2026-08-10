@@ -14,8 +14,10 @@ from datetime import datetime
 
 from ai_worklog_framework.cli import EXIT_SUCCESS, EXIT_USER_ERROR
 from ai_worklog_framework.paths import resolve_workspace, WorkspacePaths
+from ai_worklog_framework.shared import load_shared
 from ai_worklog_framework.state.manager import load_state
 
+DELIVERY_RULES = load_shared("delivery-rules.json", {})
 
 def run(args) -> int:
     """
@@ -100,38 +102,39 @@ def _build_summary(builds: list) -> str:
 
 
 def _status_indicator(status: str) -> str:
-    positive = ["complete", "merged", "success", "synced", "verified", "not_applicable"]
-    negative = ["blocked", "failure", "failed", "forced_sync_required"]
+    positive = DELIVERY_RULES.get("positive_statuses", [])
+    negative = DELIVERY_RULES.get("negative_statuses", [])
     if any(p in status.lower() for p in positive):
         return "[OK]"
     if any(n in status.lower() for n in negative):
         return "[!!]"
-    if status in ("not_started", "none", "unknown"):
+    if status in DELIVERY_RULES.get("empty_statuses", []):
         return "[--]"
     return "[..]"
 
 
 def _identify_gaps(data: dict) -> list:
     gaps = []
+    messages = DELIVERY_RULES.get("gap_messages", {})
     impl = data.get("implementation", {})
     if impl.get("state") == "complete" and impl.get("uncommitted"):
-        gaps.append("Implementation complete but changes uncommitted")
+        gaps.append(messages.get("uncommitted", "Implementation complete but changes uncommitted"))
 
     prs = data.get("pull_requests", [])
     merged_prs = [p for p in prs if p.get("state") == "merged"]
     builds = data.get("builds", [])
 
     if merged_prs and not builds:
-        gaps.append("PRs merged but no builds recorded")
+        gaps.append(messages.get("merged_without_build", "PRs merged but no builds recorded"))
 
     if builds and data.get("gitops", {}).get("state") == "not_applicable":
-        gaps.append("Builds exist but GitOps state not tracked")
+        gaps.append(messages.get("build_without_gitops", "Builds exist but GitOps state not tracked"))
 
     sync = data.get("synchronization", {})
     if sync.get("state") == "forced_sync_required":
-        gaps.append("ArgoCD requires manual forced sync")
+        gaps.append(messages.get("forced_sync", "ArgoCD requires manual forced sync"))
 
     if data.get("verification", {}).get("state") == "not_started" and merged_prs:
-        gaps.append("PRs merged but no live verification recorded")
+        gaps.append(messages.get("unverified_merge", "PRs merged but no live verification recorded"))
 
     return gaps

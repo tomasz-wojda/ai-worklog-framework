@@ -1,0 +1,33 @@
+{
+  "summary": "",
+  "governance_mode": "research",
+  "investigation": {
+    "state": "not_started",
+    "hypotheses": [],
+    "findings": [],
+    "evidence_refs": []
+  },
+  "implementation": {
+    "state": "not_started",
+    "local_changes": [],
+    "uncommitted": false
+  },
+  "pull_requests": [],
+  "builds": [],
+  "gitops": {"state": "not_applicable", "changes": []},
+  "synchronization": {"state": "unknown", "manual_actions": []},
+  "verification": {"state": "not_started", "checks": []},
+  "closeout": {
+    "implementation_complete": false,
+    "deployment_complete": false,
+    "tempo_logged": false,
+    "tempo_seconds": 0,
+    "worklog_archived": false,
+    "handover_generated": false
+  },
+  "decisions": [],
+  "blockers": [],
+  "next_action": "",
+  "services": [],
+  "repositories": []
+}

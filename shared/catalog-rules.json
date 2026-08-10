@@ -1,0 +1,5 @@
+{
+  "required_fields": ["id", "name", "type"],
+  "valid_types": ["application", "infrastructure", "library", "pipeline", "platform"],
+  "forbidden_secret_fields": ["value", "password"]
+}

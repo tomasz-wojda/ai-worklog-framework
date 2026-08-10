@@ -11,52 +11,10 @@ Outputs:
 """
 
 from ai_worklog_framework.cli import EXIT_SUCCESS, EXIT_USER_ERROR
+from ai_worklog_framework.shared import load_shared
 
 
-AVAILABLE_PACKS = {
-    "k8s-workload": {
-        "name": "Kubernetes Workload Health",
-        "description": "Checks pod status, restarts, OOM events, resources, and HPA",
-        "prerequisites": ["kubectl"],
-        "read_only": True,
-    },
-    "argocd-sync": {
-        "name": "ArgoCD Sync Verification",
-        "description": "Compares desired revision against live resource state",
-        "prerequisites": ["kubectl", "argocd"],
-        "read_only": True,
-    },
-    "k8s-oom": {
-        "name": "Kubernetes OOM Investigation",
-        "description": "Identifies OOMKilled containers, memory limits, and resource consumption",
-        "prerequisites": ["kubectl"],
-        "read_only": True,
-    },
-    "nr-telemetry": {
-        "name": "New Relic Telemetry Verification",
-        "description": "Checks for missing metrics, log forwarding, and agent connectivity",
-        "prerequisites": ["curl"],
-        "read_only": True,
-    },
-    "jenkins-build": {
-        "name": "Jenkins Build Evidence",
-        "description": "Retrieves recent build status, parameters, and failure logs",
-        "prerequisites": ["curl"],
-        "read_only": True,
-    },
-    "host-parity": {
-        "name": "Host Configuration Parity",
-        "description": "Compares installed packages and config across hosts via SSH",
-        "prerequisites": ["ssh"],
-        "read_only": True,
-    },
-    "automox-policy": {
-        "name": "Automox Policy Execution Evidence",
-        "description": "Queries policy run events and group membership from Automox API",
-        "prerequisites": ["curl"],
-        "read_only": True,
-    },
-}
+AVAILABLE_PACKS = load_shared("diagnostic-packs.json", {})
 
 
 def run(args) -> int:

@@ -17,7 +17,7 @@ if [ -z "${AI_WORKLOG_WORKSPACE:-}" ]; then
     AI_WORKLOG_WORKSPACE="$(cd "${FRAMEWORK_ROOT}/../.." && pwd)"
 fi
 
-ENV_OUTPUT="$(python3 -m ai_worklog_framework.cli toolchain env "${TOOL}" --workspace "${AI_WORKLOG_WORKSPACE}" 2>/dev/null || true)"
+ENV_OUTPUT="$("${FRAMEWORK_ROOT}/bin/ai-worklog" toolchain env "${TOOL}" --workspace "${AI_WORKLOG_WORKSPACE}" 2>/dev/null || true)"
 if echo "${ENV_OUTPUT}" | grep -q "^# BLOCKED"; then
     echo "${ENV_OUTPUT}" >&2
     exit 1

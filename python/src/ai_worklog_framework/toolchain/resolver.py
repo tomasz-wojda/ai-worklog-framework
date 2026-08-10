@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ai_worklog_framework.result import Result, ResultSet, Status
+from ai_worklog_framework.shared import load_shared
 
 
 JAVA_MAJOR_RE = re.compile(r'version "(\d+)')
@@ -66,38 +67,19 @@ class ToolEnvironment:
     message: str
 
 
+_TOOLCHAIN_RULES = load_shared("toolchain-tools.json", {})
 DEFAULT_TOOL_SPECS: Dict[str, ToolSpec] = {
-    "jira-cli": ToolSpec(
-        name="jira-cli",
-        java_major=17,
-        groovy_major=3,
-        description="jira/jira-ticket-info.sh and Groovy Jira scripts",
-    ),
-    "newrelic-cli": ToolSpec(
-        name="newrelic-cli",
-        java_major=17,
-        groovy_major=3,
-        description="newrelic/newrelic-info.sh and Groovy NR scripts",
-    ),
-    "jenkins-syntax-check": ToolSpec(
-        name="jenkins-syntax-check",
-        java_major=17,
-        groovy_major=None,
-        description="Jenkins pipeline Groovy syntax validation (JDK 17)",
-    ),
-    "gradle-java25": ToolSpec(
-        name="gradle-java25",
-        java_major=25,
-        groovy_major=None,
-        description="Gradle builds requiring Java 25",
-    ),
+    name: ToolSpec(
+        name=name,
+        java_major=int(spec["java"]),
+        groovy_major=int(spec["groovy"]) if spec.get("groovy") is not None else None,
+        description=spec.get("description", ""),
+    )
+    for name, spec in _TOOLCHAIN_RULES.get("tools", {}).items()
 }
-
-
 GROOVY_JAVA_COMPAT: Dict[int, Tuple[int, int]] = {
-    3: (8, 17),
-    4: (8, 21),
-    5: (17, 25),
+    int(major): (int(bounds["min_java"]), int(bounds["max_java"]))
+    for major, bounds in _TOOLCHAIN_RULES.get("compatibility", {}).items()
 }
 
 
