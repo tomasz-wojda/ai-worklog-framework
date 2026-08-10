@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Release Manifest",
+  "description": "Describes a multi-repository release for delivery tracking",
+  "type": "object",
+  "required": ["ticket_key", "created_at", "repositories"],
+  "properties": {
+    "ticket_key": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "description": { "type": "string" },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["local_dir"],
+        "properties": {
+          "local_dir": { "type": "string" },
+          "branch": { "type": "string" },
+          "pr_number": { "type": "integer" },
+          "pr_state": { "type": "string", "enum": ["draft", "open", "merged", "closed"] },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "local_dir values that must merge first"
+          }
+        }
+      }
+    },
+    "builds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "job": { "type": "string" },
+          "controller": { "type": "string" },
+          "expected_artifact": { "type": "string" },
+          "triggered_by": { "type": "string", "description": "Repository local_dir that triggers this build" }
+        }
+      }
+    },
+    "gitops_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "file": { "type": "string" },
+          "change_type": { "type": "string", "enum": ["image_tag", "chart_version", "config", "manifest"] },
+          "expected_value": { "type": "string" }
+        }
+      }
+    },
+    "verification_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "command": { "type": "string" },
+          "environment": { "type": "string" },
+          "expected_output": { "type": "string" },
+          "read_only": { "type": "boolean", "default": true }
+        }
+      }
+    },
+    "manual_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "reason": { "type": "string" },
+          "performed": { "type": "boolean", "default": false }
+        }
+      },
+      "description": "Actions not captured in any PR (forced syncs, seed runs, etc.)"
+    },
+    "environments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Target environments in deployment order"
+    }
+  },
+  "additionalProperties": false
+}

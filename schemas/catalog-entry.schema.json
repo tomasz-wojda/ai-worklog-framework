@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Service Catalog Entry",
+  "type": "object",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique service identifier (e.g., 'example-api', 'example-waiter')"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable service name"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["application", "infrastructure", "library", "pipeline", "platform"],
+      "description": "Service category"
+    },
+    "owners": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Team or person identifiers"
+    },
+    "jira": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string" },
+        "components": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string" },
+          "local_dir": { "type": "string", "description": "Directory name under repos/" },
+          "default_branch": { "type": "string", "default": "develop" },
+          "role": {
+            "type": "string",
+            "enum": ["source", "deploy", "config", "jenkins", "helm", "terraform"],
+            "description": "Repository purpose for this service"
+          }
+        }
+      }
+    },
+    "jenkins": {
+      "type": "object",
+      "properties": {
+        "controller": { "type": "string", "description": "Controller identifier from jenkins.properties" },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "path": { "type": "string" },
+              "type": { "type": "string", "enum": ["build", "deploy", "seed", "test", "utility"] }
+            }
+          }
+        }
+      }
+    },
+    "argocd": {
+      "type": "object",
+      "properties": {
+        "applications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "cluster": { "type": "string" },
+              "namespace": { "type": "string" },
+              "environment": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "properties": {
+        "artifact_type": { "type": "string", "enum": ["docker", "zip", "helm-chart", "npm", "jar"] },
+        "registry": { "type": "string" },
+        "image_pattern": { "type": "string", "description": "Image name pattern (e.g., 'example-metrics-exporter')" }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string", "enum": ["aws-secrets-manager", "kubernetes-secret", "jenkins-credentials", "external-secret"] },
+          "reference": { "type": "string", "description": "Secret name or path (no values)" },
+          "environments": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "description": "Secret references WITHOUT values"
+    },
+    "monitoring": {
+      "type": "object",
+      "properties": {
+        "newrelic_app_id": { "type": "string" },
+        "newrelic_entity_name": { "type": "string" },
+        "grafana_dashboard_uid": { "type": "string" },
+        "prometheus_job": { "type": "string" },
+        "diagnostic_packs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "environments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "cluster": { "type": "string" },
+          "namespace": { "type": "string" },
+          "aws_profile": { "type": "string" }
+        }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "command": { "type": "string" },
+          "read_only": { "type": "boolean", "default": true },
+          "environment": { "type": "string" }
+        }
+      },
+      "description": "Verification commands classified by read/write safety"
+    },
+    "delivery_path": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ordered steps in the canonical delivery sequence"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ticket State",
+  "description": "Per-ticket structured state with independent lifecycle dimensions",
+  "type": "object",
+  "required": ["ticket_key", "created_at"],
+  "properties": {
+    "ticket_key": { "type": "string" },
+    "summary": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "governance_mode": {
+      "type": "string",
+      "enum": ["research", "innovate", "plan", "execute"]
+    },
+    "investigation": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string", "enum": ["not_started", "in_progress", "complete", "blocked"] },
+        "hypotheses": { "type": "array", "items": { "type": "string" } },
+        "findings": { "type": "array", "items": { "type": "string" } },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string", "enum": ["not_started", "in_progress", "complete", "blocked"] },
+        "local_changes": { "type": "array", "items": { "type": "string" } },
+        "uncommitted": { "type": "boolean" }
+      }
+    },
+    "pull_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string" },
+          "number": { "type": "integer" },
+          "state": { "type": "string", "enum": ["draft", "open", "merged", "closed"] },
+          "url": { "type": "string" },
+          "depends_on": { "type": "array", "items": { "type": "integer" } }
+        }
+      }
+    },
+    "builds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "job": { "type": "string" },
+          "number": { "type": "integer" },
+          "result": { "type": "string", "enum": ["success", "failure", "running", "unknown"] },
+          "artifact": { "type": "string" },
+          "triggered_by_pr": { "type": "integer" }
+        }
+      }
+    },
+    "gitops": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string", "enum": ["not_applicable", "pending", "committed", "merged"] },
+        "changes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "synchronization": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string", "enum": ["unknown", "out_of_sync", "synced", "forced_sync_required", "verified"] },
+        "argocd_app": { "type": "string" },
+        "expected_revision": { "type": "string" },
+        "live_revision": { "type": "string" },
+        "manual_actions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "state": { "type": "string", "enum": ["not_started", "partial", "complete", "failed"] },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "passed": { "type": "boolean" },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "evidence": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "closeout": {
+      "type": "object",
+      "properties": {
+        "implementation_complete": { "type": "boolean" },
+        "deployment_complete": { "type": "boolean" },
+        "tempo_logged": { "type": "boolean" },
+        "tempo_seconds": { "type": "integer" },
+        "worklog_archived": { "type": "boolean" },
+        "handover_generated": { "type": "boolean" }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "resolved", "superseded"] },
+          "resolution": { "type": "string" },
+          "owner": { "type": "string" }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "resolved"] },
+          "owner": { "type": "string" },
+          "since": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "next_action": { "type": "string" },
+    "services": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Service catalog IDs related to this ticket"
+    },
+    "repositories": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Repository local_dir names involved"
+    }
+  },
+  "additionalProperties": false
+}

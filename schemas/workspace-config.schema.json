@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workspace Configuration",
+  "type": "object",
+  "properties": {
+    "catalog_path": {
+      "type": "string",
+      "description": "Relative or absolute path to the service catalog directory"
+    },
+    "interface_path": {
+      "type": ["string", "null"],
+      "description": "Relative or absolute path to the service interface symlink hub"
+    },
+    "services": {
+      "type": "object",
+      "description": "Per-service adapter overrides",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "path": { "type": "string" },
+          "properties_file": { "type": "string" }
+        }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "description": "Adapter-specific configuration",
+      "additionalProperties": true
+    },
+    "preflight": {
+      "type": "object",
+      "properties": {
+        "required_binaries": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optional_binaries": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
