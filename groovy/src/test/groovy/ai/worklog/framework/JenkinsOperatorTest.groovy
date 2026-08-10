@@ -94,6 +94,17 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(Status.BLOCKED, report.status)
     }
 
+    void testValidateJobNameAllowsLeadingUnderscore() {
+        JenkinsAdapter.validateJobName('_seed')
+        shouldFail(IllegalArgumentException) {
+            JenkinsAdapter.validateJobName('../bad')
+        }
+    }
+
+    void testValidateJobNameAllowsLeadingTilde() {
+        JenkinsAdapter.validateJobName('~seed-job')
+    }
+
     void testOperatorJobRecentBuildLimit() {
         writeProperties(defaultProperties())
         List<String> captured = []

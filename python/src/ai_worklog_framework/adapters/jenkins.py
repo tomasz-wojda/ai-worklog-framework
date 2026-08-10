@@ -99,9 +99,10 @@ def _validate_controller_id(controller: str) -> str:
 def _validate_job_name(job_name: str) -> str:
     if not job_name or job_name in (".", ".."):
         raise ValueError(f"Invalid job: {job_name}")
+    job_part = re.compile(r"^[A-Za-z0-9_~][A-Za-z0-9._~-]{0,127}$")
     parts = job_name.split("/")
     for part in parts:
-        if not part or part in (".", "..") or not SAFE_COMPONENT.fullmatch(part):
+        if not part or part in (".", "..") or not job_part.fullmatch(part):
             raise ValueError(f"Invalid job: {job_name}")
     return job_name
 

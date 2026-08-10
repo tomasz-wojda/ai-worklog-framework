@@ -34,6 +34,14 @@ def test_encode_job_path_nested():
     assert jenkins.encode_job_path("folder/sub/job") == "job/folder/job/sub/job/job"
 
 
+def test_validate_job_name_allows_leading_underscore():
+    assert jenkins._validate_job_name("_seed") == "_seed"
+
+
+def test_validate_job_name_allows_leading_tilde():
+    assert jenkins._validate_job_name("~seed-job") == "~seed-job"
+
+
 def test_controller_public_info_redacts_secrets(tmp_path):
     _write_properties(
         tmp_path,

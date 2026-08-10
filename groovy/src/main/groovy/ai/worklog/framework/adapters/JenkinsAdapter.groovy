@@ -12,6 +12,7 @@ import java.util.regex.Pattern
 
 class JenkinsAdapter {
     private static final Pattern SAFE_COMPONENT = ~/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+    private static final Pattern JOB_NAME_PART = ~/^[A-Za-z0-9_~][A-Za-z0-9._~-]{0,127}$/
 
     final FrameworkPaths paths
     final ReadOnlyHttp http
@@ -556,7 +557,7 @@ class JenkinsAdapter {
             throw new IllegalArgumentException("Invalid job: ${jobName}")
         }
         jobName.split('/').each { part ->
-            if (!part || part in ['.', '..'] || !SAFE_COMPONENT.matcher(part).matches()) {
+            if (!part || part in ['.', '..'] || !JOB_NAME_PART.matcher(part).matches()) {
                 throw new IllegalArgumentException("Invalid job: ${jobName}")
             }
         }
