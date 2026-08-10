@@ -1,4 +1,5 @@
 import json
+import platform
 import re
 import subprocess
 from pathlib import Path
@@ -23,12 +24,26 @@ def normalize(value: str) -> str:
     return re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", "<TIMESTAMP>", value)
 
 
-def test_default_runtime_is_groovy() -> None:
-    result = subprocess.run(
+def test_runtime_versions_are_explicit() -> None:
+    groovy = subprocess.run(
         [str(CLI), "--version"], capture_output=True, text=True, timeout=30
     )
-    assert result.returncode == 0
-    assert result.stdout.strip() == "ai-worklog 0.1.0 (groovy)"
+    python = subprocess.run(
+        [str(CLI), "--runtime", "python", "--version"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert groovy.returncode == 0
+    assert python.returncode == 0
+    assert re.fullmatch(
+        r"ai-worklog 0\.1\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
+        groovy.stdout.strip(),
+    )
+    assert (
+        python.stdout.strip()
+        == f"ai-worklog 0.1.0 (python {platform.python_version()})"
+    )
 
 
 @pytest.mark.parametrize(

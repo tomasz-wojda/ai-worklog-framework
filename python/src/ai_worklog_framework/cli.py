@@ -7,6 +7,7 @@ Exit codes: 0 = success, 1 = user error, 2 = system/adapter error, 3 = blocked.
 
 import sys
 import argparse
+import platform
 from typing import List, Optional
 
 
@@ -117,7 +118,7 @@ def dispatch(args: argparse.Namespace) -> int:
     from ai_worklog_framework import __version__
 
     if args.version:
-        print(f"ai-worklog {__version__}")
+        print(f"ai-worklog {__version__} (python {platform.python_version()})")
         return EXIT_SUCCESS
 
     if not args.command:
