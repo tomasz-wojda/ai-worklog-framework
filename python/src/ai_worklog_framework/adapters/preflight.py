@@ -37,7 +37,10 @@ def run(args) -> int:
     Returns:
         Exit code (0 if all ready, 1 otherwise).
     """
-    workspace = resolve_workspace(getattr(args, "workspace", None))
+    workspace = resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    )
     paths = WorkspacePaths(workspace)
     config = load_config(workspace)
 

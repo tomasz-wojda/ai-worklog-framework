@@ -61,12 +61,12 @@ def test_runtime_versions_are_explicit() -> None:
     assert groovy.returncode == 0
     assert python.returncode == 0
     assert re.fullmatch(
-        r"ai-worklog 0\.4\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
+        r"ai-worklog 0\.5\.0 \(groovy \d+(?:\.\d+)+ / java \d+(?:\.\d+)+(?:[-+][^)]+)?\)",
         groovy.stdout.strip(),
     )
     assert (
         python.stdout.strip()
-        == f"ai-worklog 0.4.0 (python {platform.python_version()})"
+        == f"ai-worklog 0.5.0 (python {platform.python_version()})"
     )
 
 

@@ -97,7 +97,10 @@ def run(args) -> int:
             print(message)
         return EXIT_USER_ERROR
 
-    workspace = resolve_workspace(getattr(args, "workspace", None))
+    workspace = resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    )
     paths = WorkspacePaths(workspace)
     config = jenkins_adapter.jenkins_adapter_config(paths)
     http_timeout = config["http_timeout_seconds"]

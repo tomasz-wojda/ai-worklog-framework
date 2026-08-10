@@ -39,7 +39,10 @@ def _persist(paths: WorkspacePaths, state: TicketState, applying: bool) -> int:
 
 
 def run(args) -> int:
-    paths = WorkspacePaths(resolve_workspace(getattr(args, "workspace", None)))
+    paths = WorkspacePaths(resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    ))
     action = args.state_action
     if action == "list":
         tickets = list_active_tickets(paths)

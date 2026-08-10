@@ -52,7 +52,10 @@ def run(args) -> int:
             parameters["app"] = args.app
         if getattr(args, "service", None):
             parameters["service"] = args.service
-        workspace = resolve_workspace(getattr(args, "workspace", None))
+        workspace = resolve_workspace(
+            getattr(args, "workspace", None),
+            getattr(args, "workspace_name", None),
+        )
         return _run_pack(
             args.pack,
             parameters,

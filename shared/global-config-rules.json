@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "home_environment": "AI_WORKLOG_HOME",
+  "config_filename": "config.json",
+  "default_runtime": "groovy",
+  "supported_runtimes": ["groovy", "python"],
+  "workspace_name_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+}

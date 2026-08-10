@@ -34,7 +34,10 @@ def run(args) -> int:
         return EXIT_USER_ERROR
 
     if args.delivery_action == "status":
-        workspace = resolve_workspace(getattr(args, "workspace", None))
+        workspace = resolve_workspace(
+            getattr(args, "workspace", None),
+            getattr(args, "workspace_name", None),
+        )
         paths = WorkspacePaths(workspace)
         return _status(paths, args.key)
     return EXIT_USER_ERROR

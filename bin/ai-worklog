@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME="${AI_WORKLOG_RUNTIME:-groovy}"
+RUNTIME=""
 ARGS=()
 
 while (($#)); do
@@ -25,6 +25,43 @@ while (($#)); do
       ;;
   esac
 done
+
+if [[ -z "$RUNTIME" && -n "${AI_WORKLOG_RUNTIME:-}" ]]; then
+  RUNTIME="$AI_WORKLOG_RUNTIME"
+fi
+
+if [[ -z "$RUNTIME" ]]; then
+  CONFIG_HOME="${AI_WORKLOG_HOME:-$HOME/.ai-worklog}"
+  case "$CONFIG_HOME" in
+    "~") CONFIG_HOME="$HOME" ;;
+    "~/"*) CONFIG_HOME="$HOME/${CONFIG_HOME#\~/}" ;;
+  esac
+  CONFIG_FILE="$CONFIG_HOME/config.json"
+  if [[ -f "$CONFIG_FILE" ]]; then
+    PYTHON="${AI_WORKLOG_PYTHON:-python3}"
+    if [[ -x "$ROOT/.venv/bin/python" ]]; then
+      PYTHON="$ROOT/.venv/bin/python"
+    elif [[ -x "$ROOT/python/.venv/bin/python" ]]; then
+      PYTHON="$ROOT/python/.venv/bin/python"
+    fi
+    if command -v "$PYTHON" >/dev/null 2>&1; then
+      if ! RUNTIME="$(PYTHONPATH="$ROOT/python/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" -c 'from ai_worklog_framework.global_config import load_global_config; print(load_global_config()["runtime"])' 2>/dev/null)"; then
+        echo "Malformed global configuration: $CONFIG_FILE" >&2
+        exit 1
+      fi
+    elif command -v groovy >/dev/null 2>&1; then
+      if ! RUNTIME="$(AI_WORKLOG_FRAMEWORK_ROOT="$ROOT" groovy -cp "$ROOT/groovy/src/main/groovy" -e 'import ai.worklog.framework.core.GlobalConfig; print GlobalConfig.load().runtime' 2>/dev/null)"; then
+        echo "Malformed global configuration: $CONFIG_FILE" >&2
+        exit 1
+      fi
+    else
+      echo "Cannot parse global configuration: Python or Groovy is required" >&2
+      exit 2
+    fi
+  else
+    RUNTIME="groovy"
+  fi
+fi
 
 case "$RUNTIME" in
   groovy)

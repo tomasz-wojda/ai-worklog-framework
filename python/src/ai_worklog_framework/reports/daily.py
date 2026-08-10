@@ -38,7 +38,10 @@ def run(args) -> int:
         print("Usage: ai-worklog day {start|end}")
         return EXIT_USER_ERROR
 
-    workspace = resolve_workspace(getattr(args, "workspace", None))
+    workspace = resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    )
     paths = WorkspacePaths(workspace)
 
     if args.day_action == "start":

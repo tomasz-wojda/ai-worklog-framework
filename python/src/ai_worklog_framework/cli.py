@@ -8,7 +8,7 @@ Exit codes: 0 = success, 1 = user error, 2 = system/adapter error, 3 = blocked.
 import sys
 import argparse
 import platform
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ai_worklog_framework.shared import load_shared
 
@@ -22,6 +22,31 @@ EXIT_SYSTEM_ERROR = _EXIT_CODES["system_error"]
 EXIT_BLOCKED = _EXIT_CODES["blocked"]
 
 
+def extract_global_options(argv: List[str]) -> Tuple[dict, List[str]]:
+    args = list(argv)
+    options: dict = {}
+
+    def take_option(name: str) -> Optional[str]:
+        while name in args:
+            index = args.index(name)
+            if index + 1 >= len(args):
+                raise ValueError(f"Missing value for {name}")
+            value = args[index + 1]
+            if value.startswith("-"):
+                raise ValueError(f"Missing value for {name}")
+            del args[index : index + 2]
+            return value
+        return None
+
+    options["workspace"] = take_option("--workspace")
+    workspace_name = take_option("--workspace-name")
+    if workspace_name is None:
+        workspace_name = take_option("-w")
+    options["workspace_name"] = workspace_name
+    options["runtime"] = take_option("--runtime")
+    return options, args
+
+
 def build_parser() -> argparse.ArgumentParser:
     """
     Constructs the argument parser tree for all ai-worklog subcommands.
@@ -33,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
     parent_parser.add_argument(
         "--workspace", type=str, default=argparse.SUPPRESS,
         help="Override workspace root (default: auto-detect)"
+    )
+    parent_parser.add_argument(
+        "-w", "--workspace-name", dest="workspace_name", type=str,
+        default=argparse.SUPPRESS,
+        help="Select a registered workspace by name",
     )
 
     parser = argparse.ArgumentParser(
@@ -52,6 +82,34 @@ def build_parser() -> argparse.ArgumentParser:
         workspace_action = workspace_sub.add_parser(action)
         workspace_action.add_argument("path", help="Workspace root")
         workspace_action.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_add = workspace_sub.add_parser("add", help="Register a workspace")
+    workspace_add.add_argument("name", help="Workspace name")
+    workspace_add.add_argument("path", help="Workspace root path")
+    workspace_add.add_argument("--default", action="store_true", help="Set as default workspace")
+    workspace_add.add_argument("--json", action="store_true")
+    workspace_list = workspace_sub.add_parser("list", help="List registered workspaces")
+    workspace_list.add_argument("--json", action="store_true")
+    workspace_show = workspace_sub.add_parser("show", help="Show a registered workspace")
+    workspace_show.add_argument("name", help="Workspace name")
+    workspace_show.add_argument("--json", action="store_true")
+    workspace_default = workspace_sub.add_parser("default", help="Show or set default workspace")
+    workspace_default.add_argument("name", nargs="?", help="Workspace name")
+    workspace_default.add_argument("--json", action="store_true")
+    workspace_current = workspace_sub.add_parser(
+        "current", help="Show resolved workspace", parents=[parent_parser],
+    )
+    workspace_current.add_argument("--json", action="store_true")
+    workspace_remove = workspace_sub.add_parser("remove", help="Remove a workspace registration")
+    workspace_remove.add_argument("name", help="Workspace name")
+    workspace_remove.add_argument("--json", action="store_true")
+
+    config_parser = subparsers.add_parser("config", help="Global configuration")
+    config_sub = config_parser.add_subparsers(dest="config_action")
+    config_show = config_sub.add_parser("show", help="Show global configuration")
+    config_show.add_argument("--json", action="store_true")
+    config_runtime = config_sub.add_parser("runtime", help="Show or set default runtime")
+    config_runtime.add_argument("runtime", nargs="?")
+    config_runtime.add_argument("--json", action="store_true")
 
     # catalog
     catalog_parser = subparsers.add_parser("catalog", help="Service catalog operations", parents=[parent_parser])
@@ -234,10 +292,20 @@ def dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "workspace":
         if not args.workspace_action:
-            print("Usage: ai-worklog workspace {init|revert} <path> [--apply]")
+            print(
+                "Usage: ai-worklog workspace "
+                "{init|revert|add|list|show|default|current|remove} ..."
+            )
             return EXIT_USER_ERROR
         from ai_worklog_framework.workspace import commands as workspace_cmds
         return workspace_cmds.run(args)
+
+    if args.command == "config":
+        if not args.config_action:
+            print("Usage: ai-worklog config {show|runtime}")
+            return EXIT_USER_ERROR
+        from ai_worklog_framework import global_config_commands as config_cmds
+        return config_cmds.run(args)
 
     if args.command == "ticket":
         from ai_worklog_framework.catalog import ticket as ticket_cmds
@@ -294,7 +362,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         argv: Optional argument list (defaults to sys.argv[1:]).
     """
     parser = build_parser()
-    args = parser.parse_args(argv)
+    global_opts, remaining = extract_global_options(argv if argv is not None else sys.argv[1:])
+    args = parser.parse_args(remaining)
+    for key, value in global_opts.items():
+        if value is not None:
+            setattr(args, key, value)
     try:
         code = dispatch(args)
     except ValueError as exc:

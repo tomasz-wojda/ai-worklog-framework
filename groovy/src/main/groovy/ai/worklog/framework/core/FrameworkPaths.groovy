@@ -44,39 +44,8 @@ class FrameworkPaths {
         value
     }
 
-    static File resolveWorkspace(String explicit, File frameworkRoot) {
-        if (explicit) {
-            File selected = new File(explicit).canonicalFile
-            if (!selected.isDirectory()) {
-                throw new IllegalArgumentException("Workspace not found: ${explicit}")
-            }
-            return selected
-        }
-        String configured = System.getenv('AI_WORKLOG_WORKSPACE')
-        if (configured) {
-            File selected = new File(configured).canonicalFile
-            if (selected.isDirectory()) {
-                return selected
-            }
-        }
-        Map rules = (Map) JsonFiles.read(
-            new File(frameworkRoot, 'shared/workspace-markers.json'),
-            [markers: ['.ai-worklog', 'worklog', 'prompt.log', 'jira'], max_parent_depth: 20]
-        )
-        File current = new File(System.getProperty('user.dir')).canonicalFile
-        int depth = (rules.max_parent_depth ?: 20) as int
-        for (int i = 0; i < depth; i++) {
-            if (((List) rules.markers).any { new File(current, it.toString()).exists() }) {
-                return current
-            }
-            if (current.parentFile == null || current.parentFile == current) {
-                break
-            }
-            current = current.parentFile
-        }
-        throw new IllegalArgumentException(
-            'Cannot locate workspace. Use --workspace or AI_WORKLOG_WORKSPACE.'
-        )
+    static File resolveWorkspace(String explicitPath, String explicitName, File frameworkRoot) {
+        GlobalConfig.resolveWorkspace(explicitPath, explicitName, frameworkRoot)
     }
 
     static File resolveFrameworkRoot() {

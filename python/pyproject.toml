@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-worklog-framework"
-version = "0.4.0"
+version = "0.5.0"
 description = "Executable operator layer for DevOps daily workflow automation"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}

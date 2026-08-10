@@ -8,6 +8,7 @@ import groovy.json.JsonSlurper
 
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 
 class JenkinsAdapter {
@@ -616,7 +617,8 @@ class JenkinsAdapter {
     }
 
     static String utcNow() {
-        OffsetDateTime.now(ZoneOffset.UTC).withNano(0).toString().replace('+00:00', 'Z')
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            .format(OffsetDateTime.now(ZoneOffset.UTC))
     }
 
     private Map loadControllers() {

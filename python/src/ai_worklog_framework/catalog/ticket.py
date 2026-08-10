@@ -42,7 +42,10 @@ def run(args) -> int:
         return EXIT_USER_ERROR
 
     if args.ticket_action == "prepare":
-        workspace = resolve_workspace(getattr(args, "workspace", None))
+        workspace = resolve_workspace(
+            getattr(args, "workspace", None),
+            getattr(args, "workspace_name", None),
+        )
         return prepare(workspace, args.key)
     return EXIT_USER_ERROR
 

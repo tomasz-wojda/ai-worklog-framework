@@ -34,7 +34,10 @@ def run(args) -> int:
         print("Usage: ai-worklog catalog {validate|show|search}")
         return EXIT_USER_ERROR
 
-    workspace = resolve_workspace(getattr(args, "workspace", None))
+    workspace = resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    )
     paths = WorkspacePaths(workspace)
 
     if args.catalog_action == "validate":

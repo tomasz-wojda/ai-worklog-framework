@@ -115,6 +115,17 @@ ai-worklog --runtime python --version
 AI_WORKLOG_RUNTIME=python ai-worklog --version
 ```
 
+Persist the default runtime for future commands:
+
+```bash
+ai-worklog config runtime groovy
+ai-worklog config runtime python
+ai-worklog config runtime
+```
+
+Runtime selection uses `--runtime`, then `AI_WORKLOG_RUNTIME`, then the
+persisted runtime in `~/.ai-worklog/config.json`, and finally Groovy.
+
 `ai-worklog-groovy` and `ai-worklog-python` are also available for direct
 runtime selection. The Python package installs the fallback command as
 `ai-worklog-python`; it does not replace the Groovy-default dispatcher.
@@ -174,6 +185,58 @@ or:
 ```bash
 export AI_WORKLOG_WORKSPACE=/absolute/path/to/workspace
 ```
+
+### Named Workspaces
+
+Register frequently used workspaces once:
+
+```bash
+ai-worklog workspace add work /Users/example/work --default
+ai-worklog workspace add test /Users/example/work-test
+ai-worklog workspace add personal /Users/example/personal
+```
+
+Commands run outside a workspace use the saved default:
+
+```bash
+ai-worklog jenkins controllers
+ai-worklog preflight
+```
+
+Select a registered workspace for one command:
+
+```bash
+ai-worklog -w test jenkins controllers
+ai-worklog --workspace-name personal preflight
+```
+
+Use an unregistered path for one command:
+
+```bash
+ai-worklog --workspace /some/path preflight
+```
+
+Inspect and change registrations:
+
+```bash
+ai-worklog workspace list
+ai-worklog workspace show test
+ai-worklog workspace current
+ai-worklog workspace default test
+ai-worklog workspace remove personal
+ai-worklog config show
+```
+
+Removing a registration never deletes its directory. Global preferences are
+stored in `~/.ai-worklog/config.json`; workspace-specific configuration remains
+under `<workspace>/.ai-worklog/`. The global directory and file use private
+permissions and must not contain service credentials.
+
+Workspace selection uses direct `--workspace`, then `-w` or
+`--workspace-name`, then `AI_WORKLOG_WORKSPACE`, then
+`AI_WORKLOG_WORKSPACE_NAME`, then current-directory discovery, and finally the
+saved default. Missing registered paths and malformed global configuration are
+reported instead of silently selecting another workspace.
 
 ## Python, Java, and Groovy Toolchains
 

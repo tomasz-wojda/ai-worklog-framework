@@ -6,6 +6,7 @@ import ai.worklog.framework.commands.CloseoutCommands
 import ai.worklog.framework.commands.DailyCommands
 import ai.worklog.framework.commands.DeliveryCommands
 import ai.worklog.framework.commands.DiagnosticsCommands
+import ai.worklog.framework.commands.GlobalConfigCommands
 import ai.worklog.framework.commands.JenkinsCommands
 import ai.worklog.framework.commands.PreflightCommands
 import ai.worklog.framework.commands.ReconciliationCommands
@@ -19,7 +20,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.StateManager
 
 class Main {
-    static final String VERSION = '0.4.0'
+    static final String VERSION = '0.5.0'
 
     static void main(String[] input) {
         int code
@@ -39,8 +40,7 @@ class Main {
 
     static int execute(List<String> input) {
         List<String> args = new ArrayList<>(input)
-        String workspace = takeOption(args, '--workspace')
-        takeOption(args, '--runtime')
+        Map options = extractGlobalOptions(args)
         File frameworkRoot = FrameworkPaths.resolveFrameworkRoot()
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
 
@@ -55,10 +55,23 @@ class Main {
 
         String command = args.remove(0)
         String action = args ? args.remove(0) : null
-        if (command == 'workspace') {
-            return WorkspaceCommands.run(action, args, frameworkRoot)
+        if (command == 'config') {
+            return GlobalConfigCommands.run(action, args, frameworkRoot)
         }
-        File workspaceRoot = FrameworkPaths.resolveWorkspace(workspace, frameworkRoot)
+        if (command == 'workspace') {
+            return WorkspaceCommands.run(
+                action,
+                args,
+                frameworkRoot,
+                options.workspace,
+                options.workspaceName
+            )
+        }
+        File workspaceRoot = FrameworkPaths.resolveWorkspace(
+            options.workspace,
+            options.workspaceName,
+            frameworkRoot
+        )
         FrameworkPaths paths = new FrameworkPaths(workspaceRoot)
         Map config = ConfigLoader.load(workspaceRoot)
         CatalogLoader catalog = new CatalogLoader(frameworkRoot, paths)
@@ -96,6 +109,19 @@ class Main {
         }
     }
 
+    static Map extractGlobalOptions(List<String> args) {
+        [
+            workspace: takeOption(args, '--workspace'),
+            workspaceName: takeWorkspaceNameOption(args),
+            runtime: takeOption(args, '--runtime')
+        ]
+    }
+
+    static String takeWorkspaceNameOption(List<String> args) {
+        String value = takeOption(args, '--workspace-name')
+        value ?: takeShortOption(args, '-w')
+    }
+
     static String takeOption(List<String> args, String name) {
         int index = args.indexOf(name)
         if (index < 0) {
@@ -110,13 +136,31 @@ class Main {
         value
     }
 
+    static String takeShortOption(List<String> args, String name) {
+        int index = args.indexOf(name)
+        if (index < 0) {
+            return null
+        }
+        if (index + 1 >= args.size()) {
+            throw new IllegalArgumentException("Missing value for ${name}")
+        }
+        if (args[index + 1].startsWith('-')) {
+            throw new IllegalArgumentException("Missing value for ${name}")
+        }
+        String value = args[index + 1]
+        args.remove(index + 1)
+        args.remove(index)
+        value
+    }
+
     static void help() {
-        println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [--version]'
-        println '                  {workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
+        println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]'
+        println '                  {config,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
         println()
         println 'DevOps daily workflow automation framework'
         println()
         println 'commands:'
+        println '  config       Global runtime and workspace registry'
         println '  workspace    Workspace setup operations'
         println '  catalog      Service catalog operations'
         println '  ticket       Ticket preparation'

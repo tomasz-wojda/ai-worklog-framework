@@ -20,7 +20,10 @@ def run(args) -> int:
     if args.reconcile_action != "status":
         return EXIT_USER_ERROR
 
-    workspace = resolve_workspace(getattr(args, "workspace", None))
+    workspace = resolve_workspace(
+        getattr(args, "workspace", None),
+        getattr(args, "workspace_name", None),
+    )
     paths = WorkspacePaths(workspace)
     rules = workspace_rules(paths)
     selected = args.system or rules.get("systems", list(SYSTEMS))

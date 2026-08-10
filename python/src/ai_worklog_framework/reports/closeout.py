@@ -34,7 +34,10 @@ def run(args) -> int:
         return EXIT_USER_ERROR
 
     if args.closeout_action == "report":
-        workspace = resolve_workspace(getattr(args, "workspace", None))
+        workspace = resolve_workspace(
+            getattr(args, "workspace", None),
+            getattr(args, "workspace_name", None),
+        )
         paths = WorkspacePaths(workspace)
         return _report(paths, args.key)
     return EXIT_USER_ERROR
