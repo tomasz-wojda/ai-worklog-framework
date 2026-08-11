@@ -1,8 +1,10 @@
 package ai.worklog.framework.adapters
 
 import ai.worklog.framework.core.FrameworkPaths
+import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Status
+import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.reconciliation.Observation
 import groovy.json.JsonSlurper
 
@@ -1237,12 +1239,19 @@ class JenkinsAdapter {
         if (cfg.syntax_check_script) {
             candidates << new File(cfg.syntax_check_script).canonicalFile
         }
-        String envRoot = System.getenv('AI_VAULT_ROOT')
-        if (envRoot) {
-            candidates << new File(envRoot, 'skills/jenkins-pipeline-architect/scripts/syntax_check.sh').canonicalFile
-        }
         if (cfg.ai_vault_root) {
-            candidates << new File(cfg.ai_vault_root, 'skills/jenkins-pipeline-architect/scripts/syntax_check.sh').canonicalFile
+            candidates << new File(
+                cfg.ai_vault_root,
+                'skills/jenkins-pipeline-architect/scripts/syntax_check.sh'
+            ).canonicalFile
+        }
+        List resolution = SetupResolver.resolveAiVaultRoot(paths.root)
+        File resolvedRoot = resolution[0] as File
+        if (resolvedRoot) {
+            candidates << new File(
+                resolvedRoot,
+                'skills/jenkins-pipeline-architect/scripts/syntax_check.sh'
+            ).canonicalFile
         }
         candidates.find { it.isFile() }
     }

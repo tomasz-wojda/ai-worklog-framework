@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Worklog Setup Manifest",
+  "type": "object",
+  "required": ["version", "workspace_name", "ai_vault_root", "ides", "skills", "synced_at"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "workspace_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "ai_vault_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ides": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["cursor", "claude", "antigravity"]
+      },
+      "uniqueItems": true
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "ide",
+          "source",
+          "destination",
+          "materialization",
+          "source_checksum",
+          "created_at",
+          "synced_at"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ide": {
+            "type": "string",
+            "enum": ["cursor", "claude", "antigravity"]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destination": {
+            "type": "string",
+            "minLength": 1
+          },
+          "materialization": {
+            "type": "string",
+            "enum": ["symlink", "copy"]
+          },
+          "source_checksum": {
+            "type": "string",
+            "minLength": 1
+          },
+          "applied_checksum": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "synced_at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "synced_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

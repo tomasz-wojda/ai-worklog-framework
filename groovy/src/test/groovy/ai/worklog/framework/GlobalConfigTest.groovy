@@ -1,6 +1,7 @@
 package ai.worklog.framework
 
 import ai.worklog.framework.core.GlobalConfig
+import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
@@ -36,8 +37,9 @@ class GlobalConfigTest extends GroovyTestCase {
 
     void testDefaultsWhenMissingConfig() {
         Map config = GlobalConfig.load()
-        assertEquals(1, config.version)
+        assertEquals(2, config.version)
         assertEquals('groovy', config.runtime)
+        assertNull(config.ai_vault_root)
         assertNull(config.default_workspace)
         assertEquals([:], config.workspaces)
     }
@@ -133,7 +135,67 @@ class GlobalConfigTest extends GroovyTestCase {
             GlobalConfig.save(GlobalConfig.defaults() + [extra: true])
         }
         shouldFail(IllegalArgumentException) {
-            GlobalConfig.save(GlobalConfig.defaults() + [version: 2])
+            GlobalConfig.save(GlobalConfig.defaults() + [version: 99])
+        }
+    }
+
+    void testMigratesV1ConfigOnLoad() {
+        GlobalConfig.ensureHome()
+        GlobalConfig.configFile().setText(
+            JsonOutput.toJson([
+                version: 1,
+                runtime: 'python',
+                default_workspace: 'work',
+                workspaces: [( 'work' ): work.path]
+            ]),
+            'UTF-8'
+        )
+        Map config = GlobalConfig.load()
+        assertEquals(2, config.version)
+        assertNull(config.ai_vault_root)
+        assertEquals(work.canonicalFile.path, config.workspaces.work.path)
+        assertEquals([], config.workspaces.work.ides)
+    }
+
+    void testSaveWritesV2FromV1OnDisk() {
+        GlobalConfig.ensureHome()
+        GlobalConfig.configFile().setText(
+            JsonOutput.toJson([
+                version: 1,
+                runtime: 'groovy',
+                workspaces: [( 'work' ): work.path]
+            ]),
+            'UTF-8'
+        )
+        GlobalConfig.setRuntime('python')
+        Map saved = new JsonSlurper().parse(GlobalConfig.configFile(), 'UTF-8')
+        assertEquals(2, saved.version)
+        assertNull(saved.ai_vault_root)
+        assertEquals(work.canonicalFile.path, saved.workspaces.work.path)
+        assertEquals([], saved.workspaces.work.ides)
+    }
+
+    void testAddPreservesIdes() {
+        GlobalConfig.addWorkspace('work', work.path, false)
+        GlobalConfig.setWorkspaceIdes('work', ['cursor', 'claude', 'cursor'])
+        Map unchanged = GlobalConfig.addWorkspace('work', work.path, false)
+        assertTrue(unchanged.unchanged)
+        assertEquals(['claude', 'cursor'], GlobalConfig.load().workspaces.work.ides)
+    }
+
+    void testAiVaultRootAndIdesHelpers() {
+        File vault = File.createTempDir('ai-worklog-vault-', '-test')
+        try {
+            GlobalConfig.addWorkspace('work', work.path, true)
+            Map vaultResult = GlobalConfig.setAiVaultRoot(vault.path)
+            assertEquals(vault.canonicalFile.path, vaultResult.ai_vault_root)
+            Map idesResult = GlobalConfig.setWorkspaceIdes('work', ['antigravity', 'cursor'])
+            assertEquals(['antigravity', 'cursor'], idesResult.ides)
+            Map shown = GlobalConfig.showConfiguration()
+            assertEquals(vault.canonicalFile.path, shown.ai_vault_root)
+            assertEquals(['antigravity', 'cursor'], shown.workspaces[0].ides)
+        } finally {
+            vault.deleteDir()
         }
     }
 
@@ -157,8 +219,8 @@ class GlobalConfigTest extends GroovyTestCase {
         try {
             GlobalConfig.addWorkspace('work', "~/${tildeDir.name}", false)
             Map config = GlobalConfig.load()
-            assertFalse(config.workspaces.work.contains('~'))
-            assertEquals(tildeDir.canonicalFile.path, config.workspaces.work)
+            assertFalse(config.workspaces.work.path.contains('~'))
+            assertEquals(tildeDir.canonicalFile.path, config.workspaces.work.path)
         } finally {
             tildeDir.deleteDir()
         }

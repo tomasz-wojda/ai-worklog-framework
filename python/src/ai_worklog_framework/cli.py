@@ -21,14 +21,43 @@ EXIT_USER_ERROR = _EXIT_CODES["user_error"]
 EXIT_SYSTEM_ERROR = _EXIT_CODES["system_error"]
 EXIT_BLOCKED = _EXIT_CODES["blocked"]
 
+GLOBAL_OPTION_COMMANDS = frozenset(
+    {
+        "setup",
+        "workspace",
+        "config",
+        "catalog",
+        "ticket",
+        "state",
+        "preflight",
+        "reconcile",
+        "jenkins",
+        "day",
+        "delivery",
+        "closeout",
+        "diag",
+        "toolchain",
+    }
+)
+
+
+def _command_index(argv: List[str]) -> Optional[int]:
+    for index, token in enumerate(argv):
+        if token in GLOBAL_OPTION_COMMANDS:
+            return index
+    return None
+
 
 def extract_global_options(argv: List[str]) -> Tuple[dict, List[str]]:
     args = list(argv)
     options: dict = {}
+    command_index = _command_index(args)
 
-    def take_option(name: str) -> Optional[str]:
+    def take_option(name: str, before_command: bool = False) -> Optional[str]:
         while name in args:
             index = args.index(name)
+            if before_command and command_index is not None and index >= command_index:
+                break
             if index + 1 >= len(args):
                 raise ValueError(f"Missing value for {name}")
             value = args[index + 1]
@@ -43,7 +72,7 @@ def extract_global_options(argv: List[str]) -> Tuple[dict, List[str]]:
     if workspace_name is None:
         workspace_name = take_option("-w")
     options["workspace_name"] = workspace_name
-    options["runtime"] = take_option("--runtime")
+    options["runtime"] = take_option("--runtime", before_command=True)
     return options, args
 
 
@@ -75,6 +104,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command")
+
+    setup_parser = subparsers.add_parser("setup", help="Workspace and IDE setup operations")
+    setup_sub = setup_parser.add_subparsers(dest="setup_action")
+    setup_init = setup_sub.add_parser("init", help="Initialize workspace setup")
+    setup_init.add_argument("name", help="Workspace registration name")
+    setup_init.add_argument("path", help="Workspace root path")
+    setup_init.add_argument(
+        "--ide",
+        action="append",
+        choices=["auto", "cursor", "claude", "antigravity"],
+        help="IDE profile (repeatable; default auto)",
+    )
+    setup_init.add_argument("--runtime", choices=["groovy", "python"])
+    setup_init.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
+    setup_init.add_argument("--default", action="store_true", help="Set as default workspace")
+    setup_init.add_argument("--json", action="store_true")
+    setup_init.add_argument("--apply", action="store_true", help="Apply planned changes")
+    setup_check = setup_sub.add_parser(
+        "check", help="Validate setup readiness", parents=[parent_parser],
+    )
+    setup_check.add_argument("--json", action="store_true")
+    setup_show = setup_sub.add_parser(
+        "show", help="Show setup summary", parents=[parent_parser],
+    )
+    setup_show.add_argument("--json", action="store_true")
+    setup_repair = setup_sub.add_parser(
+        "repair", help="Repair setup-managed artifacts", parents=[parent_parser],
+    )
+    setup_repair.add_argument(
+        "--ide",
+        action="append",
+        choices=["auto", "cursor", "claude", "antigravity"],
+        help="Limit repair to IDE profiles",
+    )
+    setup_repair.add_argument("--json", action="store_true")
+    setup_repair.add_argument("--apply", action="store_true", help="Apply planned changes")
+    setup_revert = setup_sub.add_parser(
+        "revert", help="Revert setup-managed artifacts", parents=[parent_parser],
+    )
+    setup_revert.add_argument(
+        "--ide",
+        action="append",
+        choices=["cursor", "claude", "antigravity"],
+        help="Limit revert to IDE profiles",
+    )
+    setup_revert.add_argument("--json", action="store_true")
+    setup_revert.add_argument("--apply", action="store_true", help="Apply planned changes")
 
     workspace_parser = subparsers.add_parser("workspace", help="Workspace setup operations")
     workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
@@ -315,6 +391,13 @@ def dispatch(args: argparse.Namespace) -> int:
     if not args.command:
         build_parser().print_help()
         return EXIT_USER_ERROR
+
+    if args.command == "setup":
+        if not args.setup_action:
+            print("Usage: ai-worklog setup {init|check|show|repair|revert} ...")
+            return EXIT_USER_ERROR
+        from ai_worklog_framework.setup import commands as setup_cmds
+        return setup_cmds.run(args)
 
     if args.command == "catalog":
         from ai_worklog_framework.catalog import commands as catalog_cmds

@@ -10,6 +10,7 @@ import ai.worklog.framework.commands.GlobalConfigCommands
 import ai.worklog.framework.commands.JenkinsCommands
 import ai.worklog.framework.commands.PreflightCommands
 import ai.worklog.framework.commands.ReconciliationCommands
+import ai.worklog.framework.commands.SetupCommands
 import ai.worklog.framework.commands.StateCommands
 import ai.worklog.framework.commands.TicketCommands
 import ai.worklog.framework.commands.ToolchainCommands
@@ -20,7 +21,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.StateManager
 
 class Main {
-    static final String VERSION = '0.6.0'
+    static final String VERSION = '0.7.0'
 
     static void main(String[] input) {
         int code
@@ -67,6 +68,9 @@ class Main {
                 options.workspaceName
             )
         }
+        if (command == 'setup') {
+            return SetupCommands.run(action, args, frameworkRoot, options)
+        }
         File workspaceRoot = FrameworkPaths.resolveWorkspace(
             options.workspace,
             options.workspaceName,
@@ -110,11 +114,36 @@ class Main {
     }
 
     static Map extractGlobalOptions(List<String> args) {
+        int commandIndex = commandIndex(args)
         [
             workspace: takeOption(args, '--workspace'),
             workspaceName: takeWorkspaceNameOption(args),
-            runtime: takeOption(args, '--runtime')
+            runtime: takeOptionBefore(args, '--runtime', commandIndex)
         ]
+    }
+
+    private static int commandIndex(List<String> args) {
+        List<String> commands = [
+            'setup', 'workspace', 'config', 'catalog', 'ticket', 'state',
+            'preflight', 'reconcile', 'jenkins', 'day', 'delivery',
+            'closeout', 'diag', 'toolchain'
+        ]
+        int index = args.findIndexOf { it in commands }
+        index >= 0 ? index : args.size()
+    }
+
+    static String takeOptionBefore(List<String> args, String name, int beforeIndex) {
+        int index = args.indexOf(name)
+        if (index < 0 || index >= beforeIndex) {
+            return null
+        }
+        if (index + 1 >= args.size()) {
+            throw new IllegalArgumentException("Missing value for ${name}")
+        }
+        String value = args[index + 1]
+        args.remove(index + 1)
+        args.remove(index)
+        value
     }
 
     static String takeWorkspaceNameOption(List<String> args) {
@@ -155,12 +184,13 @@ class Main {
 
     static void help() {
         println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]'
-        println '                  {config,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
+        println '                  {config,setup,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
         println()
         println 'DevOps daily workflow automation framework'
         println()
         println 'commands:'
         println '  config       Global runtime and workspace registry'
+        println '  setup        Workspace and IDE setup operations'
         println '  workspace    Workspace setup operations'
         println '  catalog      Service catalog operations'
         println '  ticket       Ticket preparation'

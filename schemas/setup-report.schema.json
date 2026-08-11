@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Worklog Setup Report",
+  "type": "object",
+  "required": ["operation", "status", "message"],
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": ["init", "check", "show", "repair", "revert"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "degraded", "blocked", "error"]
+    },
+    "message": {
+      "type": "string"
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "path": {"type": "string"},
+        "default": {"type": "boolean"},
+        "registered": {"type": "boolean"},
+        "available": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "value": {"type": "string"},
+        "source": {"type": "string"},
+        "available": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "ai_vault": {
+      "type": "object",
+      "properties": {
+        "path": {"type": ["string", "null"]},
+        "source": {"type": ["string", "null"]},
+        "valid": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "ides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "destination": {"type": "string"},
+          "materialization": {"type": "string"},
+          "managed_count": {"type": "integer"},
+          "conflict_count": {"type": "integer"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["layer", "status", "message"],
+        "properties": {
+          "layer": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["ready", "degraded", "blocked", "error"]
+          },
+          "message": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {"type": "string"},
+          "target": {"type": "string"},
+          "source": {"type": ["string", "null"]},
+          "skip": {"type": "boolean"},
+          "reason": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "reason": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "pending_actions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "version": {"type": "integer"},
+        "synced_at": {"type": ["string", "null"]},
+        "skill_count": {"type": "integer"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,40 @@
+{
+  "manifest_version": 1,
+  "report_version": 1,
+  "ai_vault_environment": "AI_WORKLOG_AI_VAULT_ROOT",
+  "setup_manifest_path": ".ai-worklog/setup.json",
+  "vault_manifest": "skills/manifest.json",
+  "vault_skills_dir": "skills",
+  "vault_validate_script": "scripts/validate-skills.sh",
+  "vault_skill_file": "SKILL.md",
+  "workspace_fallback_subpath": "repos/ai-vault",
+  "supported_ides": ["cursor", "claude", "antigravity"],
+  "ides": {
+    "cursor": {
+      "destination": ".cursor/skills",
+      "materialization": "symlink"
+    },
+    "claude": {
+      "destination": ".claude/skills",
+      "materialization": "symlink"
+    },
+    "antigravity": {
+      "destination": ".agents/skills",
+      "materialization": "copy"
+    }
+  },
+  "auto_detection": {
+    "cursor": {
+      "commands": ["cursor"],
+      "config_homes": [".cursor"]
+    },
+    "claude": {
+      "commands": ["claude"],
+      "config_homes": [".claude"]
+    },
+    "antigravity": {
+      "commands": [],
+      "config_homes": [".agents"]
+    }
+  }
+}

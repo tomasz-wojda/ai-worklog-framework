@@ -2,14 +2,18 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "AI Worklog Global Configuration",
   "type": "object",
-  "required": ["version", "runtime", "default_workspace", "workspaces"],
+  "required": ["version", "runtime", "ai_vault_root", "default_workspace", "workspaces"],
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
     "runtime": {
       "type": "string",
       "enum": ["groovy", "python"]
+    },
+    "ai_vault_root": {
+      "type": ["string", "null"],
+      "minLength": 1
     },
     "default_workspace": {
       "type": ["string", "null"],
@@ -21,8 +25,23 @@
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
       },
       "additionalProperties": {
-        "type": "string",
-        "minLength": 1
+        "type": "object",
+        "required": ["path", "ides"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ides": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["cursor", "claude", "antigravity"]
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
       }
     }
   },

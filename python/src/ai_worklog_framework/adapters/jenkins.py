@@ -988,17 +988,18 @@ def resolve_syntax_check_script(paths: WorkspacePaths) -> Optional[Path]:
     explicit = config.get("syntax_check_script")
     if explicit:
         candidates.append(Path(str(explicit)).expanduser())
-    env_root = os.environ.get("AI_VAULT_ROOT")
-    if env_root:
-        candidates.append(
-            Path(env_root)
-            / "skills/jenkins-pipeline-architect/scripts/syntax_check.sh"
-        )
     configured_root = config.get("ai_vault_root")
     if configured_root:
         candidates.append(
             Path(str(configured_root)).expanduser()
             / "skills/jenkins-pipeline-architect/scripts/syntax_check.sh"
+        )
+    from ai_worklog_framework.setup.resolver import resolve_ai_vault_root
+
+    resolved_root, _ = resolve_ai_vault_root(paths.root)
+    if resolved_root is not None:
+        candidates.append(
+            resolved_root / "skills/jenkins-pipeline-architect/scripts/syntax_check.sh"
         )
     for candidate in candidates:
         try:

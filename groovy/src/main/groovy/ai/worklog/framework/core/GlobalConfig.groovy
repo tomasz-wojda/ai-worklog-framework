@@ -7,11 +7,16 @@ import java.nio.file.attribute.PosixFilePermissions
 
 class GlobalConfig {
     static final Map RULES = loadRules()
-    static final int SUPPORTED_VERSION = RULES.version as int
+    static final int CANONICAL_VERSION = RULES.version as int
+    static final Set<Integer> SUPPORTED_READ_VERSIONS = [1, CANONICAL_VERSION] as Set
     static final String CONFIG_FILENAME = RULES.config_filename.toString()
     static final String DEFAULT_RUNTIME = RULES.default_runtime.toString()
-    static final Set<String> ALLOWED_KEYS = ['version', 'runtime', 'default_workspace', 'workspaces'] as Set
+    static final Set<String> ALLOWED_KEYS = [
+        'version', 'runtime', 'ai_vault_root', 'default_workspace', 'workspaces'
+    ] as Set
+    static final Set<String> ALLOWED_WORKSPACE_KEYS = ['path', 'ides'] as Set
     static final Set<String> ALLOWED_RUNTIMES = ((List) RULES.supported_runtimes)*.toString() as Set
+    static final Set<String> SUPPORTED_IDES = ((List) RULES.supported_ides)*.toString() as Set
 
     static File configHome() {
         String configured = System.getenv(RULES.home_environment.toString())
@@ -28,8 +33,9 @@ class GlobalConfig {
 
     static Map defaults() {
         [
-            version: SUPPORTED_VERSION,
+            version: CANONICAL_VERSION,
             runtime: DEFAULT_RUNTIME,
+            ai_vault_root: null,
             default_workspace: null,
             workspaces: [:]
         ]
@@ -49,7 +55,7 @@ class GlobalConfig {
         if (!(parsed instanceof Map)) {
             throw new IllegalArgumentException("Malformed global configuration: ${file}")
         }
-        validate((Map) parsed)
+        cloneConfig(validate((Map) parsed))
     }
 
     static Map save(Map config) {
@@ -82,12 +88,27 @@ class GlobalConfig {
         if (!raw.containsKey('version')) {
             throw new IllegalArgumentException('Missing global configuration field: version')
         }
-        if ((raw.version as int) != SUPPORTED_VERSION) {
+        int version = raw.version as int
+        if (!(version in SUPPORTED_READ_VERSIONS)) {
             throw new IllegalArgumentException("Unsupported global configuration version: ${raw.version}")
         }
         String runtime = raw.containsKey('runtime') ? raw.runtime?.toString() : DEFAULT_RUNTIME
         if (!(runtime in ALLOWED_RUNTIMES)) {
             throw new IllegalArgumentException("Invalid runtime: ${runtime}")
+        }
+        if (version == 1 && raw.containsKey('ai_vault_root')) {
+            throw new IllegalArgumentException('Unknown global configuration keys: ai_vault_root')
+        }
+        if (version == CANONICAL_VERSION && !raw.containsKey('ai_vault_root')) {
+            throw new IllegalArgumentException('Missing global configuration field: ai_vault_root')
+        }
+        Object aiVaultRootValue = raw.containsKey('ai_vault_root') ? raw.ai_vault_root : null
+        String aiVaultRoot = null
+        if (aiVaultRootValue != null) {
+            if (!(aiVaultRootValue instanceof String) || !aiVaultRootValue.toString().trim()) {
+                throw new IllegalArgumentException('Invalid ai_vault_root')
+            }
+            aiVaultRoot = canonicalWorkspacePath(aiVaultRootValue.toString()).path
         }
         if (raw.containsKey('default_workspace') && raw.default_workspace != null &&
             !(raw.default_workspace instanceof String)) {
@@ -100,12 +121,16 @@ class GlobalConfig {
             throw new IllegalArgumentException('Invalid workspaces')
         }
         Map workspaces = [:]
-        ((Map) (raw.workspaces ?: [:])).each { name, path ->
+        ((Map) (raw.workspaces ?: [:])).each { name, entryValue ->
             validateWorkspaceName(name.toString())
-            if (!(path instanceof String) || !path.toString().trim()) {
-                throw new IllegalArgumentException("Invalid workspace path for ${name}")
+            try {
+                workspaces[name.toString()] = normalizeWorkspaceEntry(entryValue)
+            } catch (IllegalArgumentException exception) {
+                if (exception.message == 'Invalid workspace path') {
+                    throw new IllegalArgumentException("Invalid workspace path for ${name}")
+                }
+                throw exception
             }
-            workspaces[name.toString()] = canonicalWorkspacePath(path.toString()).path
         }
         String defaultWorkspace = raw.containsKey('default_workspace') ?
             (raw.default_workspace?.toString()) : null
@@ -113,11 +138,78 @@ class GlobalConfig {
             throw new IllegalArgumentException("Unknown default workspace: ${defaultWorkspace}")
         }
         [
-            version: SUPPORTED_VERSION,
+            version: CANONICAL_VERSION,
             runtime: runtime,
+            ai_vault_root: aiVaultRoot,
             default_workspace: defaultWorkspace,
             workspaces: new LinkedHashMap(workspaces.sort { it.key })
         ]
+    }
+
+    static List<String> normalizeIdes(Object ides) {
+        if (!(ides instanceof List)) {
+            throw new IllegalArgumentException('Invalid ides')
+        }
+        Set<String> seen = [] as Set
+        List<String> normalized = []
+        ides.each { value ->
+            if (!(value instanceof String)) {
+                throw new IllegalArgumentException('Invalid ides')
+            }
+            String ide = value.toString()
+            if (!(ide in SUPPORTED_IDES)) {
+                throw new IllegalArgumentException("Invalid ide: ${ide}")
+            }
+            if (!(ide in seen)) {
+                seen << ide
+                normalized << ide
+            }
+        }
+        normalized.sort()
+    }
+
+    static Map normalizeWorkspaceEntry(Object value) {
+        if (value instanceof String) {
+            if (!value.toString().trim()) {
+                throw new IllegalArgumentException('Invalid workspace path')
+            }
+            return [
+                path: canonicalWorkspacePath(value.toString()).path,
+                ides: []
+            ]
+        }
+        if (!(value instanceof Map)) {
+            throw new IllegalArgumentException('Invalid workspace entry')
+        }
+        Map entry = (Map) value
+        def unknown = entry.keySet().findAll { !(it.toString() in ALLOWED_WORKSPACE_KEYS) }
+        if (unknown) {
+            throw new IllegalArgumentException("Unknown workspace keys: ${unknown.sort().join(', ')}")
+        }
+        if (!entry.containsKey('path')) {
+            throw new IllegalArgumentException('Invalid workspace path')
+        }
+        Object pathValue = entry.path
+        if (!(pathValue instanceof String) || !pathValue.toString().trim()) {
+            throw new IllegalArgumentException('Invalid workspace path')
+        }
+        [
+            path: canonicalWorkspacePath(pathValue.toString()).path,
+            ides: normalizeIdes(entry.containsKey('ides') ? entry.ides : [])
+        ]
+    }
+
+    static String workspaceEntryPath(Object entry) {
+        if (entry instanceof Map) {
+            Object pathValue = entry.path
+            if (pathValue instanceof String && pathValue.toString().trim()) {
+                return pathValue.toString()
+            }
+        }
+        if (entry instanceof String && entry.toString().trim()) {
+            return canonicalWorkspacePath(entry.toString()).path
+        }
+        throw new IllegalArgumentException('Invalid workspace path')
     }
 
     static String validateWorkspaceName(String name) {
@@ -148,11 +240,12 @@ class GlobalConfig {
         new File(path).isDirectory()
     }
 
-    static Map workspaceEntry(String name, String path, Map config) {
+    static Map workspaceEntry(String name, Map entry, Map config) {
         [
             name: name,
-            path: path,
-            available: workspaceAvailable(path),
+            path: entry.path.toString(),
+            ides: ((List) entry.ides)*.toString(),
+            available: workspaceAvailable(entry.path.toString()),
             default: config.default_workspace == name
         ]
     }
@@ -166,14 +259,17 @@ class GlobalConfig {
         String canonical = resolved.path
         withConfigLock {
             Map config = load()
-            Map workspaces = new LinkedHashMap((Map) config.workspaces)
-            boolean unchanged = workspaces.containsKey(name) && workspaces[name] == canonical
-            if (workspaces.containsKey(name) && workspaces[name] != canonical) {
+            Map workspaces = cloneConfig(config).workspaces
+            Map existing = workspaces[name]
+            String existingPath = existing?.path?.toString()
+            List existingIdes = existing ? ((List) existing.ides)*.toString() : []
+            boolean unchanged = existingPath == canonical
+            if (existingPath && existingPath != canonical) {
                 throw new IllegalArgumentException(
-                    "Workspace ${name} is already registered with a different path: ${workspaces[name]}"
+                    "Workspace ${name} is already registered with a different path: ${existingPath}"
                 )
             }
-            workspaces[name] = canonical
+            workspaces[name] = [path: canonical, ides: existingIdes]
             config.workspaces = workspaces
             if (makeDefault) {
                 config.default_workspace = name
@@ -197,7 +293,7 @@ class GlobalConfig {
         validateWorkspaceName(name)
         withConfigLock {
             Map config = load()
-            Map workspaces = new LinkedHashMap((Map) config.workspaces)
+            Map workspaces = cloneConfig(config).workspaces
             if (!(name in workspaces)) {
                 throw new IllegalArgumentException("Workspace not registered: ${name}")
             }
@@ -232,6 +328,52 @@ class GlobalConfig {
         }
     }
 
+    static Map setAiVaultRoot(String path) {
+        withConfigLock {
+            Map config = load()
+            String canonical = null
+            if (path == null) {
+                config.ai_vault_root = null
+            } else {
+                File resolved = canonicalWorkspacePath(path)
+                if (!resolved.isDirectory()) {
+                    throw new IllegalArgumentException("AI vault root not found: ${path}")
+                }
+                canonical = resolved.path
+                config.ai_vault_root = canonical
+            }
+            save(config)
+            [
+                operation: 'ai_vault_root',
+                status: 'ok',
+                ai_vault_root: canonical
+            ]
+        }
+    }
+
+    static Map setWorkspaceIdes(String name, List<String> ides) {
+        validateWorkspaceName(name)
+        List<String> normalizedIdes = normalizeIdes(ides)
+        withConfigLock {
+            Map config = load()
+            Map workspaces = cloneConfig(config).workspaces
+            if (!(name in workspaces)) {
+                throw new IllegalArgumentException("Workspace not registered: ${name}")
+            }
+            Map entry = new LinkedHashMap((Map) workspaces[name])
+            entry.ides = normalizedIdes
+            workspaces[name] = entry
+            config.workspaces = workspaces
+            save(config)
+            [
+                operation: 'ides',
+                status: 'ok',
+                name: name,
+                ides: normalizedIdes
+            ]
+        }
+    }
+
     static Map showDefaultWorkspace() {
         Map config = load()
         if (!config.default_workspace) {
@@ -250,8 +392,8 @@ class GlobalConfig {
             operation: 'list',
             status: 'ok',
             default_workspace: config.default_workspace,
-            workspaces: ((Map) config.workspaces).collect { name, path ->
-                workspaceEntry(name.toString(), path.toString(), config)
+            workspaces: ((Map) config.workspaces).collect { name, entry ->
+                workspaceEntry(name.toString(), (Map) entry, config)
             }.sort { it.name }
         ]
     }
@@ -262,7 +404,7 @@ class GlobalConfig {
         if (!(name in config.workspaces)) {
             throw new IllegalArgumentException("Workspace not registered: ${name}")
         }
-        Map entry = workspaceEntry(name, config.workspaces[name].toString(), config)
+        Map entry = workspaceEntry(name, (Map) config.workspaces[name], config)
         entry.operation = 'show'
         entry.status = 'ok'
         entry
@@ -275,9 +417,10 @@ class GlobalConfig {
             status: 'ok',
             version: config.version,
             runtime: config.runtime,
+            ai_vault_root: config.ai_vault_root,
             default_workspace: config.default_workspace,
-            workspaces: ((Map) config.workspaces).collect { name, path ->
-                workspaceEntry(name.toString(), path.toString(), config)
+            workspaces: ((Map) config.workspaces).collect { name, entry ->
+                workspaceEntry(name.toString(), (Map) entry, config)
             }.sort { it.name }
         ]
     }
@@ -413,7 +556,7 @@ class GlobalConfig {
         if (!(name in config.workspaces)) {
             throw new IllegalArgumentException("Workspace not registered: ${name}")
         }
-        String path = config.workspaces[name].toString()
+        String path = workspaceEntryPath(config.workspaces[name])
         if (!workspaceAvailable(path)) {
             throw new IllegalArgumentException("Registered workspace path is unavailable: ${name} -> ${path}")
         }
@@ -445,7 +588,15 @@ class GlobalConfig {
 
     private static Map cloneConfig(Map config) {
         Map cloned = new LinkedHashMap(config)
-        cloned.workspaces = new LinkedHashMap((Map) config.workspaces)
+        cloned.workspaces = ((Map) config.workspaces).collectEntries { name, entry ->
+            Map workspace = (Map) entry
+            [
+                (name.toString()): [
+                    path: workspace.path.toString(),
+                    ides: ((List) workspace.ides)*.toString()
+                ]
+            ]
+        }
         cloned
     }
 
@@ -477,12 +628,13 @@ class GlobalConfig {
         JsonFiles.read(
             new File(FrameworkPaths.resolveFrameworkRoot(), 'shared/global-config-rules.json'),
             [
-                version: 1,
+                version: 2,
                 home_environment: 'AI_WORKLOG_HOME',
                 config_filename: 'config.json',
                 default_runtime: 'groovy',
                 supported_runtimes: ['groovy', 'python'],
-                workspace_name_pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+                workspace_name_pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$',
+                supported_ides: ['cursor', 'claude', 'antigravity']
             ]
         )
     }

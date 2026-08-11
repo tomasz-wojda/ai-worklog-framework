@@ -36,6 +36,13 @@ def test_workspace(tmp_path):
     return ws
 
 
+@pytest.fixture
+def vault_root(tmp_path):
+    root = tmp_path / "vault"
+    root.mkdir()
+    return root
+
+
 def _write_raw(home: Path, payload) -> None:
     home.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = home / "config.json"
@@ -48,12 +55,21 @@ class TestGlobalConfigValidation:
         assert cfg == gc.default_config()
 
     def test_rejects_unknown_keys(self, home):
-        _write_raw(home, {"version": 1, "runtime": "groovy", "extra": True})
+        _write_raw(home, {"version": 2, "runtime": "groovy", "ai_vault_root": None, "extra": True})
         with pytest.raises(ValueError, match="Unknown global configuration keys"):
             gc.load_global_config()
 
     def test_rejects_unsupported_version(self, home):
-        _write_raw(home, {"version": 99, "runtime": "groovy", "workspaces": {}})
+        _write_raw(
+            home,
+            {
+                "version": 99,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": None,
+                "workspaces": {},
+            },
+        )
         with pytest.raises(ValueError, match="Unsupported global configuration version"):
             gc.load_global_config()
 
@@ -63,14 +79,27 @@ class TestGlobalConfigValidation:
             gc.load_global_config()
 
     def test_rejects_invalid_runtime(self, home):
-        _write_raw(home, {"version": 1, "runtime": "ruby", "workspaces": {}})
+        _write_raw(
+            home,
+            {
+                "version": 2,
+                "runtime": "ruby",
+                "ai_vault_root": None,
+                "default_workspace": None,
+                "workspaces": {},
+            },
+        )
         with pytest.raises(ValueError, match="Invalid runtime"):
             gc.load_global_config()
 
     def test_rejects_invalid_workspace_name(self, home):
         _write_raw(
             home,
-            {"version": 1, "runtime": "groovy", "workspaces": {"bad name": "/tmp/x"}},
+            {
+                "version": 1,
+                "runtime": "groovy",
+                "workspaces": {"bad name": "/tmp/x"},
+            },
         )
         with pytest.raises(ValueError, match="Invalid workspace name"):
             gc.load_global_config()
@@ -78,7 +107,13 @@ class TestGlobalConfigValidation:
     def test_rejects_default_not_registered(self, home):
         _write_raw(
             home,
-            {"version": 1, "runtime": "groovy", "default_workspace": "missing", "workspaces": {}},
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": "missing",
+                "workspaces": {},
+            },
         )
         with pytest.raises(ValueError, match="Unknown default workspace"):
             gc.load_global_config()
@@ -93,7 +128,82 @@ class TestGlobalConfigValidation:
             },
         )
         cfg = gc.load_global_config()
-        assert cfg["workspaces"]["work"] == str(work_workspace.resolve())
+        assert cfg["version"] == 2
+        assert cfg["workspaces"]["work"]["path"] == str(work_workspace.resolve())
+        assert cfg["workspaces"]["work"]["ides"] == []
+
+    def test_migrates_v1_to_v2_in_memory(self, home, work_workspace):
+        _write_raw(
+            home,
+            {
+                "version": 1,
+                "runtime": "python",
+                "default_workspace": "work",
+                "workspaces": {"work": str(work_workspace)},
+            },
+        )
+        cfg = gc.load_global_config()
+        assert cfg["version"] == 2
+        assert cfg["ai_vault_root"] is None
+        assert cfg["workspaces"]["work"]["ides"] == []
+
+    def test_reads_v2_workspace_objects(self, home, work_workspace):
+        _write_raw(
+            home,
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": None,
+                "workspaces": {
+                    "work": {
+                        "path": str(work_workspace),
+                        "ides": ["claude", "cursor"],
+                    }
+                },
+            },
+        )
+        cfg = gc.load_global_config()
+        assert cfg["workspaces"]["work"]["ides"] == ["claude", "cursor"]
+
+    def test_rejects_unknown_workspace_keys(self, home, work_workspace):
+        _write_raw(
+            home,
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": None,
+                "workspaces": {
+                    "work": {
+                        "path": str(work_workspace),
+                        "ides": [],
+                        "extra": True,
+                    }
+                },
+            },
+        )
+        with pytest.raises(ValueError, match="Unknown workspace keys"):
+            gc.load_global_config()
+
+    def test_rejects_invalid_ides(self, home, work_workspace):
+        _write_raw(
+            home,
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": None,
+                "workspaces": {
+                    "work": {
+                        "path": str(work_workspace),
+                        "ides": ["vscode"],
+                    }
+                },
+            },
+        )
+        with pytest.raises(ValueError, match="Invalid ide"):
+            gc.load_global_config()
 
 
 class TestGlobalConfigMutations:
@@ -105,11 +215,23 @@ class TestGlobalConfigMutations:
         assert cfg_path.is_file()
         assert stat.S_IMODE(cfg_path.stat().st_mode) == 0o600
         assert stat.S_IMODE(home.stat().st_mode) == 0o700
+        saved = json.loads(cfg_path.read_text(encoding="utf-8"))
+        assert saved["version"] == 2
+        assert saved["workspaces"]["work"]["path"] == str(work_workspace.resolve())
+        assert saved["workspaces"]["work"]["ides"] == []
 
     def test_add_idempotent(self, home, work_workspace):
         gc.add_workspace("work", str(work_workspace))
         payload = gc.add_workspace("work", str(work_workspace))
         assert payload.get("unchanged") is True
+
+    def test_add_preserves_ides(self, home, work_workspace):
+        gc.add_workspace("work", str(work_workspace))
+        gc.set_workspace_ides("work", ["cursor", "claude"])
+        payload = gc.add_workspace("work", str(work_workspace))
+        assert payload.get("unchanged") is True
+        cfg = gc.load_global_config()
+        assert cfg["workspaces"]["work"]["ides"] == ["claude", "cursor"]
 
     def test_add_conflict(self, home, work_workspace, test_workspace):
         gc.add_workspace("work", str(work_workspace))
@@ -125,7 +247,7 @@ class TestGlobalConfigMutations:
         monkeypatch.setenv("HOME", str(work_workspace.parent))
         gc.add_workspace("work", "~/work")
         cfg = gc.load_global_config()
-        assert cfg["workspaces"]["work"] == str(work_workspace.resolve())
+        assert cfg["workspaces"]["work"]["path"] == str(work_workspace.resolve())
 
     def test_remove_clears_default(self, home, work_workspace, test_workspace):
         gc.add_workspace("work", str(work_workspace), make_default=True)
@@ -151,6 +273,23 @@ class TestGlobalConfigMutations:
         assert payload["runtime"] == "python"
         assert gc.show_runtime()["runtime"] == "python"
 
+    def test_set_ai_vault_root(self, home, vault_root):
+        payload = gc.set_ai_vault_root(str(vault_root))
+        assert payload["ai_vault_root"] == str(vault_root.resolve())
+        assert gc.load_global_config()["ai_vault_root"] == str(vault_root.resolve())
+
+    def test_clear_ai_vault_root(self, home, vault_root):
+        gc.set_ai_vault_root(str(vault_root))
+        payload = gc.set_ai_vault_root(None)
+        assert payload["ai_vault_root"] is None
+        assert gc.load_global_config()["ai_vault_root"] is None
+
+    def test_set_workspace_ides(self, home, work_workspace):
+        gc.add_workspace("work", str(work_workspace))
+        payload = gc.set_workspace_ides("work", ["antigravity", "cursor", "cursor"])
+        assert payload["ides"] == ["antigravity", "cursor"]
+        assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["antigravity", "cursor"]
+
     def test_malformed_config_not_overwritten_on_write(self, home, work_workspace):
         path = home / "config.json"
         path.write_text("{bad", encoding="utf-8")
@@ -166,6 +305,22 @@ class TestGlobalConfigMutations:
                 gc.set_runtime("python")
         assert (home / "config.json").read_text(encoding="utf-8") == original
 
+    def test_save_migrates_v1_on_disk_to_v2(self, home, work_workspace):
+        _write_raw(
+            home,
+            {
+                "version": 1,
+                "runtime": "groovy",
+                "workspaces": {"work": str(work_workspace)},
+            },
+        )
+        gc.set_runtime("python")
+        saved = json.loads((home / "config.json").read_text(encoding="utf-8"))
+        assert saved["version"] == 2
+        assert saved["ai_vault_root"] is None
+        assert saved["workspaces"]["work"]["path"] == str(work_workspace.resolve())
+        assert saved["workspaces"]["work"]["ides"] == []
+
 
 class TestGlobalConfigListing:
     def test_list_sorted_with_flags(self, home, work_workspace, test_workspace):
@@ -173,12 +328,21 @@ class TestGlobalConfigListing:
         gc.add_workspace("test", str(test_workspace))
         missing = home / "missing"
         cfg = gc.load_global_config()
-        cfg["workspaces"]["personal"] = str(missing.resolve())
+        cfg["workspaces"]["personal"] = {"path": str(missing.resolve()), "ides": ["cursor"]}
         gc.save_global_config(cfg)
         payload = gc.list_workspaces()
         assert [entry["name"] for entry in payload["workspaces"]] == ["personal", "test", "work"]
         personal = next(entry for entry in payload["workspaces"] if entry["name"] == "personal")
         assert personal["available"] is False
+        assert personal["ides"] == ["cursor"]
+
+    def test_show_configuration_includes_v2_fields(self, home, work_workspace, vault_root):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        gc.set_ai_vault_root(str(vault_root))
+        payload = gc.show_configuration()
+        assert payload["version"] == 2
+        assert payload["ai_vault_root"] == str(vault_root.resolve())
+        assert payload["workspaces"][0]["ides"] == []
 
 
 class TestWorkspaceCommands:
@@ -218,6 +382,9 @@ class TestConfigCommands:
         assert payload["operation"] == "show"
         assert payload["runtime"] == "groovy"
         assert payload["default_workspace"] == "work"
+        assert payload["version"] == 2
+        assert payload["ai_vault_root"] is None
+        assert payload["workspaces"][0]["ides"] == []
 
     def test_runtime_show(self, home, capsys):
         args = SimpleNamespace(config_action="runtime", runtime=None, json=False)

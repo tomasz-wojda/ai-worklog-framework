@@ -4,26 +4,33 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME=""
 ARGS=()
+SAW_COMMAND=0
+KNOWN_COMMANDS=" setup workspace config catalog ticket state preflight reconcile jenkins day delivery closeout diag toolchain "
 
 while (($#)); do
-  case "$1" in
-    --runtime)
-      if (($# < 2)); then
-        echo "Missing value for --runtime" >&2
-        exit 1
-      fi
-      RUNTIME="$2"
-      shift 2
-      ;;
-    --runtime=*)
-      RUNTIME="${1#*=}"
-      shift
-      ;;
-    *)
-      ARGS+=("$1")
-      shift
-      ;;
-  esac
+  if [[ $SAW_COMMAND -eq 0 ]]; then
+    case "$1" in
+      --runtime)
+        if (($# < 2)); then
+          echo "Missing value for --runtime" >&2
+          exit 1
+        fi
+        RUNTIME="$2"
+        shift 2
+        continue
+        ;;
+      --runtime=*)
+        RUNTIME="${1#*=}"
+        shift
+        continue
+        ;;
+    esac
+  fi
+  if [[ $SAW_COMMAND -eq 0 && "$KNOWN_COMMANDS" == *" $1 "* ]]; then
+    SAW_COMMAND=1
+  fi
+  ARGS+=("$1")
+  shift
 done
 
 if [[ -z "$RUNTIME" && -n "${AI_WORKLOG_RUNTIME:-}" ]]; then
