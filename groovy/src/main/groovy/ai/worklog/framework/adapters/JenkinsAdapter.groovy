@@ -364,20 +364,7 @@ class JenkinsAdapter {
             timeout
         )
         return handleOperatorResponse('credential-domains', controller, fetchedAt, response) { Map body ->
-            List<Map> items = []
-            ((List) (body.domains ?: [])).each { entry ->
-                if (entry instanceof Map) {
-                    items << [
-                        domain_name: entry.domainName,
-                        display_name: entry.displayName,
-                        description: entry.description,
-                        url: entry.url
-                    ]
-                }
-            }
-            items.sort { a, b ->
-                (a.domain_name ?: '').toString().toLowerCase() <=> (b.domain_name ?: '').toString().toLowerCase()
-            }
+            List<Map> items = projectCredentialDomains(body)
             [
                 operation: 'credential-domains',
                 controller: controller,
@@ -1387,6 +1374,38 @@ class JenkinsAdapter {
     private static boolean isFolderJob(Map entry) {
         String jobClass = entry._class?.toString() ?: ''
         jobClass.toLowerCase().contains('folder')
+    }
+
+    private static List<Map> projectCredentialDomains(Map body) {
+        List<Map> items = []
+        Object raw = body.domains
+        if (raw instanceof List) {
+            ((List) raw).each { entry ->
+                if (entry instanceof Map) {
+                    items << [
+                        domain_name: entry.domainName,
+                        display_name: entry.displayName,
+                        description: entry.description,
+                        url: entry.url
+                    ]
+                }
+            }
+        } else if (raw instanceof Map) {
+            ((Map) raw).each { domainName, entry ->
+                if (entry instanceof Map) {
+                    items << [
+                        domain_name: domainName?.toString(),
+                        display_name: entry.displayName,
+                        description: entry.description,
+                        url: entry.url
+                    ]
+                }
+            }
+        }
+        items.sort { a, b ->
+            (a.domain_name ?: '').toString().toLowerCase() <=> (b.domain_name ?: '').toString().toLowerCase()
+        }
+        items
     }
 
     private static List<Map> projectViewJobs(List jobs) {

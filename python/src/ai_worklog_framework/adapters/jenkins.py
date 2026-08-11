@@ -1521,6 +1521,33 @@ def operator_whoami(
     }
 
 
+def _project_credential_domains(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = payload.get("domains")
+    items: List[Dict[str, Any]] = []
+    if isinstance(raw, list):
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            items.append({
+                "domain_name": entry.get("domainName"),
+                "display_name": entry.get("displayName"),
+                "description": entry.get("description"),
+                "url": entry.get("url"),
+            })
+    elif isinstance(raw, dict):
+        for domain_name, entry in raw.items():
+            if not isinstance(entry, dict):
+                continue
+            items.append({
+                "domain_name": domain_name,
+                "display_name": entry.get("displayName"),
+                "description": entry.get("description"),
+                "url": entry.get("url"),
+            })
+    items.sort(key=lambda item: str(item.get("domain_name") or "").casefold())
+    return items
+
+
 def operator_credential_domains(
     paths: WorkspacePaths,
     controller: str,
@@ -1540,17 +1567,7 @@ def operator_credential_domains(
     )
     if status_code != 200 or not isinstance(payload, dict):
         return _operator_http_error("credential-domains", controller, fetched_at, status_code)
-    items = []
-    for entry in payload.get("domains") or []:
-        if not isinstance(entry, dict):
-            continue
-        items.append({
-            "domain_name": entry.get("domainName"),
-            "display_name": entry.get("displayName"),
-            "description": entry.get("description"),
-            "url": entry.get("url"),
-        })
-    items.sort(key=lambda item: str(item.get("domain_name") or "").casefold())
+    items = _project_credential_domains(payload)
     message = "Credential domains fetched" if items else "No credential domains found"
     return {
         "operation": "credential-domains",

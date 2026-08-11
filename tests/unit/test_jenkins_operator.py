@@ -938,6 +938,30 @@ def test_operator_credential_domains_metadata_only(tmp_path, monkeypatch):
     assert "nope" not in rendered
 
 
+def test_operator_credential_domains_map_shape(tmp_path, monkeypatch):
+    paths = _setup_controller(tmp_path)
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (200, {
+            "domains": {
+                "_": {
+                    "_class": "com.cloudbees.plugins.credentials.CredentialsStoreAction$DomainWrapper",
+                    "displayName": "Global",
+                    "description": "Credentials that should be available everywhere.",
+                },
+            },
+        }),
+    )
+    report = jenkins.operator_credential_domains(paths, "primary", timeout=5)
+    assert len(report["items"]) == 1
+    item = report["items"][0]
+    assert item["domain_name"] == "_"
+    assert item["display_name"] == "Global"
+    assert item["description"] == "Credentials that should be available everywhere."
+    assert set(item) == {"domain_name", "display_name", "description", "url"}
+
+
 def test_operator_blocked_without_credentials(tmp_path):
     _write_properties(tmp_path, "primary.url=https://jenkins.example\n")
     report = jenkins.operator_whoami(WorkspacePaths(tmp_path), "primary", timeout=5)

@@ -598,6 +598,33 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('must-not-appear')
     }
 
+    void testOperatorCredentialDomainsMapShape() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [code: 200, body: '''
+            {
+              "domains": {
+                "_": {
+                  "_class": "com.cloudbees.plugins.credentials.CredentialsStoreAction$DomainWrapper",
+                  "displayName": "Global",
+                  "description": "Credentials that should be available everywhere."
+                }
+              }
+            }
+            ''', error: '']
+        }
+        Map report = adapter.operatorCredentialDomains('primary', 5)
+        assertEquals 1, report.items.size()
+        assertEquals('_', report.items[0].domain_name)
+        assertEquals('Global', report.items[0].display_name)
+        assertEquals(
+            'Credentials that should be available everywhere.',
+            report.items[0].description
+        )
+        assertEquals(['domain_name', 'display_name', 'description', 'url'] as Set, report.items[0].keySet())
+    }
+
     void testOperatorNodesAccessBlocked() {
         writeProperties(defaultProperties())
         JenkinsAdapter adapter = adapterWithMocks([:])
