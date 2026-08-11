@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -187,6 +189,91 @@ def pending_action_count(plan: Dict[str, Any]) -> int:
             if not action.get("skip"):
                 total += 1
     return total
+
+
+ACTION_PLAN_KEYS = ("workspace_actions", "service_actions", "skill_actions")
+LABEL_WIDTH = 17
+
+
+def collect_plan_actions(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    actions: List[Dict[str, Any]] = []
+    for key in ACTION_PLAN_KEYS:
+        actions.extend(plan.get(key, []))
+    return actions
+
+
+def action_plan_counts(plan: Dict[str, Any]) -> tuple[int, int]:
+    actions = collect_plan_actions(plan)
+    skipped = sum(1 for action in actions if action.get("skip"))
+    active = sum(1 for action in actions if not action.get("skip"))
+    return skipped, active
+
+
+def _setup_use_color() -> bool:
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _setup_print_row(label: str, detail: str, *, ok: bool = True) -> None:
+    if _setup_use_color():
+        mark = "\033[32m✓\033[0m" if ok else "\033[31m✗\033[0m"
+        dim = "\033[2m"
+        reset = "\033[0m"
+    else:
+        mark = "✓" if ok else "✗"
+        dim = ""
+        reset = ""
+    print(f"  {mark} {label:<{LABEL_WIDTH}} {dim}{detail}{reset}")
+
+
+def format_action_detail(action: Dict[str, Any]) -> str:
+    kind = action.get("kind")
+    target = action.get("target")
+    source = action.get("source")
+    reason = action.get("reason")
+    suffix = f" ({reason})" if reason else ""
+    if kind == "mkdir":
+        detail = f"mkdir {target}"
+    elif kind == "copy":
+        detail = f"copy {source} -> {target}"
+    elif kind == "symlink":
+        if isinstance(source, Path) and not source.is_absolute():
+            link_source = source
+        elif hasattr(source, "resolve"):
+            link_source = source.resolve()
+        else:
+            link_source = source
+        detail = f"link {target} -> {link_source}"
+    elif kind == "remove":
+        detail = f"remove {target}"
+    elif kind == "unlink":
+        detail = f"unlink {target}"
+    else:
+        detail = f"{kind} {target}"
+    return f"{detail}{suffix}"
+
+
+def print_compact_actions(actions: List[Dict[str, Any]], apply: bool) -> None:
+    skipped = [action for action in actions if action.get("skip")]
+    active = [action for action in actions if not action.get("skip")]
+
+    if skipped:
+        noun = "action" if len(skipped) == 1 else "actions"
+        _setup_print_row("Skipped", f"{len(skipped)} {noun}")
+
+    for action in active:
+        print(f"      {format_action_detail(action)}")
+
+    if active and not apply:
+        noun = "action" if len(active) == 1 else "actions"
+        message = f"{len(active)} pending {noun}. Re-run with --apply to make changes."
+        if _setup_use_color():
+            print(f"\n  \033[2m{message}\033[0m")
+        else:
+            print(f"\n  {message}")
+
+
+def print_compact_action_plan(plan: Dict[str, Any], apply: bool) -> None:
+    print_compact_actions(collect_plan_actions(plan), apply)
 
 
 def format_filesystem_action(action: Dict[str, Any], apply: bool) -> str:

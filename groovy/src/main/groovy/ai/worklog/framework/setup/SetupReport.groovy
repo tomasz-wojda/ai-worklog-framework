@@ -252,18 +252,46 @@ class SetupReport {
             actions: actions,
             conflicts: conflicts,
             pending_actions: pending,
-            applied_actions: 0
+            applied_actions: 0,
+            skipped_actions: actions.count { Map action -> action.skip }
         ]
     }
+
+    private static final Set<String> ACTION_OPERATIONS = ['init', 'repair', 'revert'] as Set
 
     static void finalizeAppliedActionReport(Map report) {
         List actions = (List) (report.actions ?: [])
         int applied = actions.count { Map action -> !action.skip }
+        int skipped = actions.count { Map action -> action.skip }
         report.applied_actions = applied
+        report.skipped_actions = skipped
         report.pending_actions = 0
     }
 
-    static void renderReport(Map report, boolean jsonOutput) {
+    private static void renderActionFooter(Map report) {
+        int applied = report.applied_actions instanceof Number ? report.applied_actions as int : 0
+        int skipped = report.skipped_actions instanceof Number ?
+            report.skipped_actions as int :
+            ((List) (report.actions ?: [])).count { Map action -> action.skip }
+        String status = report.status?.toString()?.toUpperCase() ?: 'READY'
+        boolean useColor = SetupPlanner.setupUseColor()
+        String color
+        if (useColor) {
+            if (status == 'READY') {
+                color = '\u001B[32m'
+            } else if (status in ['BLOCKED', 'ERROR']) {
+                color = '\u001B[31m'
+            } else {
+                color = '\u001B[33m'
+            }
+        } else {
+            color = ''
+        }
+        String reset = useColor ? '\u001B[0m' : ''
+        println "\n${color}${status}${reset}  ${applied} applied · ${skipped} skipped"
+    }
+
+    static void renderReport(Map report, boolean jsonOutput, boolean actionsPrinted = false) {
         if (jsonOutput) {
             GlobalConfig.printJson(report)
             return
@@ -285,22 +313,22 @@ class SetupReport {
             Map check = (Map) checkValue
             println "  [${check.status.toUpperCase()}] ${check.layer}: ${check.message}"
         }
-        int appliedActions = report.applied_actions instanceof Number ? report.applied_actions as int : 0
-        if (appliedActions > 0) {
-            println "  Applied actions: ${appliedActions}"
-            ((List) (report.actions ?: [])).each { actionValue ->
-                Map action = (Map) actionValue
-                if (action.skip) {
-                    return
-                }
-                println "  run: ${action.kind} ${action.target}"
+        String operation = report.operation?.toString()
+        if (operation in ACTION_OPERATIONS && actionsPrinted) {
+            ((List) (report.conflicts ?: [])).each { conflictValue ->
+                Map conflict = (Map) conflictValue
+                SetupPlanner.setupPrintRow('Conflict', "${conflict.path} (${conflict.reason})", false)
             }
-        } else {
-            ((List) (report.actions ?: [])).each { actionValue ->
-                Map action = (Map) actionValue
-                String prefix = action.skip ? 'skipped:' : 'would:'
-                println "  ${prefix} ${action.kind} ${action.target}"
+            renderActionFooter(report)
+            return
+        }
+        if (operation in ACTION_OPERATIONS) {
+            SetupPlanner.printCompactActions((List) (report.actions ?: []), false)
+            ((List) (report.conflicts ?: [])).each { conflictValue ->
+                Map conflict = (Map) conflictValue
+                SetupPlanner.setupPrintRow('Conflict', "${conflict.path} (${conflict.reason})", false)
             }
+            return
         }
         ((List) (report.conflicts ?: [])).each { conflictValue ->
             Map conflict = (Map) conflictValue

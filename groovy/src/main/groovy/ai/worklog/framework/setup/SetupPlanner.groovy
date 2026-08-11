@@ -3,6 +3,98 @@ package ai.worklog.framework.setup
 import ai.worklog.framework.workspace.WorkspacePlanner
 
 class SetupPlanner {
+    private static final List<String> ACTION_PLAN_KEYS = [
+        'workspace_actions', 'service_actions', 'skill_actions'
+    ]
+    private static final int LABEL_WIDTH = 17
+
+    static List<Map> collectPlanActions(Map plan) {
+        List<Map> actions = []
+        ACTION_PLAN_KEYS.each { key ->
+            ((List) (plan[key] ?: [])).each { actionValue ->
+                actions << (Map) actionValue
+            }
+        }
+        actions
+    }
+
+    static boolean setupUseColor() {
+        if (System.getenv('NO_COLOR')) {
+            return false
+        }
+        return (System.getenv('TERM') ?: '') != 'dumb'
+    }
+
+    static void setupPrintRow(String label, String detail, boolean ok = true) {
+        boolean useColor = setupUseColor()
+        String mark = ok ? (useColor ? '\u001B[32m✓\u001B[0m' : '✓') :
+            (useColor ? '\u001B[31m✗\u001B[0m' : '✗')
+        String dim = useColor ? '\u001B[2m' : ''
+        String reset = useColor ? '\u001B[0m' : ''
+        println "  ${mark} ${label.padRight(LABEL_WIDTH)} ${dim}${detail}${reset}"
+    }
+
+    static String formatActionDetail(Map action) {
+        String kind = action.kind?.toString()
+        Object target = action.target
+        Object source = action.source
+        String reason = action.reason?.toString()
+        String suffix = reason ? " (${reason})" : ''
+        String detail
+        switch (kind) {
+            case 'mkdir':
+                detail = "mkdir ${target}"
+                break
+            case 'copy':
+                detail = "copy ${source} -> ${target}"
+                break
+            case 'symlink':
+                Object resolvedSource = source instanceof File ? ((File) source).canonicalFile : source
+                detail = "link ${target} -> ${resolvedSource}"
+                break
+            case 'remove':
+                detail = "remove ${target}"
+                break
+            case 'unlink':
+                detail = "unlink ${target}"
+                break
+            default:
+                detail = "${kind} ${target}"
+        }
+        "${detail}${suffix}"
+    }
+
+    static void printCompactActions(List<Map> actions, boolean apply) {
+        List<Map> skipped = actions.findAll { it.skip }
+        List<Map> active = actions.findAll { !it.skip }
+        if (skipped) {
+            String noun = skipped.size() == 1 ? 'action' : 'actions'
+            setupPrintRow('Skipped', "${skipped.size()} ${noun}")
+        }
+        active.each { Map action ->
+            println "      ${formatActionDetail(action)}"
+        }
+        if (active && !apply) {
+            String noun = active.size() == 1 ? 'action' : 'actions'
+            String message = "${active.size()} pending ${noun}. Re-run with --apply to make changes."
+            if (setupUseColor()) {
+                println "\n  \u001B[2m${message}\u001B[0m"
+            } else {
+                println "\n  ${message}"
+            }
+        }
+    }
+
+    static void printCompactActionPlan(Map plan, boolean apply) {
+        printCompactActions(collectPlanActions(plan), apply)
+    }
+
+    static void printActionConflicts(List<Map> conflicts) {
+        conflicts.each { Map conflict ->
+            setupPrintRow('Conflict', "${conflict.path} (${conflict.reason})", false)
+        }
+    }
+
     static Map planSetupInit(
         File workspace,
         File vaultRoot,

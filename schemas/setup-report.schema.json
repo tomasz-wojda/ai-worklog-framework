@@ -107,6 +107,10 @@
       "type": "integer",
       "minimum": 0
     },
+    "skipped_actions": {
+      "type": "integer",
+      "minimum": 0
+    },
     "manifest": {
       "type": "object",
       "properties": {

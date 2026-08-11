@@ -518,10 +518,25 @@ class SetupTest extends GroovyTestCase {
         ]
         SetupReport.finalizeAppliedActionReport(report)
         assertEquals(1, report.applied_actions)
+        assertEquals(1, report.skipped_actions)
         assertEquals(0, report.pending_actions)
     }
 
-    void testRenderReportShowsRunPrefixAfterApply() {
+    void testPrintCompactActionPlanSummarizesSkipped() {
+        Map plan = [
+            workspace_actions: [
+                [kind: 'mkdir', target: '/tmp/a', skip: true, reason: 'already exists'],
+                [kind: 'symlink', target: '/tmp/jira', source: '../../jira', skip: false],
+            ]
+        ]
+        String output = captureOutput { SetupPlanner.printCompactActionPlan(plan, true) }
+        assertTrue(output.contains('Skipped'))
+        assertTrue(output.contains('1 action'))
+        assertTrue(output.contains('link /tmp/jira'))
+        assertFalse(output.contains('skipped:'))
+    }
+
+    void testRenderReportFooterAfterApply() {
         Map report = [
             operation: 'repair',
             status: 'ready',
@@ -533,13 +548,13 @@ class SetupTest extends GroovyTestCase {
             ],
             conflicts: [],
             pending_actions: 0,
-            applied_actions: 1
+            applied_actions: 1,
+            skipped_actions: 1
         ]
-        String output = captureOutput { SetupReport.renderReport(report, false) }
-        assertTrue(output.contains('Applied actions: 1'))
-        assertTrue(output.contains('run: symlink /tmp/jira'))
-        assertFalse(output.contains('would:'))
+        String output = captureOutput { SetupReport.renderReport(report, false, true) }
+        assertTrue(output.contains('Setup repair: ready'))
+        assertTrue(output.contains('1 applied · 1 skipped'))
         assertFalse(output.contains('skipped:'))
-        assertFalse(output.contains('Pending actions:'))
+        assertFalse(output.contains('would:'))
     }
 }

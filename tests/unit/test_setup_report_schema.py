@@ -9,6 +9,7 @@ from ai_worklog_framework import global_config as gc
 from ai_worklog_framework.setup.manifest import save_manifest
 from ai_worklog_framework.setup.planner import plan_setup_init
 from ai_worklog_framework.setup.report import build_action_report, build_check_report, build_show_report, finalize_applied_action_report, render_report
+from ai_worklog_framework.setup.planner import print_compact_action_plan
 from ai_worklog_framework.setup.vault import validate_vault_root
 
 _REPORT_TOP_KEYS = {
@@ -24,6 +25,7 @@ _REPORT_TOP_KEYS = {
     "conflicts",
     "pending_actions",
     "applied_actions",
+    "skipped_actions",
     "manifest",
 }
 _REPORT_OPERATIONS = {"init", "check", "show", "repair", "revert"}
@@ -172,6 +174,10 @@ def validate_setup_report(report: dict) -> None:
     applied = report.get("applied_actions")
     if applied is not None and (not isinstance(applied, int) or applied < 0):
         raise AssertionError("applied_actions must be a non-negative integer")
+
+    skipped = report.get("skipped_actions")
+    if skipped is not None and (not isinstance(skipped, int) or skipped < 0):
+        raise AssertionError("skipped_actions must be a non-negative integer")
 
     manifest = report.get("manifest")
     if manifest is not None:
@@ -349,10 +355,26 @@ def test_finalize_applied_action_report_clears_pending():
     }
     finalize_applied_action_report(report)
     assert report["applied_actions"] == 1
+    assert report["skipped_actions"] == 1
     assert report["pending_actions"] == 0
 
 
-def test_render_report_shows_run_prefix_after_apply(capsys):
+def test_print_compact_action_plan_summarizes_skipped(capsys):
+    plan = {
+        "workspace_actions": [
+            {"kind": "mkdir", "target": "/tmp/a", "skip": True, "reason": "already exists"},
+            {"kind": "symlink", "target": "/tmp/jira", "source": "../../jira", "skip": False},
+        ]
+    }
+    print_compact_action_plan(plan, apply=True)
+    output = capsys.readouterr().out
+    assert "Skipped" in output
+    assert "1 action" in output
+    assert "link /tmp/jira" in output
+    assert "skipped:" not in output
+
+
+def test_render_report_footer_after_apply(capsys):
     report = {
         "operation": "repair",
         "status": "ready",
@@ -365,33 +387,34 @@ def test_render_report_shows_run_prefix_after_apply(capsys):
         "conflicts": [],
         "pending_actions": 0,
         "applied_actions": 1,
+        "skipped_actions": 1,
     }
-    render_report(report, False)
+    render_report(report, False, actions_printed=True)
     output = capsys.readouterr().out
-    assert "Applied actions: 1" in output
-    assert "run: symlink /tmp/jira" in output
-    assert "would:" not in output
+    assert "Setup repair: ready" in output
+    assert "1 applied · 1 skipped" in output
     assert "skipped:" not in output
-    assert "Pending actions:" not in output
+    assert "would:" not in output
 
 
-def test_render_report_shows_would_prefix_for_dry_run(capsys):
+def test_render_report_compact_for_planned_actions(capsys):
     report = {
         "operation": "repair",
         "status": "degraded",
         "message": "Setup repair planned",
         "workspace": {"name": "test"},
         "actions": [
-            {"kind": "symlink", "target": "/tmp/jira", "skip": False},
+            {"kind": "symlink", "target": "/tmp/jira", "skip": False, "source": "../../jira"},
             {"kind": "symlink", "target": "/tmp/aws", "skip": True},
         ],
         "conflicts": [],
         "pending_actions": 1,
         "applied_actions": 0,
+        "skipped_actions": 1,
     }
-    render_report(report, False)
+    render_report(report, False, actions_printed=False)
     output = capsys.readouterr().out
-    assert "would: symlink /tmp/jira" in output
-    assert "skipped: symlink /tmp/aws" in output
-    assert "Pending actions: 1" in output
-    assert "Applied actions:" not in output
+    assert "Skipped" in output
+    assert "link /tmp/jira" in output
+    assert "pending action" in output
+    assert "skipped:" not in output

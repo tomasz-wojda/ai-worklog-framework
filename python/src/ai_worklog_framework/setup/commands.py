@@ -21,11 +21,12 @@ from ai_worklog_framework.setup.checks import find_workspace_registration
 from ai_worklog_framework.setup.planner import (
     apply_init_or_repair_plan,
     apply_revert_plan,
-    format_filesystem_action,
     plan_setup_init,
     plan_setup_repair,
     plan_setup_revert,
+    print_compact_action_plan,
 )
+from ai_worklog_framework.setup.planner import _setup_print_row
 from ai_worklog_framework.setup.report import (
     build_action_report,
     build_check_report,
@@ -72,6 +73,18 @@ def _resolve_vault_or_error(
 
 def _persist_revert_ides(name: str, remaining_ides: List[str]) -> None:
     set_workspace_ides(name, remaining_ides)
+
+
+def _print_action_conflicts(conflicts: list) -> None:
+    for conflict in conflicts:
+        _setup_print_row("Conflict", f"{conflict['path']} ({conflict['reason']})", ok=False)
+
+
+def _render_human_action_plan(plan: dict, apply: bool, operation: str) -> None:
+    print(f"Setup {operation}")
+    print_compact_action_plan(plan, apply)
+    _print_action_conflicts(plan.get("conflicts") or [])
+    print()
 
 
 def run_init(args) -> int:
@@ -125,18 +138,10 @@ def run_init(args) -> int:
             apply=apply,
         )
 
-        if not json_output:
-            for action in plan.get("workspace_actions", []):
-                print(format_filesystem_action(action, apply))
-            for action in plan.get("skill_actions", []):
-                print(format_filesystem_action(action, apply))
-            for conflict in plan.get("conflicts", []):
-                print(f"conflict: {conflict['path']} ({conflict['reason']})")
-            if not apply:
-                print("Dry run only. Re-run with --apply to make changes.")
-
         if apply:
             if plan.get("conflicts"):
+                if not json_output:
+                    _render_human_action_plan(plan, apply=False, operation="init")
                 render_report(report, json_output)
                 return EXIT_BLOCKED
             try:
@@ -164,7 +169,10 @@ def run_init(args) -> int:
             report["message"] = "Setup init complete"
             finalize_applied_action_report(report)
 
-        render_report(report, json_output)
+        if not json_output:
+            _render_human_action_plan(plan, apply, operation="init")
+
+        render_report(report, json_output, actions_printed=not json_output)
         return exit_code_for_report(report)
     except ValueError as exc:
         if json_output:
@@ -268,18 +276,10 @@ def run_repair(args) -> int:
             apply=apply,
         )
 
-        if not json_output:
-            for action in plan.get("workspace_actions", []):
-                print(format_filesystem_action(action, apply))
-            for action in plan.get("skill_actions", []):
-                print(format_filesystem_action(action, apply))
-            for conflict in plan.get("conflicts", []):
-                print(f"conflict: {conflict['path']} ({conflict['reason']})")
-            if not apply:
-                print("Dry run only. Re-run with --apply to make changes.")
-
         if apply:
             if plan.get("conflicts"):
+                if not json_output:
+                    _render_human_action_plan(plan, apply=False, operation="repair")
                 render_report(report, json_output)
                 return EXIT_BLOCKED
             try:
@@ -300,7 +300,10 @@ def run_repair(args) -> int:
             report["message"] = "Setup repair complete"
             finalize_applied_action_report(report)
 
-        render_report(report, json_output)
+        if not json_output:
+            _render_human_action_plan(plan, apply, operation="repair")
+
+        render_report(report, json_output, actions_printed=not json_output)
         return exit_code_for_report(report)
     except ValueError as exc:
         if json_output:
@@ -345,16 +348,6 @@ def run_revert(args) -> int:
             apply=apply,
         )
 
-        if not json_output:
-            for action in plan.get("service_actions", []):
-                print(format_filesystem_action(action, apply))
-            for action in plan.get("skill_actions", []):
-                print(format_filesystem_action(action, apply))
-            for conflict in plan.get("conflicts", []):
-                print(f"conflict: {conflict['path']} ({conflict['reason']})")
-            if not apply:
-                print("Dry run only. Re-run with --apply to make changes.")
-
         if apply:
             try:
                 apply_revert_plan(
@@ -374,7 +367,10 @@ def run_revert(args) -> int:
             report["message"] = "Setup revert complete"
             finalize_applied_action_report(report)
 
-        render_report(report, json_output)
+        if not json_output:
+            _render_human_action_plan(plan, apply, operation="revert")
+
+        render_report(report, json_output, actions_printed=not json_output)
         return exit_code_for_report(report)
     except ValueError as exc:
         if json_output:

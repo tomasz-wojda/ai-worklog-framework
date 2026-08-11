@@ -6,7 +6,12 @@ from ai_worklog_framework.global_config import load_global_config, print_json
 from ai_worklog_framework.result import Status
 from ai_worklog_framework.setup.checks import aggregate_check_status, run_setup_checks
 from ai_worklog_framework.setup.manifest import load_manifest
-from ai_worklog_framework.setup.planner import format_filesystem_action, pending_action_count
+from ai_worklog_framework.setup.planner import (
+    _setup_print_row,
+    pending_action_count,
+    print_compact_action_plan,
+    print_compact_actions,
+)
 from ai_worklog_framework.setup.resolver import ide_materialization, resolve_ai_vault_root, resolve_runtime_selection
 from ai_worklog_framework.setup.vault import validate_vault_root
 
@@ -169,8 +174,36 @@ def build_check_report(
 def finalize_applied_action_report(report: Dict[str, Any]) -> None:
     actions = report.get("actions") or []
     applied = sum(1 for action in actions if not action.get("skip"))
+    skipped = sum(1 for action in actions if action.get("skip"))
     report["applied_actions"] = applied
+    report["skipped_actions"] = skipped
     report["pending_actions"] = 0
+
+
+_ACTION_OPERATIONS = frozenset({"init", "repair", "revert"})
+
+
+def _render_action_footer(report: Dict[str, Any]) -> None:
+    from ai_worklog_framework.setup.planner import _setup_use_color
+
+    applied = report.get("applied_actions") or 0
+    skipped = report.get("skipped_actions")
+    if skipped is None:
+        actions = report.get("actions") or []
+        skipped = sum(1 for action in actions if action.get("skip"))
+    status = str(report.get("status", "ready")).upper()
+    if _setup_use_color():
+        if status == "READY":
+            color = "\033[32m"
+        elif status in {"BLOCKED", "ERROR"}:
+            color = "\033[31m"
+        else:
+            color = "\033[33m"
+        reset = "\033[0m"
+    else:
+        color = ""
+        reset = ""
+    print(f"\n{color}{status}{reset}  {applied} applied · {skipped} skipped")
 
 
 def build_action_report(
@@ -236,10 +269,11 @@ def build_action_report(
         "conflicts": conflicts,
         "pending_actions": pending,
         "applied_actions": 0,
+        "skipped_actions": sum(1 for action in actions if action.get("skip")),
     }
 
 
-def render_report(report: Dict[str, Any], json_output: bool) -> None:
+def render_report(report: Dict[str, Any], json_output: bool, *, actions_printed: bool = False) -> None:
     if json_output:
         print_json(report)
         return
@@ -256,17 +290,17 @@ def render_report(report: Dict[str, Any], json_output: bool) -> None:
         print(f"  AI vault: {vault.get('path')} ({vault.get('source')})")
     for check in report.get("checks") or []:
         print(f"  [{check['status'].upper()}] {check['layer']}: {check['message']}")
-    applied_actions = report.get("applied_actions") or 0
-    if applied_actions > 0:
-        print(f"  Applied actions: {applied_actions}")
-        for action in report.get("actions") or []:
-            if action.get("skip"):
-                continue
-            print(f"  run: {action.get('kind')} {action.get('target')}")
-    else:
-        for action in report.get("actions") or []:
-            prefix = "skipped:" if action.get("skip") else "would:"
-            print(f"  {prefix} {action.get('kind')} {action.get('target')}")
+    operation = report.get("operation")
+    if operation in _ACTION_OPERATIONS and actions_printed:
+        for conflict in report.get("conflicts") or []:
+            _setup_print_row("Conflict", f"{conflict['path']} ({conflict['reason']})", ok=False)
+        _render_action_footer(report)
+        return
+    if operation in _ACTION_OPERATIONS:
+        print_compact_actions(report.get("actions") or [], apply=False)
+        for conflict in report.get("conflicts") or []:
+            _setup_print_row("Conflict", f"{conflict['path']} ({conflict['reason']})", ok=False)
+        return
     for conflict in report.get("conflicts") or []:
         print(f"  conflict: {conflict['path']} ({conflict['reason']})")
     pending_actions = report.get("pending_actions") or 0

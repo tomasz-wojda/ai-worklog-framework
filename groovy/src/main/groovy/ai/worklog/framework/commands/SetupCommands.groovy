@@ -103,24 +103,11 @@ class SetupCommands {
                 apply
             )
 
-            if (!jsonOutput) {
-                ((List) plan.workspace_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.skill_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.conflicts).each { conflictValue ->
-                    Map conflict = (Map) conflictValue
-                    println "conflict: ${conflict.path} (${conflict.reason})"
-                }
-                if (!apply) {
-                    println 'Dry run only. Re-run with --apply to make changes.'
-                }
-            }
-
             if (apply) {
                 if (plan.conflicts) {
+                    if (!jsonOutput) {
+                        renderHumanActionPlan(plan, false, 'init')
+                    }
                     SetupReport.renderReport(report, jsonOutput)
                     return exitCodes.blocked
                 }
@@ -147,7 +134,11 @@ class SetupCommands {
                 SetupReport.finalizeAppliedActionReport(report)
             }
 
-            SetupReport.renderReport(report, jsonOutput)
+            if (!jsonOutput) {
+                renderHumanActionPlan(plan, apply, 'init')
+            }
+
+            SetupReport.renderReport(report, jsonOutput, !jsonOutput)
             return SetupReport.exitCodeForReport(report, exitCodes)
         } catch (IllegalArgumentException exception) {
             if (jsonOutput) {
@@ -265,24 +256,11 @@ class SetupCommands {
                 apply
             )
 
-            if (!jsonOutput) {
-                ((List) plan.workspace_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.skill_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.conflicts).each { conflictValue ->
-                    Map conflict = (Map) conflictValue
-                    println "conflict: ${conflict.path} (${conflict.reason})"
-                }
-                if (!apply) {
-                    println 'Dry run only. Re-run with --apply to make changes.'
-                }
-            }
-
             if (apply) {
                 if (plan.conflicts) {
+                    if (!jsonOutput) {
+                        renderHumanActionPlan(plan, false, 'repair')
+                    }
                     SetupReport.renderReport(report, jsonOutput)
                     return exitCodes.blocked
                 }
@@ -301,7 +279,11 @@ class SetupCommands {
                 SetupReport.finalizeAppliedActionReport(report)
             }
 
-            SetupReport.renderReport(report, jsonOutput)
+            if (!jsonOutput) {
+                renderHumanActionPlan(plan, apply, 'repair')
+            }
+
+            SetupReport.renderReport(report, jsonOutput, !jsonOutput)
             return SetupReport.exitCodeForReport(report, exitCodes)
         } catch (IllegalArgumentException exception) {
             if (jsonOutput) {
@@ -352,22 +334,6 @@ class SetupCommands {
                 apply
             )
 
-            if (!jsonOutput) {
-                ((List) plan.service_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.skill_actions).each {
-                    println SetupPlanner.formatFilesystemAction((Map) it, apply)
-                }
-                ((List) plan.conflicts).each { conflictValue ->
-                    Map conflict = (Map) conflictValue
-                    println "conflict: ${conflict.path} (${conflict.reason})"
-                }
-                if (!apply) {
-                    println 'Dry run only. Re-run with --apply to make changes.'
-                }
-            }
-
             if (apply) {
                 try {
                     SetupPlanner.applyRevertPlan(workspace, name, vaultRoot, plan)
@@ -385,7 +351,11 @@ class SetupCommands {
                 SetupReport.finalizeAppliedActionReport(report)
             }
 
-            SetupReport.renderReport(report, jsonOutput)
+            if (!jsonOutput) {
+                renderHumanActionPlan(plan, apply, 'revert')
+            }
+
+            SetupReport.renderReport(report, jsonOutput, !jsonOutput)
             return SetupReport.exitCodeForReport(report, exitCodes)
         } catch (IllegalArgumentException exception) {
             if (jsonOutput) {
@@ -395,6 +365,13 @@ class SetupCommands {
             }
             return exitCodes.userError
         }
+    }
+
+    private static void renderHumanActionPlan(Map plan, boolean apply, String operation) {
+        println "Setup ${operation}"
+        SetupPlanner.printCompactActionPlan(plan, apply)
+        SetupPlanner.printActionConflicts((List) (plan.conflicts ?: []))
+        println()
     }
 
     private static List workspaceContext(File frameworkRoot, Map options) {
