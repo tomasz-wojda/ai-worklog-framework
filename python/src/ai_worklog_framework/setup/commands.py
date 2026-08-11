@@ -31,6 +31,7 @@ from ai_worklog_framework.setup.report import (
     build_check_report,
     build_show_report,
     exit_code_for_report,
+    finalize_applied_action_report,
     render_report,
 )
 from ai_worklog_framework.setup.resolver import (
@@ -161,6 +162,7 @@ def run_init(args) -> int:
                 return EXIT_SYSTEM_ERROR
             report["status"] = "ready"
             report["message"] = "Setup init complete"
+            finalize_applied_action_report(report)
 
         render_report(report, json_output)
         return exit_code_for_report(report)
@@ -296,6 +298,7 @@ def run_repair(args) -> int:
                 return EXIT_SYSTEM_ERROR
             report["status"] = "ready"
             report["message"] = "Setup repair complete"
+            finalize_applied_action_report(report)
 
         render_report(report, json_output)
         return exit_code_for_report(report)
@@ -369,6 +372,7 @@ def run_revert(args) -> int:
                 return EXIT_SYSTEM_ERROR
             report["status"] = "ready"
             report["message"] = "Setup revert complete"
+            finalize_applied_action_report(report)
 
         render_report(report, json_output)
         return exit_code_for_report(report)

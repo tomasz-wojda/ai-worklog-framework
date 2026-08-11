@@ -166,6 +166,13 @@ def build_check_report(
     }
 
 
+def finalize_applied_action_report(report: Dict[str, Any]) -> None:
+    actions = report.get("actions") or []
+    applied = sum(1 for action in actions if not action.get("skip"))
+    report["applied_actions"] = applied
+    report["pending_actions"] = 0
+
+
 def build_action_report(
     *,
     operation: str,
@@ -228,6 +235,7 @@ def build_action_report(
         "actions": actions,
         "conflicts": conflicts,
         "pending_actions": pending,
+        "applied_actions": 0,
     }
 
 
@@ -248,13 +256,22 @@ def render_report(report: Dict[str, Any], json_output: bool) -> None:
         print(f"  AI vault: {vault.get('path')} ({vault.get('source')})")
     for check in report.get("checks") or []:
         print(f"  [{check['status'].upper()}] {check['layer']}: {check['message']}")
-    for action in report.get("actions") or []:
-        prefix = "skipped:" if action.get("skip") else "would:"
-        print(f"  {prefix} {action.get('kind')} {action.get('target')}")
+    applied_actions = report.get("applied_actions") or 0
+    if applied_actions > 0:
+        print(f"  Applied actions: {applied_actions}")
+        for action in report.get("actions") or []:
+            if action.get("skip"):
+                continue
+            print(f"  run: {action.get('kind')} {action.get('target')}")
+    else:
+        for action in report.get("actions") or []:
+            prefix = "skipped:" if action.get("skip") else "would:"
+            print(f"  {prefix} {action.get('kind')} {action.get('target')}")
     for conflict in report.get("conflicts") or []:
         print(f"  conflict: {conflict['path']} ({conflict['reason']})")
-    if report.get("pending_actions"):
-        print(f"  Pending actions: {report['pending_actions']}")
+    pending_actions = report.get("pending_actions") or 0
+    if pending_actions:
+        print(f"  Pending actions: {pending_actions}")
 
 
 def exit_code_for_report(report: Dict[str, Any]) -> int:

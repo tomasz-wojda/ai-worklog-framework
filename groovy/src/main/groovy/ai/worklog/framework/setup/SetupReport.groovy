@@ -251,8 +251,16 @@ class SetupReport {
             },
             actions: actions,
             conflicts: conflicts,
-            pending_actions: pending
+            pending_actions: pending,
+            applied_actions: 0
         ]
+    }
+
+    static void finalizeAppliedActionReport(Map report) {
+        List actions = (List) (report.actions ?: [])
+        int applied = actions.count { Map action -> !action.skip }
+        report.applied_actions = applied
+        report.pending_actions = 0
     }
 
     static void renderReport(Map report, boolean jsonOutput) {
@@ -277,17 +285,30 @@ class SetupReport {
             Map check = (Map) checkValue
             println "  [${check.status.toUpperCase()}] ${check.layer}: ${check.message}"
         }
-        ((List) (report.actions ?: [])).each { actionValue ->
-            Map action = (Map) actionValue
-            String prefix = action.skip ? 'skipped:' : 'would:'
-            println "  ${prefix} ${action.kind} ${action.target}"
+        int appliedActions = report.applied_actions instanceof Number ? report.applied_actions as int : 0
+        if (appliedActions > 0) {
+            println "  Applied actions: ${appliedActions}"
+            ((List) (report.actions ?: [])).each { actionValue ->
+                Map action = (Map) actionValue
+                if (action.skip) {
+                    return
+                }
+                println "  run: ${action.kind} ${action.target}"
+            }
+        } else {
+            ((List) (report.actions ?: [])).each { actionValue ->
+                Map action = (Map) actionValue
+                String prefix = action.skip ? 'skipped:' : 'would:'
+                println "  ${prefix} ${action.kind} ${action.target}"
+            }
         }
         ((List) (report.conflicts ?: [])).each { conflictValue ->
             Map conflict = (Map) conflictValue
             println "  conflict: ${conflict.path} (${conflict.reason})"
         }
-        if (report.pending_actions) {
-            println "  Pending actions: ${report.pending_actions}"
+        int pendingActions = report.pending_actions instanceof Number ? report.pending_actions as int : 0
+        if (pendingActions) {
+            println "  Pending actions: ${pendingActions}"
         }
     }
 

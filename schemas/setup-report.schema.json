@@ -103,6 +103,10 @@
       "type": "integer",
       "minimum": 0
     },
+    "applied_actions": {
+      "type": "integer",
+      "minimum": 0
+    },
     "manifest": {
       "type": "object",
       "properties": {

@@ -499,6 +499,7 @@ def test_setup_repair_dry_run_and_idempotent_apply(
     first_payload = _normalize_setup_json(first.stdout, markers)
     second_payload = _normalize_setup_json(second.stdout, markers)
     assert first_payload["status"] == "ready"
+    assert first_payload["pending_actions"] == 0
     assert second_payload["pending_actions"] == 0
 
     _reset_state(isolated_home, workspace)
@@ -619,6 +620,9 @@ def test_setup_repair_after_missing_symlink(
     _assert_parity_json(python_apply, groovy_apply, markers)
     assert python_apply.returncode == 0
     assert (workspace / ".cursor/skills/developer-protocol").is_symlink()
+    apply_payload = _normalize_setup_json(python_apply.stdout, markers)
+    assert apply_payload["pending_actions"] == 0
+    assert apply_payload["applied_actions"] > 0
 
 
 def test_setup_init_conflict_blocked(

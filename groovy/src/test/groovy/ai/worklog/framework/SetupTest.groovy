@@ -10,6 +10,7 @@ import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.setup.SetupManifest
 import ai.worklog.framework.setup.SetupMaterialize
 import ai.worklog.framework.setup.SetupPlanner
+import ai.worklog.framework.setup.SetupReport
 import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.setup.SetupVault
 import groovy.json.JsonOutput
@@ -505,5 +506,40 @@ class SetupTest extends GroovyTestCase {
             System.out = original
         }
         buffer.toString('UTF-8').trim()
+    }
+
+    void testFinalizeAppliedActionReportClearsPending() {
+        Map report = [
+            actions: [
+                [kind: 'symlink', target: '/tmp/jira', skip: false],
+                [kind: 'symlink', target: '/tmp/aws', skip: true],
+            ],
+            pending_actions: 1
+        ]
+        SetupReport.finalizeAppliedActionReport(report)
+        assertEquals(1, report.applied_actions)
+        assertEquals(0, report.pending_actions)
+    }
+
+    void testRenderReportShowsRunPrefixAfterApply() {
+        Map report = [
+            operation: 'repair',
+            status: 'ready',
+            message: 'Setup repair complete',
+            workspace: [name: 'test'],
+            actions: [
+                [kind: 'symlink', target: '/tmp/jira', skip: false],
+                [kind: 'symlink', target: '/tmp/aws', skip: true],
+            ],
+            conflicts: [],
+            pending_actions: 0,
+            applied_actions: 1
+        ]
+        String output = captureOutput { SetupReport.renderReport(report, false) }
+        assertTrue(output.contains('Applied actions: 1'))
+        assertTrue(output.contains('run: symlink /tmp/jira'))
+        assertFalse(output.contains('would:'))
+        assertFalse(output.contains('skipped:'))
+        assertFalse(output.contains('Pending actions:'))
     }
 }

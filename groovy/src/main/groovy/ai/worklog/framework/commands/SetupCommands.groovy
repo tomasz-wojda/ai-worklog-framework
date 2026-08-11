@@ -144,6 +144,7 @@ class SetupCommands {
                 }
                 report.status = 'ready'
                 report.message = 'Setup init complete'
+                SetupReport.finalizeAppliedActionReport(report)
             }
 
             SetupReport.renderReport(report, jsonOutput)
@@ -297,6 +298,7 @@ class SetupCommands {
                 }
                 report.status = 'ready'
                 report.message = 'Setup repair complete'
+                SetupReport.finalizeAppliedActionReport(report)
             }
 
             SetupReport.renderReport(report, jsonOutput)
@@ -380,6 +382,7 @@ class SetupCommands {
                 }
                 report.status = 'ready'
                 report.message = 'Setup revert complete'
+                SetupReport.finalizeAppliedActionReport(report)
             }
 
             SetupReport.renderReport(report, jsonOutput)

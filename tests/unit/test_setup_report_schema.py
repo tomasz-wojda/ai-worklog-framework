@@ -8,7 +8,7 @@ import pytest
 from ai_worklog_framework import global_config as gc
 from ai_worklog_framework.setup.manifest import save_manifest
 from ai_worklog_framework.setup.planner import plan_setup_init
-from ai_worklog_framework.setup.report import build_action_report, build_check_report, build_show_report
+from ai_worklog_framework.setup.report import build_action_report, build_check_report, build_show_report, finalize_applied_action_report, render_report
 from ai_worklog_framework.setup.vault import validate_vault_root
 
 _REPORT_TOP_KEYS = {
@@ -23,6 +23,7 @@ _REPORT_TOP_KEYS = {
     "actions",
     "conflicts",
     "pending_actions",
+    "applied_actions",
     "manifest",
 }
 _REPORT_OPERATIONS = {"init", "check", "show", "repair", "revert"}
@@ -167,6 +168,10 @@ def validate_setup_report(report: dict) -> None:
     pending = report.get("pending_actions")
     if pending is not None and (not isinstance(pending, int) or pending < 0):
         raise AssertionError("pending_actions must be a non-negative integer")
+
+    applied = report.get("applied_actions")
+    if applied is not None and (not isinstance(applied, int) or applied < 0):
+        raise AssertionError("applied_actions must be a non-negative integer")
 
     manifest = report.get("manifest")
     if manifest is not None:
@@ -332,3 +337,61 @@ class TestSetupReportSchema:
         validate_setup_report(report)
         assert report["manifest"]["version"] == 1
         assert report["manifest"]["synced_at"] == "2026-01-01T00:00:00+00:00"
+
+
+def test_finalize_applied_action_report_clears_pending():
+    report = {
+        "actions": [
+            {"kind": "symlink", "target": "/tmp/jira", "skip": False},
+            {"kind": "symlink", "target": "/tmp/aws", "skip": True},
+        ],
+        "pending_actions": 1,
+    }
+    finalize_applied_action_report(report)
+    assert report["applied_actions"] == 1
+    assert report["pending_actions"] == 0
+
+
+def test_render_report_shows_run_prefix_after_apply(capsys):
+    report = {
+        "operation": "repair",
+        "status": "ready",
+        "message": "Setup repair complete",
+        "workspace": {"name": "test"},
+        "actions": [
+            {"kind": "symlink", "target": "/tmp/jira", "skip": False},
+            {"kind": "symlink", "target": "/tmp/aws", "skip": True},
+        ],
+        "conflicts": [],
+        "pending_actions": 0,
+        "applied_actions": 1,
+    }
+    render_report(report, False)
+    output = capsys.readouterr().out
+    assert "Applied actions: 1" in output
+    assert "run: symlink /tmp/jira" in output
+    assert "would:" not in output
+    assert "skipped:" not in output
+    assert "Pending actions:" not in output
+
+
+def test_render_report_shows_would_prefix_for_dry_run(capsys):
+    report = {
+        "operation": "repair",
+        "status": "degraded",
+        "message": "Setup repair planned",
+        "workspace": {"name": "test"},
+        "actions": [
+            {"kind": "symlink", "target": "/tmp/jira", "skip": False},
+            {"kind": "symlink", "target": "/tmp/aws", "skip": True},
+        ],
+        "conflicts": [],
+        "pending_actions": 1,
+        "applied_actions": 0,
+    }
+    render_report(report, False)
+    output = capsys.readouterr().out
+    assert "would: symlink /tmp/jira" in output
+    assert "skipped: symlink /tmp/aws" in output
+    assert "Pending actions: 1" in output
+    assert "Applied actions:" not in output
