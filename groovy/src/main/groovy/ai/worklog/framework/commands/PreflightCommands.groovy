@@ -275,7 +275,9 @@ class PreflightCommands {
     }
 
     static boolean available(String binary) {
-        ToolchainCommands.execute(['which', binary]).code == 0
+        boolean isWindows = System.getProperty('os.name')?.toLowerCase()?.contains('win')
+        List<String> cmd = isWindows ? ['where.exe', binary] : ['which', binary]
+        ToolchainCommands.execute(cmd).code == 0
     }
 
     static String option(List<String> args, String name) {
