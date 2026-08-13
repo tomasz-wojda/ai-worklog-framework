@@ -15,10 +15,10 @@
       "groovy": null,
       "description": "Jenkins pipeline Groovy syntax validation"
     },
-    "gradle-java25": {
-      "java": 25,
+    "gradle": {
+      "java": 17,
       "groovy": null,
-      "description": "Gradle builds requiring Java 25"
+      "description": "Gradle build system"
     },
     "framework-groovy": {
       "java": 17,
