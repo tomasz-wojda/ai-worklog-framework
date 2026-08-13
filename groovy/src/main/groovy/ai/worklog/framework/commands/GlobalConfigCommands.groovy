@@ -67,7 +67,7 @@ class GlobalConfigCommands {
                 if (payload.workspaces) {
                     println '  workspaces:'
                     payload.workspaces.each { Map entry ->
-                        println "    ${entry.name}  ${entry.path}${availabilitySuffix(entry)}${defaultSuffix(entry)}"
+                        println "    ${entry.name}  ${entry.path}${availabilitySuffix(entry)}${defaultSuffix(entry)}${idesSuffix(entry)}"
                     }
                 } else {
                     println '  workspaces: none'
@@ -88,5 +88,10 @@ class GlobalConfigCommands {
 
     private static String defaultSuffix(Map entry) {
         entry.default ? ' [default]' : ''
+    }
+
+    private static String idesSuffix(Map entry) {
+        List ides = entry.ides instanceof List ? (List) entry.ides*.toString() : []
+        ides ? "  ides: ${ides.join(', ')}" : '  ides: none'
     }
 }

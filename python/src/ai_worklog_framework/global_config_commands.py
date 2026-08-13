@@ -16,6 +16,13 @@ def _default_suffix(entry: dict) -> str:
     return " [default]" if entry.get("default") else ""
 
 
+def _ides_suffix(entry: dict) -> str:
+    ides = entry.get("ides") or []
+    if ides:
+        return f"  ides: {', '.join(ides)}"
+    return "  ides: none"
+
+
 def _render_human(payload: dict) -> None:
     operation = payload.get("operation")
     if operation == "show":
@@ -29,7 +36,7 @@ def _render_human(payload: dict) -> None:
             for entry in payload["workspaces"]:
                 print(
                     f"    {entry['name']}  {entry['path']}"
-                    f"{_availability_suffix(entry)}{_default_suffix(entry)}"
+                    f"{_availability_suffix(entry)}{_default_suffix(entry)}{_ides_suffix(entry)}"
                 )
         else:
             print("  workspaces: none")
