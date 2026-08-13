@@ -140,6 +140,7 @@ def plan_init(workspace: Path) -> Dict[str, Any]:
 
 
 def plan_revert(workspace: Path) -> Dict[str, Any]:
+    rules = load_shared("workspace-init.json", {})
     integrations_rel, services = _workspace_layout()
     integrations = workspace / integrations_rel
     actions: List[Dict[str, Any]] = []
