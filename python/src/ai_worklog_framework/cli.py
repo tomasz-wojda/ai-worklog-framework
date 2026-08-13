@@ -119,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup_init.add_argument("--runtime", choices=["groovy", "python"])
     setup_init.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
     setup_init.add_argument("--default", action="store_true", help="Set as default workspace")
+    setup_init.add_argument("--adopt", action="store_true", help="Adopt existing foreign skill links or directories")
     setup_init.add_argument("--json", action="store_true")
     setup_init.add_argument("--apply", action="store_true", help="Apply planned changes")
     setup_check = setup_sub.add_parser(

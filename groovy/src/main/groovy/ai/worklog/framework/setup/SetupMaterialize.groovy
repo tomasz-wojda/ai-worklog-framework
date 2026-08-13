@@ -31,23 +31,38 @@ class SetupMaterialize {
                     target.canonicalFile.path == manifestEntry.source?.toString()) {
                     return ['update', 'stale symlink']
                 }
+                if (adopt) {
+                    return ['update', 'adopting foreign symlink']
+                }
                 return ['conflict', 'foreign symlink']
             }
             if (destination.isDirectory() || destination.isFile()) {
+                if (adopt) {
+                    return ['update', 'adopting foreign file or directory']
+                }
                 return ['conflict', 'foreign file or directory']
             }
             return ['create', '']
         }
         if (Files.isSymbolicLink(destination.toPath())) {
+            if (adopt) {
+                return ['update', 'adopting foreign symlink']
+            }
             return ['conflict', 'foreign symlink']
         }
         if (!destination.isDirectory()) {
+            if (adopt) {
+                return ['update', 'adopting foreign file']
+            }
             return ['conflict', 'foreign file']
         }
         String currentChecksum = SetupManifest.treeChecksum(destination)
         if (manifestEntry) {
             String applied = manifestEntry.applied_checksum?.toString()
             if (applied && currentChecksum != applied) {
+                if (adopt) {
+                    return ['update', 'adopting modified copy']
+                }
                 return ['conflict', 'modified copy']
             }
             if (applied && currentChecksum == applied) {
@@ -137,7 +152,11 @@ class SetupMaterialize {
         String kind = action.kind.toString()
         target.parentFile?.mkdirs()
         if (kind == 'symlink') {
-            if (Files.isSymbolicLink(target.toPath()) || target.exists()) {
+            if (Files.isSymbolicLink(target.toPath())) {
+                Files.delete(target.toPath())
+            } else if (target.isDirectory()) {
+                deleteRecursive(target)
+            } else if (target.exists()) {
                 Files.delete(target.toPath())
             }
             try {

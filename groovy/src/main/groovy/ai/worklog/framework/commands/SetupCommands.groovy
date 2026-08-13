@@ -42,6 +42,7 @@ class SetupCommands {
         boolean jsonOutput = remaining.remove('--json')
         boolean apply = remaining.remove('--apply')
         boolean makeDefault = remaining.remove('--default')
+        boolean adopt = remaining.remove('--adopt')
         List<String> ideValues = takeRepeatedOption(remaining, '--ide')
         String explicitRuntime = takeOption(remaining, '--runtime')
         String aiVault = takeOption(remaining, '--ai-vault')
@@ -117,7 +118,7 @@ class SetupCommands {
                 vaultRoot,
                 vaultManifest,
                 ides,
-                apply,
+                adopt,
                 frameworkRoot
             )
 

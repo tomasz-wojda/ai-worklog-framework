@@ -35,18 +35,28 @@ def inspect_destination(
                 return "adopt", "matching unmanaged link"
             if manifest_entry and target is not None and str(target) == manifest_entry.get("source"):
                 return "update", "stale symlink"
+            if adopt:
+                return "update", "adopting foreign symlink"
             return "conflict", "foreign symlink"
         if destination.is_dir() or destination.is_file():
+            if adopt:
+                return "update", "adopting foreign file or directory"
             return "conflict", "foreign file or directory"
         return "create", ""
     if destination.is_symlink():
+        if adopt:
+            return "update", "adopting foreign symlink"
         return "conflict", "foreign symlink"
     if not destination.is_dir():
+        if adopt:
+            return "update", "adopting foreign file"
         return "conflict", "foreign file"
     current_checksum = tree_checksum(destination)
     if manifest_entry:
         applied = manifest_entry.get("applied_checksum")
         if applied and current_checksum != applied:
+            if adopt:
+                return "update", "adopting modified copy"
             return "conflict", "modified copy"
         if applied and current_checksum == applied:
             source_checksum = tree_checksum(source)
@@ -132,7 +142,11 @@ def apply_skill_action(action: Dict[str, Any]) -> None:
     kind = action["kind"]
     target.parent.mkdir(parents=True, exist_ok=True)
     if kind == "symlink":
-        if target.is_symlink() or target.exists():
+        if target.is_symlink():
+            target.unlink()
+        elif target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
             target.unlink()
         target.symlink_to(source.resolve())
         return
