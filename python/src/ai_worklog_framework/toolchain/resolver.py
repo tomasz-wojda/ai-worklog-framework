@@ -97,18 +97,24 @@ def detect_python() -> Optional[PythonRuntime]:
     exe = Path(sys.executable)
     code, out, err = _run([str(exe), "--version"])
     version = (out or err).strip()
-    if code == 0 and version:
+    if code == 0 and version and "nie znaleziono" not in version.lower() and "not found" not in version.lower():
         return PythonRuntime(executable=exe, version_string=version)
     return None
 
 
 def _java_version_at_home(java_home: Path) -> Optional[JavaRuntime]:
+    if not java_home.is_dir():
+        return None
+    java_exe = java_home / "bin" / "java.exe"
     java_bin = java_home / "bin" / "java"
-    if not java_bin.is_file():
+    target = java_exe if java_exe.is_file() else java_bin
+    if not target.is_file():
         return None
     env = os.environ.copy()
     env["JAVA_HOME"] = str(java_home)
-    code, out, err = _run([str(java_bin), "-version"], env=env)
+    code, out, err = _run([str(target), "-version"], env=env)
+    if code != 0:
+        return None
     text = out + err
     match = JAVA_MAJOR_RE.search(text)
     if not match:

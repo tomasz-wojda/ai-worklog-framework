@@ -143,12 +143,19 @@ class ToolchainCommands {
     static Map<Integer, Map> detectJava(Map config) {
         Map<Integer, Map> runtimes = [:]
         Map configured = config.java instanceof Map ? (Map) config.java : [:]
+        boolean isWindows = System.getProperty('os.name')?.toLowerCase()?.contains('win')
         configured.each { key, path ->
             try {
                 int major = key.toString().replace('java', '') as int
-                File home = new File(path.toString()).canonicalFile
-                String version = commandVersion([new File(home, 'bin/java').path, '-version'])
-                if (version) runtimes[major] = [major: major, home: home.path, version: version]
+                File home = new File(path.toString())
+                if (!home.isDirectory()) return
+                File canonicalHome = home.canonicalFile
+                File javaExe = isWindows ? new File(canonicalHome, 'bin/java.exe') : new File(canonicalHome, 'bin/java')
+                if (!javaExe.isFile()) javaExe = new File(canonicalHome, 'bin/java')
+                if (!javaExe.isFile()) return
+
+                String version = commandVersion([javaExe.path, '-version'])
+                if (version) runtimes[major] = [major: major, home: canonicalHome.path, version: version]
             } catch (Exception ignored) {
             }
         }
@@ -188,7 +195,15 @@ class ToolchainCommands {
         Map configured = config.groovy instanceof Map ? (Map) config.groovy : [:]
         configured.values().each { candidates << it.toString() }
         candidates << 'groovy'
+        boolean isWindows = System.getProperty('os.name')?.toLowerCase()?.contains('win')
+        if (isWindows) {
+            candidates << 'groovy.bat'
+            candidates << 'groovy.cmd'
+        }
         candidates.unique().each { executable ->
+            if (executable.contains('/') || executable.contains('\\')) {
+                if (!new File(executable).isFile()) return
+            }
             String version = commandVersion([executable, '--version'])
             if (version) {
                 def match = version =~ /Groovy Version:\s*(\d+(?:\.\d+)*)/
@@ -208,8 +223,16 @@ class ToolchainCommands {
 
     static String commandVersion(List<String> command) {
         Map result = execute(command)
+        if (result.code != 0) {
+            return null
+        }
         String text = [result.out, result.err].findAll { it }.join(System.lineSeparator()).trim()
-        text ? text.readLines()[0] : null
+        if (!text) return null
+        String firstLine = text.readLines()[0]
+        if (firstLine.toLowerCase().contains('nie znaleziono') || firstLine.toLowerCase().contains('not found')) {
+            return null
+        }
+        firstLine
     }
 
     static Map execute(List<String> command) {
