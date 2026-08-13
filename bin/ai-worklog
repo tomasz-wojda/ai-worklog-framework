@@ -37,6 +37,33 @@ if [[ -z "$RUNTIME" && -n "${AI_WORKLOG_RUNTIME:-}" ]]; then
   RUNTIME="$AI_WORKLOG_RUNTIME"
 fi
 
+_read_config_runtime() {
+  local runtime=""
+  local python="${AI_WORKLOG_PYTHON:-python3}"
+
+  if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    python="$ROOT/.venv/bin/python"
+  elif [[ -x "$ROOT/python/.venv/bin/python" ]]; then
+    python="$ROOT/python/.venv/bin/python"
+  fi
+
+  if command -v "$python" >/dev/null 2>&1; then
+    if runtime="$(PYTHONPATH="$ROOT/python/src${PYTHONPATH:+:$PYTHONPATH}" "$python" -c 'from ai_worklog_framework.global_config import load_global_config; print(load_global_config()["runtime"])' 2>/dev/null)"; then
+      RUNTIME="$runtime"
+      return 0
+    fi
+  fi
+
+  if command -v groovy >/dev/null 2>&1; then
+    if runtime="$(AI_WORKLOG_FRAMEWORK_ROOT="$ROOT" groovy -cp "$ROOT/groovy/src/main/groovy" -e 'import ai.worklog.framework.core.GlobalConfig; print GlobalConfig.load().runtime' 2>/dev/null)"; then
+      RUNTIME="$runtime"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
 if [[ -z "$RUNTIME" ]]; then
   CONFIG_HOME="${AI_WORKLOG_HOME:-$HOME/.ai-worklog}"
   case "$CONFIG_HOME" in
@@ -45,37 +72,29 @@ if [[ -z "$RUNTIME" ]]; then
   esac
   CONFIG_FILE="$CONFIG_HOME/config.json"
   if [[ -f "$CONFIG_FILE" ]]; then
-    PYTHON="${AI_WORKLOG_PYTHON:-python3}"
-    if [[ -x "$ROOT/.venv/bin/python" ]]; then
-      PYTHON="$ROOT/.venv/bin/python"
-    elif [[ -x "$ROOT/python/.venv/bin/python" ]]; then
-      PYTHON="$ROOT/python/.venv/bin/python"
-    fi
-    if command -v "$PYTHON" >/dev/null 2>&1; then
-      if ! RUNTIME="$(PYTHONPATH="$ROOT/python/src${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" -c 'from ai_worklog_framework.global_config import load_global_config; print(load_global_config()["runtime"])' 2>/dev/null)"; then
-        echo "Malformed global configuration: $CONFIG_FILE" >&2
-        exit 1
-      fi
-    elif command -v groovy >/dev/null 2>&1; then
-      if ! RUNTIME="$(AI_WORKLOG_FRAMEWORK_ROOT="$ROOT" groovy -cp "$ROOT/groovy/src/main/groovy" -e 'import ai.worklog.framework.core.GlobalConfig; print GlobalConfig.load().runtime' 2>/dev/null)"; then
-        echo "Malformed global configuration: $CONFIG_FILE" >&2
-        exit 1
-      fi
-    else
-      echo "Cannot parse global configuration: Python or Groovy is required" >&2
-      exit 2
+    if ! _read_config_runtime; then
+      echo "Malformed global configuration: $CONFIG_FILE" >&2
+      exit 1
     fi
   else
     RUNTIME="groovy"
   fi
 fi
 
+_dispatch_runtime() {
+  local launcher="$1"
+  if ((${#ARGS[@]})); then
+    exec "$launcher" "${ARGS[@]}"
+  fi
+  exec "$launcher"
+}
+
 case "$RUNTIME" in
   groovy)
-    exec "$ROOT/bin/ai-worklog-groovy" "${ARGS[@]}"
+    _dispatch_runtime "$ROOT/bin/ai-worklog-groovy"
     ;;
   python)
-    exec "$ROOT/bin/ai-worklog-python" "${ARGS[@]}"
+    _dispatch_runtime "$ROOT/bin/ai-worklog-python"
     ;;
   *)
     echo "Unsupported runtime: $RUNTIME (expected groovy or python)" >&2
