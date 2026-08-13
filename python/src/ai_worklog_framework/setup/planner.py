@@ -210,16 +210,33 @@ def action_plan_counts(plan: Dict[str, Any]) -> tuple[int, int]:
 
 
 def _setup_use_color() -> bool:
-    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    if os.environ.get("NO_COLOR"):
+        return False
+    if sys.platform == "win32":
+        term = os.environ.get("TERM", "")
+        wt = os.environ.get("WT_SESSION", "")
+        ansicon = os.environ.get("ANSICON", "")
+        conemu = os.environ.get("ConEmuANSI", "")
+        if not wt and not ansicon and not conemu and term in ("", "dumb"):
+            return False
+    return sys.stdout.isatty() and os.environ.get("TERM") != "dumb"
+
+
+def _is_utf8_console() -> bool:
+    encoding = getattr(sys.stdout, "encoding", "") or ""
+    return "utf-8" in encoding.lower() or os.environ.get("PYTHONIOENCODING", "").lower().startswith("utf")
 
 
 def _setup_print_row(label: str, detail: str, *, ok: bool = True) -> None:
-    if _setup_use_color():
-        mark = "\033[32m✓\033[0m" if ok else "\033[31m✗\033[0m"
+    use_color = _setup_use_color()
+    is_utf8 = _is_utf8_console()
+    mark_symbol = ("✓" if is_utf8 else "[OK]") if ok else ("✗" if is_utf8 else "[FAIL]")
+    if use_color:
+        mark = f"\033[32m{mark_symbol}\033[0m" if ok else f"\033[31m{mark_symbol}\033[0m"
         dim = "\033[2m"
         reset = "\033[0m"
     else:
-        mark = "✓" if ok else "✗"
+        mark = mark_symbol
         dim = ""
         reset = ""
     print(f"  {mark} {label:<{LABEL_WIDTH}} {dim}{detail}{reset}")

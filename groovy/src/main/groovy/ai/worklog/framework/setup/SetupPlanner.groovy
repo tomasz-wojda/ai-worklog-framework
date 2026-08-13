@@ -22,13 +22,36 @@ class SetupPlanner {
         if (System.getenv('NO_COLOR')) {
             return false
         }
+        if (System.getProperty('os.name')?.toLowerCase()?.contains('win')) {
+            String term = System.getenv('TERM') ?: ''
+            String wt = System.getenv('WT_SESSION') ?: ''
+            String ansicon = System.getenv('ANSICON') ?: ''
+            String conemu = System.getenv('ConEmuANSI') ?: ''
+            if (!wt && !ansicon && !conemu && (term == '' || term == 'dumb')) {
+                return false
+            }
+        }
         return (System.getenv('TERM') ?: '') != 'dumb'
+    }
+
+    static boolean isUtf8Console() {
+        String encoding = java.nio.charset.Charset.defaultCharset().name()
+        if (encoding != null && encoding.equalsIgnoreCase('UTF-8')) {
+            return true
+        }
+        String fileEnc = System.getProperty('file.encoding')
+        if (fileEnc != null && fileEnc.equalsIgnoreCase('UTF-8')) {
+            return true
+        }
+        return (System.getenv('LANG') ?: '').toUpperCase().contains('UTF-8')
     }
 
     static void setupPrintRow(String label, String detail, boolean ok = true) {
         boolean useColor = setupUseColor()
-        String mark = ok ? (useColor ? '\u001B[32m✓\u001B[0m' : '✓') :
-            (useColor ? '\u001B[31m✗\u001B[0m' : '✗')
+        boolean isUtf8 = isUtf8Console()
+        String markSymbol = ok ? (isUtf8 ? '✓' : '[OK]') : (isUtf8 ? '✗' : '[FAIL]')
+        String mark = ok ? (useColor ? "\u001B[32m${markSymbol}\u001B[0m" : markSymbol) :
+            (useColor ? "\u001B[31m${markSymbol}\u001B[0m" : markSymbol)
         String dim = useColor ? '\u001B[2m' : ''
         String reset = useColor ? '\u001B[0m' : ''
         println "  ${mark} ${label.padRight(LABEL_WIDTH)} ${dim}${detail}${reset}"

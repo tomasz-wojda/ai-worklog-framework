@@ -184,7 +184,7 @@ _ACTION_OPERATIONS = frozenset({"init", "repair", "revert"})
 
 
 def _render_action_footer(report: Dict[str, Any]) -> None:
-    from ai_worklog_framework.setup.planner import _setup_use_color
+    from ai_worklog_framework.setup.planner import _is_utf8_console, _setup_use_color
 
     applied = report.get("applied_actions") or 0
     skipped = report.get("skipped_actions")
@@ -203,7 +203,8 @@ def _render_action_footer(report: Dict[str, Any]) -> None:
     else:
         color = ""
         reset = ""
-    print(f"\n{color}{status}{reset}  {applied} applied · {skipped} skipped")
+    dot = "·" if _is_utf8_console() else "-"
+    print(f"\n{color}{status}{reset}  {applied} applied {dot} {skipped} skipped")
 
 
 def build_action_report(

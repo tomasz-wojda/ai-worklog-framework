@@ -288,7 +288,8 @@ class SetupReport {
             color = ''
         }
         String reset = useColor ? '\u001B[0m' : ''
-        println "\n${color}${status}${reset}  ${applied} applied · ${skipped} skipped"
+        String dot = SetupPlanner.isUtf8Console() ? '·' : '-'
+        println "\n${color}${status}${reset}  ${applied} applied ${dot} ${skipped} skipped"
     }
 
     static void renderReport(Map report, boolean jsonOutput, boolean actionsPrinted = false) {
