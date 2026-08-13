@@ -156,7 +156,7 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
     for action in ("init", "revert"):
         workspace_action = workspace_sub.add_parser(action)
-        workspace_action.add_argument("path", help="Workspace root")
+        workspace_action.add_argument("path", help="Workspace registration name or root path")
         workspace_action.add_argument("--apply", action="store_true", help="Apply planned changes")
     workspace_add = workspace_sub.add_parser("add", help="Register a workspace")
     workspace_add.add_argument("name", help="Workspace name")

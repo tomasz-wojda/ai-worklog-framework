@@ -81,7 +81,13 @@ class WorkspaceCommands {
         }
         List<String> remaining = new ArrayList<>(args)
         boolean applying = remaining.remove('--apply')
-        File workspace = GlobalConfig.canonicalWorkspacePath(remaining[0])
+        String targetInput = remaining[0]
+        Map configData = GlobalConfig.load()
+        Map workspaces = (Map) (configData.workspaces ?: [:])
+        if (workspaces.containsKey(targetInput)) {
+            targetInput = ((Map) workspaces[targetInput]).path
+        }
+        File workspace = GlobalConfig.canonicalWorkspacePath(targetInput)
         if (remaining.size() > 1) {
             throw new IllegalArgumentException('Unexpected arguments for workspace operation')
         }

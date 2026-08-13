@@ -133,25 +133,28 @@ runtime selection. The Python package installs the fallback command as
 ## Workspace Setup
 
 Workspace initialization creates the runtime directories, seeds configuration,
-and links existing service directories under `integrations/`. It never
-reads credential contents or overwrites existing targets.
+and links existing service directories under `integrations/`. It accepts either a
+registered workspace short name (`work`) or a directory path. It never reads
+credential contents or overwrites existing targets.
 
 Preview all operations:
 
 ```bash
+ai-worklog workspace init work
+# or using an absolute directory path:
 ai-worklog workspace init /absolute/path/to/workspace
 ```
 
 Create links:
 
 ```bash
-ai-worklog workspace init /absolute/path/to/workspace --apply
+ai-worklog workspace init work --apply
 ```
 
 Remove links created by the framework:
 
 ```bash
-ai-worklog workspace revert /absolute/path/to/workspace --apply
+ai-worklog workspace revert work --apply
 ```
 
 The legacy `scripts/bootstrap.sh` interface remains available as a compatibility

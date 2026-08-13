@@ -14,6 +14,7 @@ from ai_worklog_framework.global_config import (
     print_json,
     remove_workspace,
     set_default_workspace,
+    show_configuration,
     show_default_workspace,
     show_workspace,
 )
@@ -99,7 +100,12 @@ def _handle_error(action: str, json: bool, exc: ValueError) -> int:
 
 
 def _run_init_revert(args) -> int:
-    target = canonical_workspace_path(args.path)
+    target_input = args.path
+    config = show_configuration()
+    workspaces = config.get("workspaces", {})
+    if target_input in workspaces:
+        target_input = workspaces[target_input]["path"]
+    target = canonical_workspace_path(target_input)
     if not target.is_dir():
         print(f"Workspace not found: {args.path}")
         return EXIT_USER_ERROR
