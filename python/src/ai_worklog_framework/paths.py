@@ -15,9 +15,6 @@ MAX_PARENT_DEPTH = _PATH_RULES["max_parent_depth"]
 SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _WORKSPACE_LAYOUT = load_shared("workspace-init.json", {})
 _INTEGRATIONS_PATH = _WORKSPACE_LAYOUT.get("integrations_path", "integrations")
-_LEGACY_INTERFACE = _WORKSPACE_LAYOUT.get(
-    "legacy_interface_path", "worklog/interface"
-)
 
 
 @dataclass(frozen=True)
@@ -85,9 +82,6 @@ class WorkspacePaths:
         canonical = self.integrations_dir / service
         if canonical.exists():
             return canonical
-        legacy = self.root / _LEGACY_INTERFACE / service
-        if legacy.exists():
-            return legacy
         root_svc = self.root / service
         if root_svc.exists():
             return root_svc

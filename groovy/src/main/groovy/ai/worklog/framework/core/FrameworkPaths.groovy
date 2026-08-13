@@ -15,12 +15,10 @@ class FrameworkPaths {
 
     private static final Map WORKSPACE_LAYOUT = (Map) JsonFiles.read(
         new File(resolveFrameworkRoot(), 'shared/workspace-init.json'),
-        [integrations_path: 'integrations', legacy_interface_path: 'worklog/interface']
+        [integrations_path: 'integrations']
     )
     private static final String INTEGRATIONS_PATH =
         WORKSPACE_LAYOUT.integrations_path.toString()
-    private static final String LEGACY_INTERFACE =
-        WORKSPACE_LAYOUT.legacy_interface_path.toString()
 
     FrameworkPaths(File root) {
         this.root = root.canonicalFile
@@ -39,10 +37,6 @@ class FrameworkPaths {
         File canonical = new File(integrationsDir, service)
         if (canonical.exists()) {
             return canonical
-        }
-        File legacy = new File(root, "${LEGACY_INTERFACE}/${service}")
-        if (legacy.exists()) {
-            return legacy
         }
         File rootPath = new File(root, service)
         rootPath.exists() ? rootPath : canonical

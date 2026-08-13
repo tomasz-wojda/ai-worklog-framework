@@ -23,20 +23,19 @@ def _create_symlink_or_junction(target: Path, source: Path) -> None:
             raise exc
 
 
-def _workspace_layout() -> Tuple[Path, Path, List[str]]:
+def _workspace_layout() -> Tuple[Path, List[str]]:
     rules = load_shared("workspace-init.json", {})
     integrations_path = rules.get("integrations_path", "integrations")
-    legacy_path = rules.get("legacy_interface_path", "worklog/interface")
     services = list(rules.get("services", []))
-    return Path(integrations_path), Path(legacy_path), services
+    return Path(integrations_path), services
 
 
-def _managed_target(service: str, *, legacy: bool = False) -> Path:
-    return (Path("../..") if legacy else Path("..")) / service
+def _managed_target(service: str) -> Path:
+    return Path("..") / service
 
 
-def _is_managed_link(path: Path, service: str, *, legacy: bool = False) -> bool:
-    expected = _managed_target(service, legacy=legacy)
+def _is_managed_link(path: Path, service: str) -> bool:
+    expected = _managed_target(service)
     if not path.is_symlink():
         if sys.platform == "win32" and path.is_dir():
             expected_source = (path.parent / expected).resolve()
@@ -68,9 +67,8 @@ def _foreign_integration_reason(path: Path) -> str:
 
 def plan_init(workspace: Path) -> Dict[str, Any]:
     rules = load_shared("workspace-init.json", {})
-    integrations_rel, legacy_rel, services = _workspace_layout()
+    integrations_rel, services = _workspace_layout()
     integrations = workspace / integrations_rel
-    legacy_interface = workspace / legacy_rel
     actions: List[Dict[str, Any]] = []
     conflicts: List[Dict[str, Any]] = []
 
@@ -96,9 +94,7 @@ def plan_init(workspace: Path) -> Dict[str, Any]:
     for service in services:
         root_source = workspace / service
         canonical = integrations / service
-        legacy = legacy_interface / service
         canonical_managed = _is_managed_link(canonical, service)
-        legacy_managed = _is_managed_link(legacy, service, legacy=True)
         canonical_directory = canonical.is_dir() and not canonical.is_symlink()
         canonical_present = _path_present(canonical)
         root_ready = root_source.is_dir() and not root_source.is_symlink()
@@ -140,27 +136,12 @@ def plan_init(workspace: Path) -> Dict[str, Any]:
                 "reason": "source absent",
             })
 
-        if legacy_managed:
-            can_remove_legacy = canonical_managed or canonical_directory or (
-                root_ready and not (
-                    canonical_present and not canonical_managed and not canonical_directory
-                )
-            )
-            actions.append({
-                "kind": "unlink",
-                "target": legacy,
-                "skip": not can_remove_legacy,
-                "reason": "" if can_remove_legacy else "canonical integration unavailable",
-            })
-
-    _append_directory_cleanup(actions, legacy_interface)
     return {"actions": actions, "conflicts": conflicts}
 
 
 def plan_revert(workspace: Path) -> Dict[str, Any]:
-    integrations_rel, legacy_rel, services = _workspace_layout()
+    integrations_rel, services = _workspace_layout()
     integrations = workspace / integrations_rel
-    legacy_interface = workspace / legacy_rel
     actions: List[Dict[str, Any]] = []
 
     for service in services:
@@ -171,43 +152,13 @@ def plan_revert(workspace: Path) -> Dict[str, Any]:
             "skip": not _is_managed_link(canonical, service),
             "reason": "not a managed link" if not _is_managed_link(canonical, service) else "",
         })
-        legacy = legacy_interface / service
-        actions.append({
-            "kind": "unlink",
-            "target": legacy,
-            "skip": not _is_managed_link(legacy, service, legacy=True),
-            "reason": "not a managed link" if not _is_managed_link(legacy, service, legacy=True) else "",
-        })
 
     _append_directory_cleanup(actions, integrations)
-    _append_directory_cleanup(actions, legacy_interface)
     return {"actions": actions, "conflicts": []}
 
 
 def legacy_integration_status(workspace: Path) -> Optional[str]:
-    _, legacy_rel, services = _workspace_layout()
-    legacy_interface = workspace / legacy_rel
-    if not legacy_interface.is_dir():
-        return None
-    remaining = list(legacy_interface.iterdir())
-    if not remaining:
-        return None
-    unmanaged = [
-        entry for entry in remaining
-        if entry.name not in services or not _is_managed_link(
-            entry, entry.name, legacy=True
-        )
-    ]
-    if unmanaged:
-        count = len(unmanaged)
-        noun = "item" if count == 1 else "items"
-        return (
-            f"Legacy integration hub contains {count} unmanaged {noun}; "
-            "move them to integrations/"
-        )
-    count = len(remaining)
-    noun = "item" if count == 1 else "items"
-    return f"Legacy integration hub retains {count} {noun}; run setup repair --apply"
+    return None
 
 
 def apply_plan(actions: List[Dict[str, Any]]) -> None:

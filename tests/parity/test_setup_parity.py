@@ -12,7 +12,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / "bin" / "ai-worklog"
+CLI = ROOT / "bin" / ("ai-worklog.cmd" if platform.system() == "Windows" else "ai-worklog")
 FRAMEWORK_MARKER = "<FRAMEWORK>"
 
 VAULT_MANIFEST = {

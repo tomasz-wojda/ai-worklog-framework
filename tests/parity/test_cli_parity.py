@@ -9,7 +9,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / "bin" / "ai-worklog"
+CLI = ROOT / "bin" / ("ai-worklog.cmd" if platform.system() == "Windows" else "ai-worklog")
 WORKSPACE = Path(__file__).parent / "fixtures" / "workspace"
 
 
@@ -116,43 +116,7 @@ def test_workspace_init_dry_run_matches(tmp_path) -> None:
     assert python.stdout == groovy.stdout
 
 
-def test_workspace_init_migrates_legacy_links_with_parity(tmp_path) -> None:
-    workspaces = {
-        "python": tmp_path / "python-workspace",
-        "groovy": tmp_path / "groovy-workspace",
-    }
-    results = {}
-    for runtime, workspace in workspaces.items():
-        (workspace / "jira").mkdir(parents=True)
-        legacy = workspace / "worklog" / "interface"
-        legacy.mkdir(parents=True)
-        (legacy / "jira").symlink_to("../../jira")
-        results[runtime] = subprocess.run(
-            [
-                str(CLI),
-                "--runtime",
-                runtime,
-                "workspace",
-                "init",
-                str(workspace),
-                "--apply",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert results[runtime].returncode == 0
-        assert (workspace / "integrations" / "jira").is_symlink()
-        assert os.readlink(workspace / "integrations" / "jira") == "../jira"
-        assert not legacy.exists()
 
-    python_output = results["python"].stdout.replace(
-        str(workspaces["python"]), "<WORKSPACE>"
-    )
-    groovy_output = results["groovy"].stdout.replace(
-        str(workspaces["groovy"]), "<WORKSPACE>"
-    )
-    assert python_output == groovy_output
 
 
 def test_workspace_init_blocks_canonical_conflicts_with_parity(tmp_path) -> None:

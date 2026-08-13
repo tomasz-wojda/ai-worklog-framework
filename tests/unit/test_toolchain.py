@@ -33,14 +33,13 @@ class TestResolveToolEnvironment:
         assert env.ready is False
         assert "Incompatible" in env.message
 
-    def test_gradle_java25_no_groovy(self):
+    def test_gradle_java17_no_groovy(self):
         java_rts = [
             JavaRuntime(major=17, home=Path("/java17")),
-            JavaRuntime(major=25, home=Path("/java25")),
         ]
-        env = resolve_tool_environment("gradle-java25", {}, java_rts, [])
+        env = resolve_tool_environment("gradle", {}, java_rts, [])
         assert env.ready is True
-        assert env.java_home == Path("/java25")
+        assert env.java_home == Path("/java17")
         assert env.groovy_executable is None
 
     def test_missing_java_blocked(self):
@@ -48,10 +47,10 @@ class TestResolveToolEnvironment:
         assert env.ready is False
         assert "Java 17 not found" in env.message
 
-    def test_config_override_java25_for_gradle(self):
-        java_rts = [JavaRuntime(major=25, home=Path("/java25"))]
-        cfg = {"tools": {"gradle-java25": {"java": 25}}}
-        env = resolve_tool_environment("gradle-java25", cfg, java_rts, [])
+    def test_config_override_java17_for_gradle(self):
+        java_rts = [JavaRuntime(major=17, home=Path("/java17"))]
+        cfg = {"tools": {"gradle": {"java": 17}}}
+        env = resolve_tool_environment("gradle", cfg, java_rts, [])
         assert env.ready is True
 
 

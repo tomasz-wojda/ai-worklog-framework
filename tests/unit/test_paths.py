@@ -228,13 +228,7 @@ class TestWorkspacePaths:
         wp = WorkspacePaths(mock_workspace)
         assert wp.service_dir("jira") == integrations
 
-    def test_service_dir_falls_back_to_legacy_interface(self, mock_workspace):
-        from ai_worklog_framework.paths import WorkspacePaths
 
-        legacy = mock_workspace / "worklog" / "interface" / "jira"
-        legacy.mkdir(parents=True)
-        wp = WorkspacePaths(mock_workspace)
-        assert wp.service_dir("jira") == legacy
 
     def test_service_dir_falls_back_to_root(self, mock_workspace):
         from ai_worklog_framework.paths import WorkspacePaths

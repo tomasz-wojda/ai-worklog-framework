@@ -1,5 +1,6 @@
 import json
 import os
+import platform
 import re
 import subprocess
 import threading
@@ -12,7 +13,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / "bin" / "ai-worklog"
+CLI = ROOT / "bin" / ("ai-worklog.cmd" if platform.system() == "Windows" else "ai-worklog")
 
 
 class _JenkinsMockState:

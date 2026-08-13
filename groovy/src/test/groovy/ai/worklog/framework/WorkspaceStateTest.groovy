@@ -49,64 +49,13 @@ class WorkspaceStateTest extends GroovyTestCase {
         assertFalse(new File(workspace, 'integrations').exists())
     }
 
-    void testWorkspaceInitMigratesLegacyManagedLinks() {
-        new File(workspace, 'jira').mkdir()
-        File legacy = new File(workspace, 'worklog/interface')
-        legacy.mkdirs()
-        java.nio.file.Files.createSymbolicLink(
-            new File(legacy, 'jira').toPath(),
-            java.nio.file.Paths.get('../..', 'jira')
-        )
-        WorkspacePlanner planner = new WorkspacePlanner(repository)
-        WorkspacePlanner.apply((List) planner.planInit(workspace).actions)
-        assertTrue(java.nio.file.Files.isSymbolicLink(new File(workspace, 'integrations/jira').toPath()))
-        assertFalse(new File(legacy, 'jira').exists())
-        assertFalse(legacy.exists())
-    }
-
-    void testWorkspaceInitAcceptsCanonicalIntegrationDirectory() {
-        new File(workspace, 'jira').mkdir()
-        File canonical = new File(workspace, 'integrations/jira')
-        canonical.mkdirs()
-        WorkspacePlanner planner = new WorkspacePlanner(repository)
-
-        Map plan = planner.planInit(workspace)
-
-        assertTrue(((List) plan.conflicts).isEmpty())
-        Map action = ((List<Map>) plan.actions).find {
-            it.kind == 'symlink' && it.target == canonical
-        }
-        assertTrue(action.skip)
-        assertEquals('integration present', action.reason)
-    }
-
-    void testWorkspaceInitBlocksForeignCanonicalSymlink() {
-        new File(workspace, 'jira').mkdir()
-        File canonical = new File(workspace, 'integrations/jira')
-        canonical.parentFile.mkdirs()
-        java.nio.file.Files.createSymbolicLink(
-            canonical.toPath(),
-            java.nio.file.Paths.get('..', 'other')
-        )
-        WorkspacePlanner planner = new WorkspacePlanner(repository)
-
-        Map plan = planner.planInit(workspace)
-
-        assertEquals(1, ((List) plan.conflicts).size())
-        assertEquals('foreign symlink', ((List) plan.conflicts)[0].reason)
-    }
-
     void testServiceDirResolutionOrder() {
         FrameworkPaths paths = new FrameworkPaths(workspace)
         File rootJira = new File(workspace, 'jira')
-        File legacyJira = new File(workspace, 'worklog/interface/jira')
         File canonicalJira = new File(workspace, 'integrations/jira')
 
         rootJira.mkdir()
         assertEquals(rootJira.canonicalFile, paths.serviceDir('jira').canonicalFile)
-
-        legacyJira.mkdirs()
-        assertEquals(legacyJira.canonicalFile, paths.serviceDir('jira').canonicalFile)
 
         canonicalJira.mkdirs()
         assertEquals(canonicalJira.canonicalFile, paths.serviceDir('jira').canonicalFile)

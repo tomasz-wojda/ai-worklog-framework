@@ -18,9 +18,7 @@ class WorkspacePlanner {
 
     Map planInit(File workspace) {
         String integrationsRel = rules.integrations_path?.toString() ?: 'integrations'
-        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
         File integrations = new File(workspace, integrationsRel)
-        File legacyInterface = new File(workspace, legacyRel)
         List<Map> actions = []
         List<Map> conflicts = []
         List<String> services = ((List) rules.services)*.toString()
@@ -49,9 +47,7 @@ class WorkspacePlanner {
         services.each { String service ->
             File rootSource = new File(workspace, service)
             File canonical = new File(integrations, service)
-            File legacy = new File(legacyInterface, service)
-            boolean canonicalManaged = isManagedLink(canonical, service, false)
-            boolean legacyManaged = isManagedLink(legacy, service, true)
+            boolean canonicalManaged = isManagedLink(canonical, service)
             boolean canonicalDirectory = canonical.isDirectory() &&
                 !Files.isSymbolicLink(canonical.toPath())
             boolean canonicalPresent = pathPresent(canonical)
@@ -62,7 +58,7 @@ class WorkspacePlanner {
                 conflicts << [path: canonical.path, reason: reason]
                 actions << [
                     kind: 'symlink',
-                    source: managedTarget(service, false),
+                    source: managedTarget(service),
                     target: canonical,
                     skip: true,
                     reason: reason
@@ -70,7 +66,7 @@ class WorkspacePlanner {
             } else if (canonicalManaged || canonicalDirectory) {
                 actions << [
                     kind: 'symlink',
-                    source: managedTarget(service, false),
+                    source: managedTarget(service),
                     target: canonical,
                     skip: true,
                     reason: canonicalManaged ? 'already linked' : 'integration present'
@@ -78,7 +74,7 @@ class WorkspacePlanner {
             } else if (rootReady) {
                 actions << [
                     kind: 'symlink',
-                    source: managedTarget(service, false),
+                    source: managedTarget(service),
                     target: canonical,
                     skip: false,
                     reason: ''
@@ -86,84 +82,40 @@ class WorkspacePlanner {
             } else {
                 actions << [
                     kind: 'symlink',
-                    source: managedTarget(service, false),
+                    source: managedTarget(service),
                     target: canonical,
                     skip: true,
                     reason: 'source absent'
                 ]
             }
-
-            if (legacyManaged) {
-                boolean canRemoveLegacy = canonicalManaged || canonicalDirectory ||
-                    (rootReady && !(
-                        canonicalPresent && !canonicalManaged && !canonicalDirectory
-                    ))
-                actions << [
-                    kind: 'unlink',
-                    target: legacy,
-                    skip: !canRemoveLegacy,
-                    reason: canRemoveLegacy ? '' : 'canonical integration unavailable'
-                ]
-            }
         }
 
-        appendDirectoryCleanup(actions, legacyInterface)
         [actions: actions, conflicts: conflicts]
     }
 
     Map planRevert(File workspace) {
         String integrationsRel = rules.integrations_path?.toString() ?: 'integrations'
-        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
         File integrations = new File(workspace, integrationsRel)
-        File legacyInterface = new File(workspace, legacyRel)
         List<String> services = ((List) rules.services)*.toString()
         List<Map> actions = []
 
         services.each { String service ->
             File canonical = new File(integrations, service)
-            boolean canonicalManaged = isManagedLink(canonical, service, false)
+            boolean canonicalManaged = isManagedLink(canonical, service)
             actions << [
                 kind: 'unlink',
                 target: canonical,
                 skip: !canonicalManaged,
                 reason: canonicalManaged ? '' : 'not a managed link'
             ]
-            File legacy = new File(legacyInterface, service)
-            boolean legacyManaged = isManagedLink(legacy, service, true)
-            actions << [
-                kind: 'unlink',
-                target: legacy,
-                skip: !legacyManaged,
-                reason: legacyManaged ? '' : 'not a managed link'
-            ]
         }
 
         appendDirectoryCleanup(actions, integrations)
-        appendDirectoryCleanup(actions, legacyInterface)
         [actions: actions, conflicts: []]
     }
 
     static String legacyIntegrationStatus(File workspace, Map rules) {
-        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
-        File legacyInterface = new File(workspace, legacyRel)
-        if (!legacyInterface.isDirectory()) {
-            return null
-        }
-        File[] remaining = legacyInterface.listFiles()
-        if (!remaining) {
-            return null
-        }
-        Set<String> services = ((List) (rules.services ?: []))*.toString() as Set
-        List<File> unmanaged = remaining.findAll { File entry ->
-            !(entry.name in services) || !isManagedLink(entry, entry.name, true)
-        }
-        if (unmanaged) {
-            String unmanagedNoun = unmanaged.size() == 1 ? 'item' : 'items'
-            return "Legacy integration hub contains ${unmanaged.size()} unmanaged " +
-                "${unmanagedNoun}; move them to integrations/"
-        }
-        String noun = remaining.length == 1 ? 'item' : 'items'
-        "Legacy integration hub retains ${remaining.length} ${noun}; run setup repair --apply"
+        null
     }
 
     static void apply(List<Map> actions) {
@@ -234,11 +186,11 @@ class WorkspacePlanner {
         "${prefix} ${detail}"
     }
 
-    private static Path managedTarget(String service, boolean legacy) {
+    private static Path managedTarget(String service, boolean legacy = false) {
         legacy ? Paths.get('../..', service) : Paths.get('..', service)
     }
 
-    private static boolean isManagedLink(File target, String service, boolean legacy) {
+    private static boolean isManagedLink(File target, String service, boolean legacy = false) {
         if (!Files.isSymbolicLink(target.toPath())) {
             if (System.getProperty("os.name")?.toLowerCase()?.contains("win") && target.isDirectory()) {
                 File expectedSource = new File(target.parentFile, managedTarget(service, legacy).toString()).canonicalFile
