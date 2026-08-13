@@ -93,18 +93,36 @@ def run_init(args) -> int:
     try:
         config = load_global_config()
         workspaces = config.get("workspaces", {})
-        target_name = args.name
-        target_path = args.path
-        if not target_path and target_name in workspaces:
-            target_path = workspaces[target_name]["path"]
+        target_name = getattr(args, "name", None)
+        target_path = getattr(args, "path", None)
+
+        if not target_name and not target_path:
+            explicit_path, explicit_name = _selectors(args)
+            if explicit_name and explicit_name in workspaces:
+                target_name = explicit_name
+                target_path = workspaces[explicit_name]["path"]
+            elif explicit_path:
+                target_path = explicit_path
+                target_name = explicit_name or find_workspace_registration(canonical_workspace_path(explicit_path)) or "workspace"
+            elif config.get("default_workspace") and config["default_workspace"] in workspaces:
+                target_name = config["default_workspace"]
+                target_path = workspaces[target_name]["path"]
+        elif target_name and not target_path:
+            if target_name in workspaces:
+                target_path = workspaces[target_name]["path"]
+            else:
+                target_path = target_name
+                target_name = find_workspace_registration(canonical_workspace_path(target_path)) or "workspace"
         elif target_path in workspaces:
             target_path = workspaces[target_path]["path"]
-        if not target_path:
-            raise ValueError(f"Workspace path required or registration '{target_name}' not found")
+
+        if not target_name or not target_path:
+            raise ValueError("Usage: ai-worklog setup init [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]")
+
         validate_workspace_name(target_name)
         workspace = canonical_workspace_path(target_path)
         if not workspace.is_dir():
-            raise ValueError(f"Workspace not found: {args.path}")
+            raise ValueError(f"Workspace not found: {target_path}")
 
         vault_root, vault_source, vault_manifest = _resolve_vault_or_error(
             workspace,
@@ -138,7 +156,7 @@ def run_init(args) -> int:
         report = build_action_report(
             operation="init",
             workspace=workspace,
-            workspace_name=args.name,
+            workspace_name=target_name,
             plan=plan,
             runtime=runtime,
             runtime_source=runtime_source,
@@ -157,15 +175,15 @@ def run_init(args) -> int:
             try:
                 apply_init_or_repair_plan(
                     workspace=workspace,
-                    workspace_name=args.name,
+                    workspace_name=target_name,
                     vault_root=vault_root,
                     ides=ides,
                     plan=plan,
                 )
                 config = load_global_config()
                 make_default = bool(getattr(args, "default", False)) or config.get("default_workspace") is None
-                add_workspace(args.name, str(workspace), make_default=make_default)
-                set_workspace_ides(args.name, ides)
+                add_workspace(target_name, str(workspace), make_default=make_default)
+                set_workspace_ides(target_name, ides)
                 if explicit_runtime is not None:
                     set_runtime(explicit_runtime)
                 set_ai_vault_root(str(vault_root))

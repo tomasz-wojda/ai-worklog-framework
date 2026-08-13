@@ -107,8 +107,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     setup_parser = subparsers.add_parser("setup", help="Workspace and IDE setup operations")
     setup_sub = setup_parser.add_subparsers(dest="setup_action")
-    setup_init = setup_sub.add_parser("init", help="Initialize workspace setup")
-    setup_init.add_argument("name", help="Workspace registration name")
+    setup_init = setup_sub.add_parser("init", help="Initialize workspace setup", parents=[parent_parser])
+    setup_init.add_argument("name", nargs="?", help="Workspace registration name")
     setup_init.add_argument("path", nargs="?", help="Workspace root path (optional if name is registered)")
     setup_init.add_argument(
         "--ide",

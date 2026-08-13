@@ -22,7 +22,7 @@ class SetupCommands {
         }
         switch (action) {
             case 'init':
-                return runInit(args, frameworkRoot, exitCodes)
+                return runInit(args, frameworkRoot, options, exitCodes)
             case 'check':
                 return runCheck(frameworkRoot, options, args, exitCodes)
             case 'show':
@@ -37,31 +37,53 @@ class SetupCommands {
         }
     }
 
-    private static int runInit(List<String> args, File frameworkRoot, ExitCodes exitCodes) {
+    private static int runInit(List<String> args, File frameworkRoot, Map options, ExitCodes exitCodes) {
         List<String> remaining = new ArrayList<>(args)
         boolean jsonOutput = remaining.remove('--json')
         boolean apply = remaining.remove('--apply')
+        boolean makeDefault = remaining.remove('--default')
+        List<String> ideValues = takeRepeatedOption(remaining, '--ide')
+        String explicitRuntime = takeOption(remaining, '--runtime')
+        String aiVault = takeOption(remaining, '--ai-vault')
+
         try {
-            if (remaining.size() < 2) {
-                Map configData = GlobalConfig.load()
-                Map workspaces = (Map) (configData.workspaces ?: [:])
-                if (remaining.size() == 1 && workspaces.containsKey(remaining[0])) {
-                    String regName = remaining[0]
-                    String regPath = ((Map) workspaces[regName]).path
-                    remaining.clear()
-                    remaining.add(regName)
-                    remaining.add(regPath)
+            Map config = GlobalConfig.load()
+            Map workspaces = (Map) (config.workspaces ?: [:])
+            String name = null
+            String path = null
+
+            if (remaining.size() == 2) {
+                name = remaining.remove(0)
+                path = remaining.remove(0)
+            } else if (remaining.size() == 1) {
+                String arg = remaining.remove(0)
+                if (workspaces.containsKey(arg)) {
+                    name = arg
+                    path = ((Map) workspaces[arg]).path
                 } else {
-                    throw new IllegalArgumentException('Usage: ai-worklog setup init <name> [path] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]')
+                    path = arg
+                    name = workspaces.find { k, v -> ((Map) v).path == path }?.key ?: 'workspace'
+                }
+            } else if (remaining.size() == 0) {
+                String explicitName = options?.workspaceName
+                String explicitPath = options?.workspace
+                if (explicitName && workspaces.containsKey(explicitName)) {
+                    name = explicitName
+                    path = ((Map) workspaces[explicitName]).path
+                } else if (explicitPath) {
+                    path = explicitPath
+                    name = explicitName ?: 'workspace'
+                } else if (config.default_workspace && workspaces.containsKey(config.default_workspace)) {
+                    name = config.default_workspace?.toString()
+                    path = ((Map) workspaces[name])?.path
                 }
             }
-            String name = remaining.remove(0)
-            String path = remaining.remove(0)
-            List<String> ideValues = takeRepeatedOption(remaining, '--ide')
-            String explicitRuntime = takeOption(remaining, '--runtime')
-            String aiVault = takeOption(remaining, '--ai-vault')
-            boolean makeDefault = remaining.remove('--default')
+
             rejectExtraArgs(remaining, 'init')
+
+            if (!name || !path) {
+                throw new IllegalArgumentException('Usage: ai-worklog setup init [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]')
+            }
 
             GlobalConfig.validateWorkspaceName(name)
             File workspace = GlobalConfig.canonicalWorkspacePath(path)
@@ -81,7 +103,6 @@ class SetupCommands {
             String runtime = explicitRuntime ?: runtimeSelection[0]
             String runtimeSource = explicitRuntime ? 'explicit' : runtimeSelection[1]
 
-            Map config = GlobalConfig.load()
             List<String> existingIdes = config.workspaces[name] ?
                 ((List) ((Map) config.workspaces[name]).ides)*.toString() :
                 []
