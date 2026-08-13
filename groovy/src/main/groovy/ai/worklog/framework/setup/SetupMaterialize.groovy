@@ -234,15 +234,16 @@ class SetupMaterialize {
     }
 
     static void cleanupEmptyParent(File path, File stopAt) {
-        File current = path
-        while (current != stopAt && current.isDirectory()) {
+        File current = path?.canonicalFile
+        File stop = stopAt?.canonicalFile
+        while (current != null && current != stop && current.isDirectory()) {
             File[] children = current.listFiles()
-            if (children && children.length > 0) {
+            if (children != null && children.length > 0) {
                 break
             }
             File parent = current.parentFile
-            current.deleteDir()
-            current = parent
+            current.delete()
+            current = parent != null ? parent.canonicalFile : null
         }
     }
 

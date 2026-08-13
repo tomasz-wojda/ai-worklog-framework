@@ -154,6 +154,21 @@ def plan_revert(workspace: Path) -> Dict[str, Any]:
         })
 
     _append_directory_cleanup(actions, integrations)
+
+    for managed_file in reversed(rules.get("files", [])):
+        target = workspace / managed_file["target"]
+        actions.append({
+            "kind": "delete",
+            "target": target,
+            "skip": not target.exists(),
+            "reason": "" if target.exists() else "not present",
+        })
+
+    for relative in reversed(rules.get("directories", [])):
+        target = workspace / relative
+        if target != integrations:
+            _append_directory_cleanup(actions, target)
+
     return {"actions": actions, "conflicts": []}
 
 
@@ -173,8 +188,9 @@ def apply_plan(actions: List[Dict[str, Any]]) -> None:
             shutil.copyfile(action["source"], target)
         elif action["kind"] == "symlink":
             _create_symlink_or_junction(target, action["source"])
-        elif action["kind"] == "unlink":
-            target.unlink()
+        elif action["kind"] in ("unlink", "delete"):
+            if target.exists() or target.is_symlink():
+                target.unlink()
         elif action["kind"] == "rmdir":
             if target.is_dir() and not any(target.iterdir()):
                 target.rmdir()
@@ -193,6 +209,8 @@ def format_action(action: Dict[str, Any], apply: bool) -> str:
         detail = f"link {action['target']} -> {action['source']}"
     elif kind == "rmdir":
         detail = f"rmdir {action['target']}"
+    elif kind == "delete":
+        detail = f"delete {action['target']}"
     else:
         detail = f"unlink {action['target']}"
     return f"{prefix} {detail}"
@@ -210,14 +228,14 @@ def _append_directory_cleanup(
             "reason": "not present",
         })
         return
-    planned_unlinks = {
-        action["target"]
+    planned_removals = {
+        action["target"].resolve()
         for action in actions
-        if action["kind"] == "unlink" and not action["skip"]
+        if action["kind"] in ("unlink", "delete", "rmdir") and not action["skip"]
     }
     remaining = [
         entry for entry in directory.iterdir()
-        if entry not in planned_unlinks
+        if entry.resolve() not in planned_removals
     ]
     actions.append({
         "kind": "rmdir",

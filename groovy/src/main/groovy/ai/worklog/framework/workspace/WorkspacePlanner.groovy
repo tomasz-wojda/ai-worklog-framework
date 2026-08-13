@@ -111,6 +111,24 @@ class WorkspacePlanner {
         }
 
         appendDirectoryCleanup(actions, integrations)
+
+        ((List) rules.files ?: []).reverse().each { managedFile ->
+            File target = new File(workspace, managedFile.target.toString())
+            actions << [
+                kind: 'delete',
+                target: target,
+                skip: !target.exists(),
+                reason: target.exists() ? '' : 'not present'
+            ]
+        }
+
+        ((List) rules.directories ?: []).reverse().each { relative ->
+            File target = new File(workspace, relative.toString())
+            if (target.path != integrations.path) {
+                appendDirectoryCleanup(actions, target)
+            }
+        }
+
         [actions: actions, conflicts: []]
     }
 
@@ -150,7 +168,10 @@ class WorkspacePlanner {
                     }
                     break
                 case 'unlink':
-                    Files.delete(target.toPath())
+                case 'delete':
+                    if (target.exists() || Files.isSymbolicLink(target.toPath())) {
+                        Files.delete(target.toPath())
+                    }
                     break
                 case 'rmdir':
                     if (target.isDirectory() && !target.listFiles()) {
@@ -179,6 +200,9 @@ class WorkspacePlanner {
                 break
             case 'rmdir':
                 detail = "rmdir ${action.target}"
+                break
+            case 'delete':
+                detail = "delete ${action.target}"
                 break
             default:
                 detail = "unlink ${action.target}"
@@ -226,11 +250,11 @@ class WorkspacePlanner {
             ]
             return
         }
-        Set<File> plannedUnlinks = actions.findAll {
-            it.kind == 'unlink' && !it.skip
-        }.collect { (File) it.target } as Set
+        Set<File> plannedRemovals = actions.findAll {
+            (it.kind in ['unlink', 'delete', 'rmdir']) && !it.skip
+        }.collect { ((File) it.target).canonicalFile } as Set
         List<File> remaining = directory.listFiles()?.findAll { File entry ->
-            !(entry in plannedUnlinks)
+            !(entry.canonicalFile in plannedRemovals)
         } ?: []
         actions << [
             kind: 'rmdir',

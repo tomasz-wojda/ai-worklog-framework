@@ -260,7 +260,7 @@ class SetupPlanner {
             Map profile = SetupResolver.ideMaterialization(action.ide.toString())
             SetupMaterialize.cleanupEmptyParent(
                 destination.parentFile,
-                new File(workspace, profile.destination)
+                workspace
             )
         }
 
@@ -278,6 +278,7 @@ class SetupPlanner {
             )
         } else if (path.isFile()) {
             path.delete()
+            SetupMaterialize.cleanupEmptyParent(path.parentFile, workspace)
         }
     }
 

@@ -203,8 +203,9 @@ def remove_skill_artifact(
 
 
 def cleanup_empty_parent(path: Path, stop_at: Path) -> None:
-    current = path
-    while current != stop_at and current.is_dir():
+    current = path.resolve() if path else None
+    stop = stop_at.resolve() if stop_at else None
+    while current and current != stop and current.is_dir():
         try:
             next(current.iterdir())
             break
@@ -212,4 +213,4 @@ def cleanup_empty_parent(path: Path, stop_at: Path) -> None:
             pass
         parent = current.parent
         current.rmdir()
-        current = parent
+        current = parent.resolve() if parent else None

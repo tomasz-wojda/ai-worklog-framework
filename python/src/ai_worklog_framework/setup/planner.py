@@ -152,7 +152,7 @@ def apply_revert_plan(
         destination = action["target"]
         remove_skill_artifact(destination, entry)
         profile = ide_materialization(str(action.get("ide")))
-        cleanup_empty_parent(destination.parent, workspace / profile["destination"])
+        cleanup_empty_parent(destination.parent, workspace)
 
     remaining = list(plan.get("remaining_skills") or [])
     path = manifest_path(workspace)
@@ -168,6 +168,7 @@ def apply_revert_plan(
         save_manifest(workspace, manifest)
     elif path.is_file():
         path.unlink()
+        cleanup_empty_parent(path.parent, workspace)
 
 
 def _manifest_entry(
