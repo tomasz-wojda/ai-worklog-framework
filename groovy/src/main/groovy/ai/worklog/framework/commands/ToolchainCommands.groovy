@@ -33,9 +33,16 @@ class ToolchainCommands {
         }
     }
 
+    static String detectPythonVersion() {
+        commandVersion(['python3', '--version']) ?:
+            commandVersion(['python', '--version']) ?:
+            commandVersion(['py', '-3', '--version'])
+    }
+
     static int check(Map rules, Map config, Map<Integer, Map> javaRuntimes, Map<Integer, Map> groovyRuntimes) {
         List<List<String>> rows = []
-        rows << ['OK', 'python3', commandVersion(['python3', '--version']) ?: 'Not detected']
+        String pythonVersion = detectPythonVersion()
+        rows << [pythonVersion ? 'OK' : 'BLOCKED', 'python3', pythonVersion ?: 'Not detected']
         javaRuntimes.each { major, runtime -> rows << ['OK', "java:${major}", runtime.version] }
         if (!javaRuntimes) rows << ['DEGRADED', 'java', 'No Java runtimes detected']
         groovyRuntimes.each { major, runtime ->

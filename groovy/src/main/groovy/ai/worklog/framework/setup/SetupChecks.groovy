@@ -229,7 +229,7 @@ class SetupChecks {
         )
         Map toolchain = wsConfig.toolchain instanceof Map ? (Map) wsConfig.toolchain : [:]
         ResultSet results = new ResultSet()
-        String python = ToolchainCommands.commandVersion(['python3', '--version'])
+        String python = ToolchainCommands.detectPythonVersion()
         results.add(new CheckResult(
             status: python ? Status.READY : Status.BLOCKED,
             source: 'python3',
