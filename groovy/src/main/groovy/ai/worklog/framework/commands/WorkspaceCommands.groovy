@@ -18,7 +18,7 @@ class WorkspaceCommands {
             return exitCodes.userError
         }
         if (action in ['init', 'revert']) {
-            return runPlanner(action, args, frameworkRoot, exitCodes)
+            return runPlanner(action, args, frameworkRoot, exitCodes, explicitPath, explicitName)
         }
         List<String> remaining = new ArrayList<>(args)
         boolean json = remaining.remove('--json')
@@ -73,26 +73,35 @@ class WorkspaceCommands {
         String action,
         List<String> args,
         File frameworkRoot,
-        ExitCodes exitCodes
+        ExitCodes exitCodes,
+        String explicitPath = null,
+        String explicitName = null
     ) {
-        if (!args) {
-            usage()
-            return exitCodes.userError
-        }
-        List<String> remaining = new ArrayList<>(args)
+        List<String> remaining = new ArrayList<>(args ?: [])
         boolean applying = remaining.remove('--apply')
-        String targetInput = remaining[0]
+        String targetInput = remaining ? remaining.remove(0) : (explicitName ?: explicitPath)
+        if (!targetInput) {
+            try {
+                File resolved = ai.worklog.framework.core.FrameworkPaths.resolveWorkspace(
+                    explicitPath, explicitName, frameworkRoot
+                )
+                targetInput = resolved.path
+            } catch (Exception ignored) {
+                usage()
+                return exitCodes.userError
+            }
+        }
         Map configData = GlobalConfig.load()
         Map workspaces = (Map) (configData.workspaces ?: [:])
         if (workspaces.containsKey(targetInput)) {
             targetInput = ((Map) workspaces[targetInput]).path
         }
         File workspace = GlobalConfig.canonicalWorkspacePath(targetInput)
-        if (remaining.size() > 1) {
+        if (remaining) {
             throw new IllegalArgumentException('Unexpected arguments for workspace operation')
         }
         if (!workspace.isDirectory()) {
-            println "Workspace not found: ${remaining[0]}"
+            println "Workspace not found: ${targetInput}"
             return exitCodes.userError
         }
         WorkspacePlanner planner = new WorkspacePlanner(frameworkRoot)

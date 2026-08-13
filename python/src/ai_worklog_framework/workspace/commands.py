@@ -99,15 +99,24 @@ def _handle_error(action: str, json: bool, exc: ValueError) -> int:
     return EXIT_USER_ERROR
 
 
-def _run_init_revert(args) -> int:
-    target_input = args.path
+def _run_init_revert(args, framework_root: Optional[Path] = None) -> int:
+    target_input = args.path or _selector(args, "workspace_name") or _selector(args, "workspace")
+    if not target_input:
+        try:
+            from ai_worklog_framework.global_config import resolve_workspace
+
+            explicit_path, explicit_name = _selectors(args)
+            target_input = str(resolve_workspace(explicit_path, explicit_name, framework_root))
+        except Exception:
+            print("Usage: ai-worklog workspace {init|revert|add|list|show|default|current|remove} ...")
+            return EXIT_USER_ERROR
     config = show_configuration()
     workspaces = config.get("workspaces", {})
     if target_input in workspaces:
         target_input = workspaces[target_input]["path"]
     target = canonical_workspace_path(target_input)
     if not target.is_dir():
-        print(f"Workspace not found: {args.path}")
+        print(f"Workspace not found: {target_input}")
         return EXIT_USER_ERROR
 
     actions = plan_init(target) if args.workspace_action == "init" else plan_revert(target)
