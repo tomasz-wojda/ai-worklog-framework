@@ -20,7 +20,7 @@
     },
     "antigravity": {
       "destination": ".agents/skills",
-      "materialization": "copy"
+      "materialization": "symlink"
     }
   },
   "auto_detection": {
