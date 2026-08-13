@@ -43,7 +43,17 @@ class SetupCommands {
         boolean apply = remaining.remove('--apply')
         try {
             if (remaining.size() < 2) {
-                throw new IllegalArgumentException('Usage: ai-worklog setup init <name> <path> [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]')
+                Map configData = GlobalConfig.load()
+                Map workspaces = (Map) (configData.workspaces ?: [:])
+                if (remaining.size() == 1 && workspaces.containsKey(remaining[0])) {
+                    String regName = remaining[0]
+                    String regPath = ((Map) workspaces[regName]).path
+                    remaining.clear()
+                    remaining.add(regName)
+                    remaining.add(regPath)
+                } else {
+                    throw new IllegalArgumentException('Usage: ai-worklog setup init <name> [path] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]')
+                }
             }
             String name = remaining.remove(0)
             String path = remaining.remove(0)

@@ -91,8 +91,18 @@ def run_init(args) -> int:
     json_output = bool(getattr(args, "json", False))
     apply = bool(getattr(args, "apply", False))
     try:
-        validate_workspace_name(args.name)
-        workspace = canonical_workspace_path(args.path)
+        config = load_global_config()
+        workspaces = config.get("workspaces", {})
+        target_name = args.name
+        target_path = args.path
+        if not target_path and target_name in workspaces:
+            target_path = workspaces[target_name]["path"]
+        elif target_path in workspaces:
+            target_path = workspaces[target_path]["path"]
+        if not target_path:
+            raise ValueError(f"Workspace path required or registration '{target_name}' not found")
+        validate_workspace_name(target_name)
+        workspace = canonical_workspace_path(target_path)
         if not workspace.is_dir():
             raise ValueError(f"Workspace not found: {args.path}")
 
