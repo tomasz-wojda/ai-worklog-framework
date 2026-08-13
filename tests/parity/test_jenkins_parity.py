@@ -526,10 +526,22 @@ def test_jenkins_seed_human(tmp_path: Path, jenkins_mock: str) -> None:
     _assert_parity_human(python, groovy)
 
 
+def _make_script(path: Path, body_sh: str, body_cmd: str) -> Path:
+    if platform.system() == "Windows":
+        cmd_path = path.with_suffix(".cmd")
+        cmd_path.write_text(body_cmd, encoding="utf-8")
+        return cmd_path
+    path.write_text(body_sh, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
 def test_jenkins_syntax_check_success_json(tmp_path: Path) -> None:
-    script = tmp_path / "syntax_check.sh"
-    script.write_text("#!/bin/sh\nprintf 'SYNTAX OK\\n'\nexit 0\n")
-    script.chmod(0o755)
+    script = _make_script(
+        tmp_path / "syntax_check.sh",
+        "#!/bin/sh\nprintf 'SYNTAX OK\\n'\nexit 0\n",
+        "@echo off\necho SYNTAX OK\nexit /b 0\n",
+    )
     target = tmp_path / "Jenkinsfile.groovy"
     target.write_text("pipeline { agent any; stages {} }")
     _write_config(tmp_path, {"syntax_check_script": str(script)})
@@ -540,9 +552,11 @@ def test_jenkins_syntax_check_success_json(tmp_path: Path) -> None:
 
 
 def test_jenkins_syntax_check_success_human(tmp_path: Path) -> None:
-    script = tmp_path / "syntax_check.sh"
-    script.write_text("#!/bin/sh\nprintf 'SYNTAX OK\\n'\nexit 0\n")
-    script.chmod(0o755)
+    script = _make_script(
+        tmp_path / "syntax_check.sh",
+        "#!/bin/sh\nprintf 'SYNTAX OK\\n'\nexit 0\n",
+        "@echo off\necho SYNTAX OK\nexit /b 0\n",
+    )
     target = tmp_path / "Jenkinsfile.groovy"
     target.write_text("pipeline { agent any; stages {} }")
     _write_config(tmp_path, {"syntax_check_script": str(script)})
@@ -567,9 +581,11 @@ def test_jenkins_syntax_check_missing_script_json(
 
 
 def test_jenkins_syntax_check_failure_json(tmp_path: Path) -> None:
-    script = tmp_path / "syntax_check.sh"
-    script.write_text("#!/bin/sh\nprintf 'SYNTAX ERROR\\n' >&2\nexit 1\n")
-    script.chmod(0o755)
+    script = _make_script(
+        tmp_path / "syntax_check.sh",
+        "#!/bin/sh\nprintf 'SYNTAX ERROR\\n' >&2\nexit 1\n",
+        "@echo off\necho SYNTAX ERROR>&2\nexit /b 1\n",
+    )
     target = tmp_path / "Jenkinsfile.groovy"
     target.write_text("pipeline {}")
     _write_config(tmp_path, {"syntax_check_script": str(script)})

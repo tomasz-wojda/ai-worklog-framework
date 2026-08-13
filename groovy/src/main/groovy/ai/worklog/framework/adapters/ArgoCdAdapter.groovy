@@ -97,8 +97,10 @@ class ArgoCdAdapter {
 
     private static boolean commandAvailable(String binary) {
         try {
-            ReadOnlyProcess.validateArgv(['which', binary])
-            new ProcessBuilder(['which', binary]).start().waitFor() == 0
+            boolean isWindows = System.getProperty("os.name")?.toLowerCase()?.contains("win")
+            List<String> cmd = isWindows ? ['where.exe', binary] : ['which', binary]
+            ReadOnlyProcess.validateArgv(cmd)
+            new ProcessBuilder(cmd).start().waitFor() == 0
         } catch (Exception ignored) {
             false
         }

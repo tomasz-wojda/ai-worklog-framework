@@ -285,13 +285,17 @@ def test_reconciliation_malformed_adapter_response_matches(tmp_path) -> None:
         }],
     }]
     (catalog_dir / "fixture.json").write_text(json.dumps(catalog))
-    gh = fake_bin / "gh"
-    gh.write_text(
-        "#!/bin/sh\n"
-        "if [ \"$1\" = \"--version\" ]; then exit 0; fi\n"
-        "printf 'not-json'\n"
-    )
-    gh.chmod(0o755)
+    gh_name = "gh.cmd" if platform.system() == "Windows" else "gh"
+    gh = fake_bin / gh_name
+    if platform.system() == "Windows":
+        gh.write_text("@echo off\nif \"%1\"==\"--version\" exit /b 0\necho not-json\n")
+    else:
+        gh.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = \"--version\" ]; then exit 0; fi\n"
+            "printf 'not-json'\n"
+        )
+        gh.chmod(0o755)
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
     arguments = (

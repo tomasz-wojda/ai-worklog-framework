@@ -33,8 +33,10 @@ class DiagnosticExecutor {
         List<String> missing = ((List) (pack.required_parameters ?: [])).findAll {
             !parameters[it.toString()]
         }.collect { it.toString() }
+        boolean isWindows = System.getProperty("os.name")?.toLowerCase()?.contains("win")
         List<String> missingTools = ((List) (pack.prerequisites ?: [])).findAll {
-            ToolchainCommands.execute(['which', it.toString()]).code != 0
+            List<String> checkCmd = isWindows ? ['where.exe', it.toString()] : ['which', it.toString()]
+            ToolchainCommands.execute(checkCmd).code != 0
         }.collect { it.toString() }
         List<Map> steps = []
         String status
