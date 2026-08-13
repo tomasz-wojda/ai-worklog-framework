@@ -23,21 +23,98 @@ class WorkspaceStateTest extends GroovyTestCase {
     void testWorkspaceInitAndRevert() {
         new File(workspace, 'jira').mkdir()
         WorkspacePlanner planner = new WorkspacePlanner(repository)
-        WorkspacePlanner.apply(planner.planInit(workspace))
+        Map initPlan = planner.planInit(workspace)
+        WorkspacePlanner.apply((List) initPlan.actions)
         assertTrue(new File(workspace, '.ai-worklog/state').isDirectory())
         assertTrue(new File(workspace, '.ai-worklog/config.json').isFile())
+        assertTrue(new File(workspace, 'integrations').isDirectory())
         assertEquals(
             "*${System.lineSeparator()}!.gitignore${System.lineSeparator()}",
             new File(workspace, '.ai-worklog/.gitignore').getText('UTF-8')
         )
         assertTrue(
             java.nio.file.Files.isSymbolicLink(
-                new File(workspace, 'worklog/interface/jira').toPath()
+                new File(workspace, 'integrations/jira').toPath()
             )
         )
-        assertTrue(planner.planInit(workspace).every { it.skip })
-        WorkspacePlanner.apply(planner.planRevert(workspace))
-        assertFalse(new File(workspace, 'worklog/interface/jira').exists())
+        assertEquals(
+            java.nio.file.Paths.get('..', 'jira'),
+            java.nio.file.Files.readSymbolicLink(
+                new File(workspace, 'integrations/jira').toPath()
+            )
+        )
+        assertTrue(((List) planner.planInit(workspace).actions).every { it.skip })
+        WorkspacePlanner.apply((List) planner.planRevert(workspace).actions)
+        assertFalse(new File(workspace, 'integrations/jira').exists())
+        assertFalse(new File(workspace, 'integrations').exists())
+    }
+
+    void testWorkspaceInitMigratesLegacyManagedLinks() {
+        new File(workspace, 'jira').mkdir()
+        File legacy = new File(workspace, 'worklog/interface')
+        legacy.mkdirs()
+        java.nio.file.Files.createSymbolicLink(
+            new File(legacy, 'jira').toPath(),
+            java.nio.file.Paths.get('../..', 'jira')
+        )
+        WorkspacePlanner planner = new WorkspacePlanner(repository)
+        WorkspacePlanner.apply((List) planner.planInit(workspace).actions)
+        assertTrue(java.nio.file.Files.isSymbolicLink(new File(workspace, 'integrations/jira').toPath()))
+        assertFalse(new File(legacy, 'jira').exists())
+        assertFalse(legacy.exists())
+    }
+
+    void testWorkspaceInitAcceptsCanonicalIntegrationDirectory() {
+        new File(workspace, 'jira').mkdir()
+        File canonical = new File(workspace, 'integrations/jira')
+        canonical.mkdirs()
+        WorkspacePlanner planner = new WorkspacePlanner(repository)
+
+        Map plan = planner.planInit(workspace)
+
+        assertTrue(((List) plan.conflicts).isEmpty())
+        Map action = ((List<Map>) plan.actions).find {
+            it.kind == 'symlink' && it.target == canonical
+        }
+        assertTrue(action.skip)
+        assertEquals('integration present', action.reason)
+    }
+
+    void testWorkspaceInitBlocksForeignCanonicalSymlink() {
+        new File(workspace, 'jira').mkdir()
+        File canonical = new File(workspace, 'integrations/jira')
+        canonical.parentFile.mkdirs()
+        java.nio.file.Files.createSymbolicLink(
+            canonical.toPath(),
+            java.nio.file.Paths.get('..', 'other')
+        )
+        WorkspacePlanner planner = new WorkspacePlanner(repository)
+
+        Map plan = planner.planInit(workspace)
+
+        assertEquals(1, ((List) plan.conflicts).size())
+        assertEquals('foreign symlink', ((List) plan.conflicts)[0].reason)
+    }
+
+    void testServiceDirResolutionOrder() {
+        FrameworkPaths paths = new FrameworkPaths(workspace)
+        File rootJira = new File(workspace, 'jira')
+        File legacyJira = new File(workspace, 'worklog/interface/jira')
+        File canonicalJira = new File(workspace, 'integrations/jira')
+
+        rootJira.mkdir()
+        assertEquals(rootJira.canonicalFile, paths.serviceDir('jira').canonicalFile)
+
+        legacyJira.mkdirs()
+        assertEquals(legacyJira.canonicalFile, paths.serviceDir('jira').canonicalFile)
+
+        canonicalJira.mkdirs()
+        assertEquals(canonicalJira.canonicalFile, paths.serviceDir('jira').canonicalFile)
+
+        assertEquals(
+            new File(workspace, 'integrations/jenkins').canonicalFile,
+            paths.serviceDir('jenkins').canonicalFile
+        )
     }
 
     void testValidatedStatePatchAndAtomicSave() {

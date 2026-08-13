@@ -58,6 +58,9 @@ class SetupPlanner {
             case 'unlink':
                 detail = "unlink ${target}"
                 break
+            case 'rmdir':
+                detail = "rmdir ${target}"
+                break
             default:
                 detail = "${kind} ${target}"
         }
@@ -113,10 +116,11 @@ class SetupPlanner {
             existingManifest,
             adopt
         )
+        Map initPlan = planner.planInit(workspace)
         [
-            workspace_actions: planner.planInit(workspace),
+            workspace_actions: initPlan.actions,
             skill_actions: planned[0],
-            conflicts: planned[1],
+            conflicts: ((List) planned[1]) + ((List) (initPlan.conflicts ?: [])),
             skill_records: planned[2],
             existing_manifest: existingManifest
         ]
@@ -172,7 +176,7 @@ class SetupPlanner {
             .sort()
 
         [
-            service_actions: planner.planRevert(workspace),
+            service_actions: planner.planRevert(workspace).actions,
             skill_actions: skillActions,
             conflicts: conflicts,
             remaining_skills: remainingSkills,

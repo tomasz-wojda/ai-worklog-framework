@@ -90,12 +90,19 @@ class WorkspaceCommands {
             return exitCodes.userError
         }
         WorkspacePlanner planner = new WorkspacePlanner(frameworkRoot)
-        List<Map> actions = action == 'init' ?
+        Map plan = action == 'init' ?
             planner.planInit(workspace) : planner.planRevert(workspace)
+        ((List) (plan.conflicts ?: [])).each { Map conflict ->
+            println "conflict: ${conflict.path} (${conflict.reason})"
+        }
+        List<Map> actions = (List) plan.actions
         actions.each { println WorkspacePlanner.format(it, applying) }
         if (!applying) {
             println 'Dry run only. Re-run with --apply to make changes.'
             return exitCodes.success
+        }
+        if (plan.conflicts) {
+            return exitCodes.blocked
         }
         try {
             WorkspacePlanner.apply(actions)

@@ -16,8 +16,15 @@ class WorkspacePlanner {
         rules = (Map) JsonFiles.read(new File(frameworkRoot, 'shared/workspace-init.json'), [:])
     }
 
-    List<Map> planInit(File workspace) {
+    Map planInit(File workspace) {
+        String integrationsRel = rules.integrations_path?.toString() ?: 'integrations'
+        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
+        File integrations = new File(workspace, integrationsRel)
+        File legacyInterface = new File(workspace, legacyRel)
         List<Map> actions = []
+        List<Map> conflicts = []
+        List<String> services = ((List) rules.services)*.toString()
+
         ((List) rules.directories).each { relative ->
             File target = new File(workspace, relative.toString())
             actions << [
@@ -39,41 +46,124 @@ class WorkspacePlanner {
             ]
         }
 
-        File interfaceDir = new File(workspace, rules.interface_path.toString())
-        ((List) rules.services).each { service ->
-            File source = new File(workspace, service.toString())
-            File target = new File(interfaceDir, service.toString())
-            boolean skip = !source.isDirectory() || Files.isSymbolicLink(source.toPath()) ||
-                target.exists() || Files.isSymbolicLink(target.toPath())
-            String reason = !source.isDirectory() ? 'source absent' :
-                Files.isSymbolicLink(source.toPath()) ? 'source is symlink' :
-                target.exists() || Files.isSymbolicLink(target.toPath()) ? 'target exists' : ''
-            actions << [
-                kind: 'symlink',
-                source: Paths.get('../..', service.toString()),
-                target: target,
-                skip: skip,
-                reason: reason
-            ]
+        services.each { String service ->
+            File rootSource = new File(workspace, service)
+            File canonical = new File(integrations, service)
+            File legacy = new File(legacyInterface, service)
+            boolean canonicalManaged = isManagedLink(canonical, service, false)
+            boolean legacyManaged = isManagedLink(legacy, service, true)
+            boolean canonicalDirectory = canonical.isDirectory() &&
+                !Files.isSymbolicLink(canonical.toPath())
+            boolean canonicalPresent = pathPresent(canonical)
+            boolean rootReady = rootSource.isDirectory() && !Files.isSymbolicLink(rootSource.toPath())
+
+            if (canonicalPresent && !canonicalManaged && !canonicalDirectory) {
+                String reason = foreignIntegrationReason(canonical)
+                conflicts << [path: canonical.path, reason: reason]
+                actions << [
+                    kind: 'symlink',
+                    source: managedTarget(service, false),
+                    target: canonical,
+                    skip: true,
+                    reason: reason
+                ]
+            } else if (canonicalManaged || canonicalDirectory) {
+                actions << [
+                    kind: 'symlink',
+                    source: managedTarget(service, false),
+                    target: canonical,
+                    skip: true,
+                    reason: canonicalManaged ? 'already linked' : 'integration present'
+                ]
+            } else if (rootReady) {
+                actions << [
+                    kind: 'symlink',
+                    source: managedTarget(service, false),
+                    target: canonical,
+                    skip: false,
+                    reason: ''
+                ]
+            } else {
+                actions << [
+                    kind: 'symlink',
+                    source: managedTarget(service, false),
+                    target: canonical,
+                    skip: true,
+                    reason: 'source absent'
+                ]
+            }
+
+            if (legacyManaged) {
+                boolean canRemoveLegacy = canonicalManaged || canonicalDirectory ||
+                    (rootReady && !(
+                        canonicalPresent && !canonicalManaged && !canonicalDirectory
+                    ))
+                actions << [
+                    kind: 'unlink',
+                    target: legacy,
+                    skip: !canRemoveLegacy,
+                    reason: canRemoveLegacy ? '' : 'canonical integration unavailable'
+                ]
+            }
         }
-        actions
+
+        appendDirectoryCleanup(actions, legacyInterface)
+        [actions: actions, conflicts: conflicts]
     }
 
-    List<Map> planRevert(File workspace) {
-        File interfaceDir = new File(workspace, rules.interface_path.toString())
-        ((List) rules.services).collect { service ->
-            File target = new File(interfaceDir, service.toString())
-            Path expected = Paths.get('../..', service.toString())
-            boolean managed = (Files.isSymbolicLink(target.toPath()) || target.exists()) &&
-                (Files.isSymbolicLink(target.toPath()) && Files.readSymbolicLink(target.toPath()) == expected ||
-                 target.canonicalFile == new File(workspace, service.toString()).canonicalFile)
-            [
+    Map planRevert(File workspace) {
+        String integrationsRel = rules.integrations_path?.toString() ?: 'integrations'
+        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
+        File integrations = new File(workspace, integrationsRel)
+        File legacyInterface = new File(workspace, legacyRel)
+        List<String> services = ((List) rules.services)*.toString()
+        List<Map> actions = []
+
+        services.each { String service ->
+            File canonical = new File(integrations, service)
+            boolean canonicalManaged = isManagedLink(canonical, service, false)
+            actions << [
                 kind: 'unlink',
-                target: target,
-                skip: !managed,
-                reason: managed ? '' : 'not a managed link'
+                target: canonical,
+                skip: !canonicalManaged,
+                reason: canonicalManaged ? '' : 'not a managed link'
+            ]
+            File legacy = new File(legacyInterface, service)
+            boolean legacyManaged = isManagedLink(legacy, service, true)
+            actions << [
+                kind: 'unlink',
+                target: legacy,
+                skip: !legacyManaged,
+                reason: legacyManaged ? '' : 'not a managed link'
             ]
         }
+
+        appendDirectoryCleanup(actions, integrations)
+        appendDirectoryCleanup(actions, legacyInterface)
+        [actions: actions, conflicts: []]
+    }
+
+    static String legacyIntegrationStatus(File workspace, Map rules) {
+        String legacyRel = rules.legacy_interface_path?.toString() ?: 'worklog/interface'
+        File legacyInterface = new File(workspace, legacyRel)
+        if (!legacyInterface.isDirectory()) {
+            return null
+        }
+        File[] remaining = legacyInterface.listFiles()
+        if (!remaining) {
+            return null
+        }
+        Set<String> services = ((List) (rules.services ?: []))*.toString() as Set
+        List<File> unmanaged = remaining.findAll { File entry ->
+            !(entry.name in services) || !isManagedLink(entry, entry.name, true)
+        }
+        if (unmanaged) {
+            String unmanagedNoun = unmanaged.size() == 1 ? 'item' : 'items'
+            return "Legacy integration hub contains ${unmanaged.size()} unmanaged " +
+                "${unmanagedNoun}; move them to integrations/"
+        }
+        String noun = remaining.length == 1 ? 'item' : 'items'
+        "Legacy integration hub retains ${remaining.length} ${noun}; run setup repair --apply"
     }
 
     static void apply(List<Map> actions) {
@@ -95,20 +185,25 @@ class WorkspacePlanner {
                     Files.createDirectories(target.parentFile.toPath())
                     try {
                         Files.createSymbolicLink(target.toPath(), (Path) action.source)
-                    } catch (Exception exc) {
-                        if (System.getProperty('os.name')?.toLowerCase()?.contains('win')) {
-                            File absoluteSource = new File(target.parentFile, action.source.toString()).canonicalFile
-                            Process proc = new ProcessBuilder('cmd.exe', '/c', 'mklink', '/J', target.absolutePath, absoluteSource.absolutePath).start()
-                            if (proc.waitFor() != 0) {
-                                throw exc
+                    } catch (IOException | UnsupportedOperationException exception) {
+                        if (System.getProperty("os.name")?.toLowerCase()?.contains("win")) {
+                            File sourceDir = new File(target.parentFile, action.source.toString()).canonicalFile
+                            Process p = new ProcessBuilder("cmd.exe", "/c", "mklink", "/J", target.absolutePath, sourceDir.absolutePath).start()
+                            if (p.waitFor() != 0) {
+                                throw exception
                             }
                         } else {
-                            throw exc
+                            throw exception
                         }
                     }
                     break
                 case 'unlink':
                     Files.delete(target.toPath())
+                    break
+                case 'rmdir':
+                    if (target.isDirectory() && !target.listFiles()) {
+                        Files.delete(target.toPath())
+                    }
                     break
             }
         }
@@ -130,9 +225,66 @@ class WorkspacePlanner {
             case 'symlink':
                 detail = "link ${action.target} -> ${action.source}"
                 break
+            case 'rmdir':
+                detail = "rmdir ${action.target}"
+                break
             default:
                 detail = "unlink ${action.target}"
         }
         "${prefix} ${detail}"
+    }
+
+    private static Path managedTarget(String service, boolean legacy) {
+        legacy ? Paths.get('../..', service) : Paths.get('..', service)
+    }
+
+    private static boolean isManagedLink(File target, String service, boolean legacy) {
+        if (!Files.isSymbolicLink(target.toPath())) {
+            if (System.getProperty("os.name")?.toLowerCase()?.contains("win") && target.isDirectory()) {
+                File expectedSource = new File(target.parentFile, managedTarget(service, legacy).toString()).canonicalFile
+                return target.canonicalFile == expectedSource
+            }
+            return false
+        }
+        Path read = Files.readSymbolicLink(target.toPath())
+        read == managedTarget(service, legacy) || read.toAbsolutePath().normalize() == new File(target.parentFile, managedTarget(service, legacy).toString()).toPath().toAbsolutePath().normalize()
+    }
+
+    private static boolean pathPresent(File target) {
+        target.exists() || Files.isSymbolicLink(target.toPath())
+    }
+
+    private static String foreignIntegrationReason(File target) {
+        if (Files.isSymbolicLink(target.toPath())) {
+            return 'foreign symlink'
+        }
+        if (target.isDirectory()) {
+            return 'foreign directory'
+        }
+        'foreign file'
+    }
+
+    private static void appendDirectoryCleanup(List<Map> actions, File directory) {
+        if (!directory.isDirectory()) {
+            actions << [
+                kind: 'rmdir',
+                target: directory,
+                skip: true,
+                reason: 'not present'
+            ]
+            return
+        }
+        Set<File> plannedUnlinks = actions.findAll {
+            it.kind == 'unlink' && !it.skip
+        }.collect { (File) it.target } as Set
+        List<File> remaining = directory.listFiles()?.findAll { File entry ->
+            !(entry in plannedUnlinks)
+        } ?: []
+        actions << [
+            kind: 'rmdir',
+            target: directory,
+            skip: !remaining.isEmpty(),
+            reason: remaining ? 'not empty' : ''
+        ]
     }
 }

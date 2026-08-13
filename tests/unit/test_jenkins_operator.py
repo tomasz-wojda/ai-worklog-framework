@@ -292,9 +292,13 @@ def test_operator_syntax_check_success(tmp_path, monkeypatch):
     assert report["status"] == Status.READY
 
 
-def test_operator_syntax_check_missing_script(tmp_path):
+def test_operator_syntax_check_missing_script(tmp_path, monkeypatch):
     target = tmp_path / "Jenkinsfile.groovy"
     target.write_text("pipeline {}")
+    monkeypatch.setattr(
+        "ai_worklog_framework.setup.resolver.resolve_ai_vault_root",
+        lambda _workspace: (None, None),
+    )
     report = jenkins.operator_syntax_check(WorkspacePaths(tmp_path), [str(target)], timeout=5)
     assert report["status"] == Status.BLOCKED
 

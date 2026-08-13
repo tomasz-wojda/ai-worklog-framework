@@ -30,7 +30,7 @@ class TestLoadConfig:
         assert cfg.catalog_path == tmp_path / "catalog"
         assert cfg.interface_path is None
 
-    def test_workspace_config_applied(self, tmp_path):
+    def test_workspace_config_applied_and_legacy_interface_ignored(self, tmp_path):
         config_dir = tmp_path / ".ai-worklog"
         config_dir.mkdir()
         config_data = {"catalog_path": "my-catalog", "interface_path": "worklog/interface"}
@@ -38,7 +38,7 @@ class TestLoadConfig:
 
         cfg = load_config(tmp_path)
         assert cfg.catalog_path == tmp_path / "my-catalog"
-        assert cfg.interface_path == tmp_path / "worklog" / "interface"
+        assert cfg.interface_path is None
 
     def test_local_override_wins(self, tmp_path):
         config_dir = tmp_path / ".ai-worklog"

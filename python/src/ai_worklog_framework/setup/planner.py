@@ -26,7 +26,7 @@ def plan_setup_init(
 ) -> Dict[str, Any]:
     workspace_actions = plan_init(workspace)
     existing_manifest = load_manifest(workspace)
-    skill_actions, conflicts, skill_records = plan_skill_materialization(
+    skill_actions, skill_conflicts, skill_records = plan_skill_materialization(
         workspace=workspace,
         vault_root=vault_root,
         vault_manifest=vault_manifest,
@@ -35,9 +35,9 @@ def plan_setup_init(
         adopt=adopt,
     )
     return {
-        "workspace_actions": workspace_actions,
+        "workspace_actions": workspace_actions["actions"],
         "skill_actions": skill_actions,
-        "conflicts": conflicts,
+        "conflicts": skill_conflicts + workspace_actions.get("conflicts", []),
         "skill_records": skill_records,
         "existing_manifest": existing_manifest,
     }
@@ -66,7 +66,7 @@ def plan_setup_revert(
     ides: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     existing_manifest = load_manifest(workspace)
-    service_actions = plan_revert(workspace)
+    service_actions = plan_revert(workspace)["actions"]
     skill_actions: List[Dict[str, Any]] = []
     conflicts: List[Dict[str, Any]] = []
     remaining_skills: List[Dict[str, Any]] = []
@@ -243,6 +243,8 @@ def format_action_detail(action: Dict[str, Any]) -> str:
         else:
             link_source = source
         detail = f"link {target} -> {link_source}"
+    elif kind == "rmdir":
+        detail = f"rmdir {target}"
     elif kind == "remove":
         detail = f"remove {target}"
     elif kind == "unlink":
@@ -300,6 +302,8 @@ def format_filesystem_action(action: Dict[str, Any], apply: bool) -> str:
         else:
             link_source = source
         detail = f"link {target} -> {link_source}"
+    elif kind == "rmdir":
+        detail = f"rmdir {target}"
     elif kind == "remove":
         detail = f"remove {target}"
     elif kind == "unlink":

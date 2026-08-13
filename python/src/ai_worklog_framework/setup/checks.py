@@ -14,6 +14,7 @@ from ai_worklog_framework.setup.materialize import plan_skill_materialization
 from ai_worklog_framework.setup.resolver import ide_materialization, resolve_ai_vault_root, resolve_runtime_selection
 from ai_worklog_framework.setup.vault import validate_vault_root
 from ai_worklog_framework.toolchain.resolver import check_toolchain
+from ai_worklog_framework.workspace.planner import legacy_integration_status
 
 
 def _check(status: Status, layer: str, message: str) -> Dict[str, Any]:
@@ -62,6 +63,15 @@ def run_setup_checks(
         checks.append(_check(Status.BLOCKED, "structure", f"Missing: {', '.join(missing)}"))
     else:
         checks.append(_check(Status.READY, "structure", "Workspace structure present"))
+
+    if not paths.integrations_dir.is_dir():
+        checks.append(_check(Status.DEGRADED, "integrations", "integrations/ missing"))
+    else:
+        checks.append(_check(Status.READY, "integrations", "Integration hub present"))
+
+    legacy_message = legacy_integration_status(workspace)
+    if legacy_message:
+        checks.append(_check(Status.DEGRADED, "integrations", legacy_message))
 
     runtime, runtime_source, runtime_ok = resolve_runtime_selection()
     if runtime_ok:

@@ -77,7 +77,7 @@ def _run(runtime: str, workspace: Path, *arguments: str) -> subprocess.Completed
 
 
 def _write_properties(workspace: Path, content: str) -> None:
-    jenkins_dir = workspace / "worklog" / "interface" / "jenkins"
+    jenkins_dir = workspace / "integrations" / "jenkins"
     jenkins_dir.mkdir(parents=True, exist_ok=True)
     (jenkins_dir / "jenkins.properties").write_text(content)
 
@@ -550,7 +550,13 @@ def test_jenkins_syntax_check_success_human(tmp_path: Path) -> None:
     _assert_parity_human(python, groovy)
 
 
-def test_jenkins_syntax_check_missing_script_json(tmp_path: Path) -> None:
+def test_jenkins_syntax_check_missing_script_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("AI_WORKLOG_HOME", str(home))
     target = tmp_path / "Jenkinsfile.groovy"
     target.write_text("pipeline {}")
     python = _run("python", tmp_path, "syntax-check", str(target), "--json")

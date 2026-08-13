@@ -1,6 +1,5 @@
 {
   "catalog_path": "catalog",
-  "interface_path": "worklog/interface",
   "adapters": {
     "reconciliation": {
       "enabled_systems": ["jira", "git", "github", "jenkins", "argocd", "tempo"],

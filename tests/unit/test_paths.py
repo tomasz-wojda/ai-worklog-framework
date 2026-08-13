@@ -216,21 +216,37 @@ class TestWorkspacePaths:
         assert wp.worklog == mock_workspace / "worklog"
         assert wp.worklog_done == mock_workspace / "worklog" / "done"
         assert wp.state_dir == mock_workspace / ".ai-worklog" / "state"
+        assert wp.integrations_dir == mock_workspace / "integrations"
+        assert wp.interface_dir == mock_workspace / "integrations"
         assert wp.prompt_log == mock_workspace / "prompt.log"
 
-    def test_service_dir_prefers_interface(self, mock_workspace):
+    def test_service_dir_prefers_integrations(self, mock_workspace):
         from ai_worklog_framework.paths import WorkspacePaths
 
-        iface = mock_workspace / "worklog" / "interface" / "jira"
-        iface.mkdir(parents=True)
+        integrations = mock_workspace / "integrations" / "jira"
+        integrations.mkdir(parents=True)
         wp = WorkspacePaths(mock_workspace)
-        assert wp.service_dir("jira") == iface
+        assert wp.service_dir("jira") == integrations
+
+    def test_service_dir_falls_back_to_legacy_interface(self, mock_workspace):
+        from ai_worklog_framework.paths import WorkspacePaths
+
+        legacy = mock_workspace / "worklog" / "interface" / "jira"
+        legacy.mkdir(parents=True)
+        wp = WorkspacePaths(mock_workspace)
+        assert wp.service_dir("jira") == legacy
 
     def test_service_dir_falls_back_to_root(self, mock_workspace):
         from ai_worklog_framework.paths import WorkspacePaths
 
         wp = WorkspacePaths(mock_workspace)
         assert wp.service_dir("jira") == mock_workspace / "jira"
+
+    def test_service_dir_missing_returns_canonical(self, mock_workspace):
+        from ai_worklog_framework.paths import WorkspacePaths
+
+        wp = WorkspacePaths(mock_workspace)
+        assert wp.service_dir("jenkins") == mock_workspace / "integrations" / "jenkins"
 
     def test_ticket_state_file(self, mock_workspace):
         from ai_worklog_framework.paths import WorkspacePaths

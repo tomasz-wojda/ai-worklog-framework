@@ -27,8 +27,8 @@ class ReconciliationTest extends GroovyTestCase {
         workspace = File.createTempDir('ai-worklog-reconcile-', '-test')
         new File(workspace, '.ai-worklog/state').mkdirs()
         new File(workspace, '.ai-worklog/catalog').mkdirs()
-        new File(workspace, 'worklog/interface/jira').mkdirs()
-        new File(workspace, 'worklog/interface/jenkins').mkdirs()
+        new File(workspace, 'integrations/jira').mkdirs()
+        new File(workspace, 'integrations/jenkins').mkdirs()
         new File(workspace, 'repos/demo-repo/.git').mkdirs()
     }
 
@@ -85,7 +85,7 @@ class ReconciliationTest extends GroovyTestCase {
             implementation: [state: 'in_progress', uncommitted: false],
             closeout: [tempo_logged: false, tempo_seconds: 0]
         ])
-        new File(workspace, 'worklog/interface/jira/jira.properties').setText(
+        new File(workspace, 'integrations/jira/jira.properties').setText(
             "jira.url=https://jira.example.test\njira.token=secret-token-value\n",
             'UTF-8'
         )
@@ -124,7 +124,7 @@ class ReconciliationTest extends GroovyTestCase {
 
     void testMalformedJiraResponseReturnsSystemError() {
         writeState([ticket_key: 'TEST-1', summary: 'Fixture'])
-        new File(workspace, 'worklog/interface/jira/jira.properties').setText(
+        new File(workspace, 'integrations/jira/jira.properties').setText(
             "jira.url=https://jira.example.test\njira.token=token\n",
             'UTF-8'
         )
@@ -139,7 +139,7 @@ class ReconciliationTest extends GroovyTestCase {
 
     void testMalformedTempoNonListReturnsSystemError() {
         writeState([ticket_key: 'TEST-1', summary: 'Fixture', created_at: '2026-01-01T00:00:00Z'])
-        new File(workspace, 'worklog/interface/jira/jira.properties').setText(
+        new File(workspace, 'integrations/jira/jira.properties').setText(
             "jira.url=https://jira.example.test\njira.token=token\n",
             'UTF-8'
         )
@@ -159,7 +159,7 @@ class ReconciliationTest extends GroovyTestCase {
 
     void testSystemFilterLimitsObservations() {
         writeState([ticket_key: 'TEST-1', summary: 'Fixture'])
-        new File(workspace, 'worklog/interface/jira/jira.properties').setText(
+        new File(workspace, 'integrations/jira/jira.properties').setText(
             "jira.url=https://jira.example.test\njira.token=token\n",
             'UTF-8'
         )

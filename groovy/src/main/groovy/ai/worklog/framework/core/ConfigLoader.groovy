@@ -18,7 +18,9 @@ class ConfigLoader {
     static Map load(File workspace) {
         File configDir = new File(workspace, '.ai-worklog')
         Map value = JsonFiles.deepMerge(defaults(), asMap(JsonFiles.read(new File(configDir, 'config.json'), [:])))
-        JsonFiles.deepMerge(value, asMap(JsonFiles.read(new File(configDir, 'local.json'), [:])))
+        Map merged = JsonFiles.deepMerge(value, asMap(JsonFiles.read(new File(configDir, 'local.json'), [:])))
+        merged.interface_path = null
+        merged
     }
 
     static Map asMap(Object value) {

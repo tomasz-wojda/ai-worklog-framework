@@ -357,7 +357,8 @@ def test_setup_init_dry_run_human(
     )
     _assert_parity_human(python, groovy, markers)
     assert python.returncode == 0
-    assert "Dry run only" in python.stdout
+    assert "pending actions" in python.stdout
+    assert "Re-run with --apply" in python.stdout
 
 
 def test_setup_init_apply_human(

@@ -6,7 +6,7 @@
     ".ai-worklog/evidence",
     "worklog",
     "worklog/done",
-    "worklog/interface"
+    "integrations"
   ],
   "files": [
     {
@@ -31,6 +31,6 @@
     "snow",
     "datadog"
   ],
-  "interface_path": "worklog/interface",
-  "managed_marker": ".managed-by-ai-worklog-framework"
+  "integrations_path": "integrations",
+  "legacy_interface_path": "worklog/interface"
 }

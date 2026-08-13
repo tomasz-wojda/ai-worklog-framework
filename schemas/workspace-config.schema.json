@@ -9,7 +9,8 @@
     },
     "interface_path": {
       "type": ["string", "null"],
-      "description": "Relative or absolute path to the service interface symlink hub"
+      "deprecated": true,
+      "description": "Deprecated compatibility field; integrations are always resolved from the workspace-root integrations directory"
     },
     "services": {
       "type": "object",

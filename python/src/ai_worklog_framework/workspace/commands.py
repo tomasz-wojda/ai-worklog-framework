@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from ai_worklog_framework.cli import EXIT_SUCCESS, EXIT_SYSTEM_ERROR, EXIT_USER_ERROR
+from ai_worklog_framework.cli import (
+    EXIT_BLOCKED,
+    EXIT_SUCCESS,
+    EXIT_SYSTEM_ERROR,
+    EXIT_USER_ERROR,
+)
 from ai_worklog_framework.global_config import (
     add_workspace,
     canonical_workspace_path,
@@ -101,15 +106,20 @@ def _run_init_revert(args) -> int:
 
     actions = plan_init(target) if args.workspace_action == "init" else plan_revert(target)
     applying = bool(args.apply)
-    for action in actions:
+    for conflict in actions.get("conflicts", []):
+        print(f"conflict: {conflict['path']} ({conflict['reason']})")
+    for action in actions["actions"]:
         print(format_action(action, applying))
 
     if not applying:
         print("Dry run only. Re-run with --apply to make changes.")
         return EXIT_SUCCESS
 
+    if actions.get("conflicts"):
+        return EXIT_BLOCKED
+
     try:
-        apply_plan(actions)
+        apply_plan(actions["actions"])
     except OSError as exc:
         print(f"Workspace operation failed: {exc}")
         return EXIT_SYSTEM_ERROR

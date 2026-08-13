@@ -1,5 +1,7 @@
 package ai.worklog.framework.core
 
+import ai.worklog.framework.core.JsonFiles
+
 class FrameworkPaths {
     final File root
     final File worklog
@@ -7,8 +9,18 @@ class FrameworkPaths {
     final File stateDir
     final File configDir
     final File catalogDir
+    final File integrationsDir
     final File interfaceDir
     final File promptLog
+
+    private static final Map WORKSPACE_LAYOUT = (Map) JsonFiles.read(
+        new File(resolveFrameworkRoot(), 'shared/workspace-init.json'),
+        [integrations_path: 'integrations', legacy_interface_path: 'worklog/interface']
+    )
+    private static final String INTEGRATIONS_PATH =
+        WORKSPACE_LAYOUT.integrations_path.toString()
+    private static final String LEGACY_INTERFACE =
+        WORKSPACE_LAYOUT.legacy_interface_path.toString()
 
     FrameworkPaths(File root) {
         this.root = root.canonicalFile
@@ -17,18 +29,23 @@ class FrameworkPaths {
         this.stateDir = new File(this.root, '.ai-worklog/state')
         this.configDir = new File(this.root, '.ai-worklog')
         this.catalogDir = new File(this.root, '.ai-worklog/catalog')
-        this.interfaceDir = new File(worklog, 'interface')
+        this.integrationsDir = new File(this.root, INTEGRATIONS_PATH)
+        this.interfaceDir = integrationsDir
         this.promptLog = new File(this.root, 'prompt.log')
     }
 
     File serviceDir(String service) {
         validateComponent(service, 'service')
-        File interfacePath = new File(interfaceDir, service)
-        if (interfacePath.exists()) {
-            return interfacePath
+        File canonical = new File(integrationsDir, service)
+        if (canonical.exists()) {
+            return canonical
+        }
+        File legacy = new File(root, "${LEGACY_INTERFACE}/${service}")
+        if (legacy.exists()) {
+            return legacy
         }
         File rootPath = new File(root, service)
-        rootPath.exists() ? rootPath : interfacePath
+        rootPath.exists() ? rootPath : canonical
     }
 
     File ticketStateFile(String key) {

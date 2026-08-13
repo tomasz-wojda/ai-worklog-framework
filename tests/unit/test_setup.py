@@ -257,7 +257,9 @@ class TestSetupCommands:
             apply=False,
         )
         assert setup_commands.run_init(args) == 0
-        assert "Dry run only" in capsys.readouterr().out
+        output = capsys.readouterr().out
+        assert "pending actions" in output
+        assert "Re-run with --apply" in output
 
         args.apply = True
         assert setup_commands.run_init(args) == 0

@@ -122,17 +122,10 @@ def load_config(workspace_root: Path) -> Config:
     if not catalog_path.is_absolute():
         catalog_path = workspace_root / catalog_path
 
-    interface_raw = merged.get("interface_path")
-    interface_path = None
-    if interface_raw:
-        interface_path = Path(interface_raw)
-        if not interface_path.is_absolute():
-            interface_path = workspace_root / interface_path
-
     return Config(
         workspace_root=workspace_root,
         catalog_path=catalog_path,
-        interface_path=interface_path,
+        interface_path=None,
         services=merged.get("services", {}),
         adapters=merged.get("adapters", {}),
         preflight=merged.get("preflight", {}),

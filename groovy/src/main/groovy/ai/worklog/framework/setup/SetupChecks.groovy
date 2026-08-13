@@ -5,7 +5,9 @@ import ai.worklog.framework.commands.PreflightCommands
 import ai.worklog.framework.commands.ToolchainCommands
 import ai.worklog.framework.core.CheckResult
 import ai.worklog.framework.core.ConfigLoader
+import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.FrameworkPaths
+import ai.worklog.framework.workspace.WorkspacePlanner
 import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.ResultSet
 import ai.worklog.framework.core.Status
@@ -63,6 +65,20 @@ class SetupChecks {
             checks << check(Status.BLOCKED.value, 'structure', "Missing: ${missing.join(', ')}")
         } else {
             checks << check(Status.READY.value, 'structure', 'Workspace structure present')
+        }
+
+        if (!paths.integrationsDir.isDirectory()) {
+            checks << check(Status.DEGRADED.value, 'integrations', 'integrations/ missing')
+        } else {
+            checks << check(Status.READY.value, 'integrations', 'Integration hub present')
+        }
+        Map workspaceRules = (Map) JsonFiles.read(
+            new File(frameworkRoot, 'shared/workspace-init.json'),
+            [:]
+        )
+        String legacyMessage = WorkspacePlanner.legacyIntegrationStatus(workspace, workspaceRules)
+        if (legacyMessage) {
+            checks << check(Status.DEGRADED.value, 'integrations', legacyMessage)
         }
 
         List runtimeSelection = SetupResolver.resolveRuntimeSelection()

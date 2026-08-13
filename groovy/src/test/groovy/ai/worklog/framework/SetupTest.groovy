@@ -345,7 +345,8 @@ class SetupTest extends GroovyTestCase {
                 '--ai-vault', vault.path
             ]))
         }
-        assertTrue(dryRun.contains('Dry run only'))
+        assertTrue(dryRun.contains('pending actions'))
+        assertTrue(dryRun.contains('Re-run with --apply'))
 
         captureOutput {
             assertEquals(0, Main.execute([

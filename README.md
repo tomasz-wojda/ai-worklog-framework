@@ -65,7 +65,7 @@ ai-worklog-framework/
 ```
 
 The runtime workspace is not versioned by this repository. The framework reads
-existing service interfaces and stores runtime state under
+existing service integrations and stores runtime state under
 `<workspace>/.ai-worklog/`.
 
 The Groovy and Python implementations expose the same command tree and consume
@@ -133,7 +133,7 @@ runtime selection. The Python package installs the fallback command as
 ## Workspace Setup
 
 Workspace initialization creates the runtime directories, seeds configuration,
-and links existing service directories under `worklog/interface/`. It never
+and links existing service directories under `integrations/`. It never
 reads credential contents or overwrites existing targets.
 
 Preview all operations:
@@ -155,7 +155,7 @@ ai-worklog workspace revert /absolute/path/to/workspace --apply
 ```
 
 The legacy `scripts/bootstrap.sh` interface remains available as a compatibility
-wrapper. The following service interfaces are supported:
+wrapper. The following service integrations are supported:
 
 ```
 jira newrelic aws eks jenkins github argocd artifactory ssh snow datadog

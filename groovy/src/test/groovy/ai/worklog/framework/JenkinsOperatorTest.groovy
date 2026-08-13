@@ -21,15 +21,26 @@ import groovy.test.GroovyTestCase
 class JenkinsOperatorTest extends GroovyTestCase {
     private File repository
     private File workspace
+    private File home
+    private String originalTestHome
 
     void setUp() {
         repository = new File('..').canonicalFile
         workspace = File.createTempDir('ai-worklog-jenkins-', '-test')
-        new File(workspace, 'worklog/interface/jenkins').mkdirs()
+        home = File.createTempDir('ai-worklog-jenkins-home-', '-test')
+        originalTestHome = System.getProperty('ai.worklog.test.home')
+        System.setProperty('ai.worklog.test.home', home.path)
+        new File(workspace, 'integrations/jenkins').mkdirs()
     }
 
     void tearDown() {
+        if (originalTestHome) {
+            System.setProperty('ai.worklog.test.home', originalTestHome)
+        } else {
+            System.clearProperty('ai.worklog.test.home')
+        }
         workspace.deleteDir()
+        home.deleteDir()
     }
 
     void testEncodeJobPathNested() {
@@ -38,7 +49,7 @@ class JenkinsOperatorTest extends GroovyTestCase {
 
     void testControllerPublicInfoRedactsSecrets() {
         writeProperties('primary.url=https://jenkins.example\nprimary.user=bot\nprimary.token=secret-token\n')
-        Map controllers = PropertiesSupport.controllers(new File(workspace, 'worklog/interface/jenkins/jenkins.properties'))
+        Map controllers = PropertiesSupport.controllers(new File(workspace, 'integrations/jenkins/jenkins.properties'))
         List publicInfo = JenkinsAdapter.controllerPublicInfo(controllers)
         assertEquals([[id: 'primary', url: 'https://jenkins.example', has_user: true, has_token: true]], publicInfo)
         assertFalse JsonOutputWrapper.json(publicInfo).contains('secret-token')
@@ -689,7 +700,7 @@ class JenkinsOperatorTest extends GroovyTestCase {
     }
 
     private void writeProperties(String content) {
-        new File(workspace, 'worklog/interface/jenkins/jenkins.properties').setText(content, 'UTF-8')
+        new File(workspace, 'integrations/jenkins/jenkins.properties').setText(content, 'UTF-8')
     }
 
     private static String defaultProperties() {
