@@ -246,7 +246,7 @@ class PreflightCommands {
         Map javaRuntimes = ToolchainCommands.detectJava(toolchain)
         Map groovyRuntimes = ToolchainCommands.detectGroovy(toolchain)
 
-        String python = ToolchainCommands.commandVersion(['python3', '--version'])
+        String python = ToolchainCommands.detectPythonVersion()
         results.add(new CheckResult(
             status: python ? Status.READY : Status.BLOCKED,
             source: 'python3',
