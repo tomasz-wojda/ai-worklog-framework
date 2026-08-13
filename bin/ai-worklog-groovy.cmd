@@ -27,5 +27,5 @@ if %ERRORLEVEL% neq 0 (
 
 :: Execute Groovy Main script with passed arguments
 if not defined JAVA_OPTS set "JAVA_OPTS=-Dfile.encoding=UTF-8"
-%GROOVY_EXEC% -cp "%ROOT%\groovy\src\main\groovy" "%ROOT%\groovy\src\main\groovy\ai\worklog\framework\Main.groovy" %*
+call %GROOVY_EXEC% -cp "%ROOT%\groovy\src\main\groovy" "%ROOT%\groovy\src\main\groovy\ai\worklog\framework\Main.groovy" %*
 exit /b %ERRORLEVEL%
