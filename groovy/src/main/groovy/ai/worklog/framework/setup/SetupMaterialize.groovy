@@ -140,7 +140,18 @@ class SetupMaterialize {
             if (Files.isSymbolicLink(target.toPath()) || target.exists()) {
                 Files.delete(target.toPath())
             }
-            Files.createSymbolicLink(target.toPath(), source.canonicalFile.toPath())
+            try {
+                Files.createSymbolicLink(target.toPath(), source.canonicalFile.toPath())
+            } catch (Exception exc) {
+                if (System.getProperty('os.name')?.toLowerCase()?.contains('win')) {
+                    Process proc = new ProcessBuilder('cmd.exe', '/c', 'mklink', '/J', target.absolutePath, source.canonicalFile.absolutePath).start()
+                    if (proc.waitFor() != 0) {
+                        throw exc
+                    }
+                } else {
+                    throw exc
+                }
+            }
             return
         }
         if (kind == 'copy') {

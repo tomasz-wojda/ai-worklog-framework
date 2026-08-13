@@ -186,6 +186,9 @@ def build_parser() -> argparse.ArgumentParser:
     config_runtime = config_sub.add_parser("runtime", help="Show or set default runtime")
     config_runtime.add_argument("runtime", nargs="?")
     config_runtime.add_argument("--json", action="store_true")
+    config_vault = config_sub.add_parser("set-ai-vault-root", help="Set AI vault root path")
+    config_vault.add_argument("path", help="AI vault root path")
+    config_vault.add_argument("--json", action="store_true")
 
     # catalog
     catalog_parser = subparsers.add_parser("catalog", help="Service catalog operations", parents=[parent_parser])

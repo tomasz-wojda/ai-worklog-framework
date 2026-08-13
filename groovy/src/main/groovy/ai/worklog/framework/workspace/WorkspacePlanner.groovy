@@ -64,8 +64,9 @@ class WorkspacePlanner {
         ((List) rules.services).collect { service ->
             File target = new File(interfaceDir, service.toString())
             Path expected = Paths.get('../..', service.toString())
-            boolean managed = Files.isSymbolicLink(target.toPath()) &&
-                Files.readSymbolicLink(target.toPath()) == expected
+            boolean managed = (Files.isSymbolicLink(target.toPath()) || target.exists()) &&
+                (Files.isSymbolicLink(target.toPath()) && Files.readSymbolicLink(target.toPath()) == expected ||
+                 target.canonicalFile == new File(workspace, service.toString()).canonicalFile)
             [
                 kind: 'unlink',
                 target: target,
@@ -92,7 +93,19 @@ class WorkspacePlanner {
                     break
                 case 'symlink':
                     Files.createDirectories(target.parentFile.toPath())
-                    Files.createSymbolicLink(target.toPath(), (Path) action.source)
+                    try {
+                        Files.createSymbolicLink(target.toPath(), (Path) action.source)
+                    } catch (Exception exc) {
+                        if (System.getProperty('os.name')?.toLowerCase()?.contains('win')) {
+                            File absoluteSource = new File(target.parentFile, action.source.toString()).canonicalFile
+                            Process proc = new ProcessBuilder('cmd.exe', '/c', 'mklink', '/J', target.absolutePath, absoluteSource.absolutePath).start()
+                            if (proc.waitFor() != 0) {
+                                throw exc
+                            }
+                        } else {
+                            throw exc
+                        }
+                    }
                     break
                 case 'unlink':
                     Files.delete(target.toPath())

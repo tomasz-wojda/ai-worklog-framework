@@ -1,11 +1,16 @@
 import json
 import os
 import re
+import sys
 import tempfile
-import fcntl
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 from ai_worklog_framework.shared import load_shared
 
@@ -220,11 +225,20 @@ def global_config_lock():
     lock_path = home / ".config.lock"
     with lock_path.open("a+", encoding="utf-8") as handle:
         os.chmod(lock_path, 0o600)
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        if sys.platform == "win32":
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def save_global_config(config: dict[str, Any]) -> dict[str, Any]:

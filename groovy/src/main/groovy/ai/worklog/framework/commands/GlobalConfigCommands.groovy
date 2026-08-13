@@ -7,7 +7,7 @@ class GlobalConfigCommands {
     static int run(String action, List<String> args, File frameworkRoot) {
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
         if (!action) {
-            println 'Usage: ai-worklog config {show|runtime}'
+            println 'Usage: ai-worklog config {show|runtime|set-ai-vault-root}'
             return exitCodes.userError
         }
         List<String> remaining = new ArrayList<>(args)
@@ -24,8 +24,13 @@ class GlobalConfigCommands {
                         throw new IllegalArgumentException('Unexpected arguments for config runtime')
                     }
                     return render(GlobalConfig.setRuntime(remaining[0]), json, exitCodes)
+                case 'set-ai-vault-root':
+                    if (!remaining) {
+                        throw new IllegalArgumentException('Missing path for set-ai-vault-root')
+                    }
+                    return render(GlobalConfig.setAiVaultRoot(remaining[0]), json, exitCodes)
                 default:
-                    println 'Usage: ai-worklog config {show|runtime}'
+                    println 'Usage: ai-worklog config {show|runtime|set-ai-vault-root}'
                     return exitCodes.userError
             }
         } catch (IllegalArgumentException exception) {
@@ -57,6 +62,7 @@ class GlobalConfigCommands {
                 println "Global configuration (${GlobalConfig.configFile().path}):"
                 println "  version: ${payload.version}"
                 println "  runtime: ${payload.runtime}"
+                println "  AI Vault root: ${payload.ai_vault_root ?: 'none'}"
                 println "  default workspace: ${payload.default_workspace ?: 'none'}"
                 if (payload.workspaces) {
                     println '  workspaces:'
@@ -69,6 +75,9 @@ class GlobalConfigCommands {
                 break
             case 'runtime':
                 println "Runtime: ${payload.runtime}"
+                break
+            case 'ai_vault_root':
+                println "AI Vault Root: ${payload.ai_vault_root ?: 'none'}"
                 break
         }
     }

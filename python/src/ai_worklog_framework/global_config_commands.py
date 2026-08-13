@@ -22,6 +22,7 @@ def _render_human(payload: dict) -> None:
         print(f"Global configuration ({config_file_path()}):")
         print(f"  version: {payload['version']}")
         print(f"  runtime: {payload['runtime']}")
+        print(f"  AI Vault root: {payload.get('ai_vault_root') or 'none'}")
         print(f"  default workspace: {payload.get('default_workspace') or 'none'}")
         if payload.get("workspaces"):
             print("  workspaces:")
@@ -34,6 +35,8 @@ def _render_human(payload: dict) -> None:
             print("  workspaces: none")
     elif operation == "runtime":
         print(f"Runtime: {payload['runtime']}")
+    elif operation == "ai_vault_root":
+        print(f"AI Vault Root: {payload.get('ai_vault_root') or 'none'}")
 
 
 def _render(payload: dict, json: bool) -> int:
@@ -56,16 +59,19 @@ def run(args) -> int:
     action = args.config_action
     json = bool(getattr(args, "json", False))
     if not action:
-        print("Usage: ai-worklog config {show|runtime}")
+        print("Usage: ai-worklog config {show|runtime|set-ai-vault-root}")
         return EXIT_USER_ERROR
     try:
         if action == "show":
             return _render(show_configuration(), json)
         if action == "runtime":
-            if args.runtime is None:
+            if getattr(args, "runtime", None) is None:
                 return _render(show_runtime(), json)
             return _render(set_runtime(args.runtime), json)
-        print("Usage: ai-worklog config {show|runtime}")
+        if action == "set-ai-vault-root":
+            from ai_worklog_framework.global_config import set_ai_vault_root
+            return _render(set_ai_vault_root(getattr(args, "path", None)), json)
+        print("Usage: ai-worklog config {show|runtime|set-ai-vault-root}")
         return EXIT_USER_ERROR
     except ValueError as exc:
         return _handle_error(action, json, exc)
