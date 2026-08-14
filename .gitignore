@@ -24,7 +24,6 @@ ENV/
 
 /worklog/
 /prompt.log
-/upgrade-plan
 *.log.bak
 
 /aws/
