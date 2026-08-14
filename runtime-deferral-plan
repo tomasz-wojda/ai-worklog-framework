@@ -1,0 +1,309 @@
+# Python Runtime Gating, Windows Unship, and 1.0.0 Supported Surface
+
+Status: approved, not yet implemented
+Created: 2026-08-15
+
+## Decisions in force
+
+- Gate the Python runtime at dispatch only
+- Narrow `disabled_runtimes` list as the single lever
+- Version 1.0.0
+- No drift guard for the frozen Python tree
+- Windows launchers unshipped but retained
+- Parity suite skipped, not deleted
+- The `python/` tree is frozen
+
+A consequence of the dispatch-only choice, which supersedes the earlier
+"hard error at load" phrasing: the persisted value `python` continues to
+validate and load normally in every code path. The refusal happens only where a
+Python process would be started. This means no file under `python/src/` is
+modified by this plan, which is what keeps the tree genuinely frozen.
+
+## 1. The gate lever
+
+### 1.1 Modified: `shared/global-config-rules.json`
+
+Add a top-level key `disabled_runtimes` with value `["python"]`, placed
+immediately after `supported_runtimes`.
+
+This is the single authoritative list. Re-enabling Python later is the act of
+emptying this array.
+
+`supported_runtimes` is not changed. `python` remains a valid, loadable
+configuration value, which is what preserves recoverability.
+
+### 1.2 Not modified
+
+`schemas/global-config.schema.json` keeps `"enum": ["groovy", "python"]`.
+Narrowing it would reject existing configuration files at validation time,
+reintroducing the deadlock.
+
+No file under `python/src/ai_worklog_framework/` is touched, including
+`global_config.py`, `setup/resolver.py`, `setup/commands.py`, and `cli.py`.
+Their internal `SUPPORTED_RUNTIMES` handling is left exactly as it stands.
+
+## 2. Dispatch refusal
+
+### 2.1 Modified: `bin/ai-worklog`
+
+Add a helper `_read_disabled_runtimes` following the existing
+`_read_config_runtime` structure: attempt the Python one-liner first, fall back
+to a Groovy one-liner, both reading `disabled_runtimes` from
+`shared/global-config-rules.json` and printing it space-separated. On total
+failure it prints nothing and returns success, so an unreadable rules file
+never blocks the Groovy path.
+
+Insert the gate in the `case "$RUNTIME"` block at lines 92–103, evaluated only
+when `$RUNTIME` is not `groovy`. This keeps the hot path free of any additional
+subprocess.
+
+When the resolved runtime appears in the disabled list, print to stderr, in
+this order:
+
+- a first line naming the runtime and stating it is disabled in this build
+- a second line stating the source of the selection, distinguishing `--runtime`, `AI_WORKLOG_RUNTIME`, and the persisted global configuration
+- a third line giving the literal recovery command `ai-worklog --runtime groovy config runtime groovy`, shown only when the selection came from persisted configuration
+
+Exit with the user-error code 1.
+
+The recovery command works because an explicit `--runtime` is parsed before any
+configuration is read, and `groovy` is not in the disabled list.
+
+### 2.2 Modified: `bin/ai-worklog-python`
+
+Direct invocation currently bypasses the dispatcher entirely. Add a guard at
+the top of the script, after `ROOT` is established, that reads the disabled
+list using the same Groovy-then-Python fallback pattern and, when `python` is
+listed, prints the same refusal message shape and exits 1 before any
+interpreter is selected.
+
+### 2.3 Modified: `bin/ai-worklog-groovy`
+
+Line 27 currently reads `Groovy is required for the default runtime. Use
+--runtime python as fallback.` Replace the second sentence so it no longer
+advertises a disabled runtime; the message must state only that Groovy is
+required and name the `AI_WORKLOG_GROOVY` and `AI_WORKLOG_JAVA_HOME`
+overrides.
+
+## 3. Refusing to create a new deadlock
+
+Setting a disabled runtime is refused at the command level in the Groovy
+implementation, while validation of an already-persisted value continues to
+succeed. This prevents users from writing themselves into the broken state
+going forward, without invalidating configurations that already exist.
+
+### 3.1 Modified: `groovy/src/main/groovy/ai/worklog/framework/core/GlobalConfig.groovy`
+
+- Add a constant `DISABLED_RUNTIMES` derived from `RULES.disabled_runtimes`, defaulting to an empty set, alongside `ALLOWED_RUNTIMES` at line 18
+- Add `disabled_runtimes` with default `['python']` to the inline fallback map inside `loadRules` at line 635
+- In `setRuntime` at line 429, after the existing `ALLOWED_RUNTIMES` check, raise `IllegalArgumentException` when the requested runtime is in `DISABLED_RUNTIMES`, with a message naming the runtime as disabled in this build
+- `validate` at line 96 is not changed, so loading a persisted `python` value still succeeds
+
+### 3.2 Modified: `groovy/src/main/groovy/ai/worklog/framework/setup/SetupResolver.groovy`
+
+In `validateRuntime` at line 81, return false when the runtime is in
+`GlobalConfig.DISABLED_RUNTIMES`. This causes `setup init --runtime python` to
+fail through the existing `Runtime unavailable` path in `SetupCommands.groovy`
+at line 100, with no change needed in the command file.
+
+## 4. Parity suite skip
+
+### 4.1 New file: `tests/parity/conftest.py`
+
+Reads `shared/global-config-rules.json` relative to the repository root and
+exposes a module-level helper that raises `pytest.skip` with
+`allow_module_level=True` when `python` is present in `disabled_runtimes`. The
+skip reason must name the disabled runtime and state that the suite re-enables
+automatically when the list is emptied.
+
+Visible skips are required rather than `collect_ignore`, so the deferral is
+reported on every run instead of disappearing silently.
+
+### 4.2 Modified: the four parity modules
+
+Add the module-level guard call immediately after the imports in each of
+`tests/parity/test_cli_parity.py`, `tests/parity/test_global_config_parity.py`,
+`tests/parity/test_jenkins_parity.py`, and `tests/parity/test_setup_parity.py`.
+
+No test bodies, assertions, or the 127 Python launcher call sites are modified
+or deleted.
+
+### 4.3 Not modified
+
+`tests/unit/` is left entirely alone. Those tests import the frozen Python
+package directly and continue to pass; they are not parity tests and are not
+gated.
+
+## 5. Windows unship
+
+No Windows code is deleted. The eleven inline Windows branches across
+`WorkspacePlanner.groovy`, `SetupMaterialize.groovy`,
+`DiagnosticExecutor.groovy`, `ToolchainCommands.groovy`,
+`PreflightCommands.groovy`, `GitHubAdapter.groovy`, and `ArgoCdAdapter.groovy`
+remain untouched.
+
+### 5.1 Modified: the four Windows launchers
+
+Add an identical support-notice comment block at the top of
+`bin/ai-worklog.cmd`, `bin/ai-worklog.ps1`, `bin/ai-worklog-groovy.cmd`, and
+`bin/ai-worklog-groovy.ps1`, using each file's native comment syntax. The block
+must state three things: that the Windows entry points are unsupported and
+unmaintained as of 1.0.0, that they are retained deliberately rather than
+abandoned, and the location of the re-enablement notes in `upgrade-plan`.
+
+The notice is a comment only. No behavioural change, no runtime banner, no
+exit-code change.
+
+### 5.2 Verification step
+
+Inspect `bin/ai-worklog.cmd` and `bin/ai-worklog.ps1` for a known-command list
+equivalent to the Bash `KNOWN_COMMANDS`. If present, it is left unsynchronised
+with any new subcommand, and that divergence is recorded in the deferred
+section rather than fixed.
+
+## 6. Version and supported surface
+
+### 6.1 Modified: `groovy/src/main/groovy/ai/worklog/framework/Main.groovy`
+
+Change the `VERSION` constant at line 24 from `0.7.0` to `1.0.0`.
+
+### 6.2 Frozen version strings
+
+Any version string carried by `python/pyproject.toml` is left at its current
+value, since the Python package is frozen and is not part of the 1.0.0
+surface. This divergence is recorded in the deferred section.
+
+## 7. `upgrade-plan` restructure
+
+### 7.1 Corrections to existing content
+
+- Line 3: update the `Last audited` date
+- Line 16: change the responsibilities statement so the framework owns runtime dispatch rather than runtime parity
+- Line 28: replace the Python fallback claim with a statement that Groovy is the only dispatchable runtime and Python is deferred
+- Line 31: mark cross-runtime parity coverage as deferred rather than implemented
+- Line 52: correct the supported IDE list to `antigravity, claude, cursor`, matching `shared/setup-rules.json`
+- Line 98: restate the persisted runtime preference as Groovy only
+- Lines 272–277: restate the post-roadmap completion paragraphs so "complete in both runtimes" becomes complete in the Groovy runtime with Python frozen
+- Lines 310–311: replace the superseded-assumption note with the current position
+- Lines 318–321: move the nine unit and fifteen parity Windows failures out of Known Limitations, marking them dormant rather than outstanding
+- Line 322: resolve the stale note about the README requirements section once section 8 is applied
+- Continuation Procedure step 3 at line 331: remove the instruction to run the Python and parity suites, leaving the Groovy and ai-vault suites
+
+### 7.2 Restated verification baseline
+
+Replace the baseline block at lines 281–286 with a Groovy-only baseline: the
+Groovy unit test count on macOS, an explicit statement that the 259 Python unit
+tests still pass against the frozen tree but are not part of the release gate,
+and that the 186 parity assertions are skipped by design. The limitations list
+keeps the note that no CI enforces the baseline.
+
+### 7.3 New section: `## Deferred Capabilities and Re-enablement`
+
+Placed immediately before `## Known Limitations and Superseded Assumptions`.
+
+An introductory paragraph stating that each entry below was deferred
+deliberately to shorten the path to production on the Groovy runtime, and that
+each records its own restore procedure.
+
+Three subsections, each with the same four headings — *What was deferred*,
+*Why*, *Exact restore steps*, *Known restoration cost*:
+
+**Python runtime.** Restore steps: empty `disabled_runtimes` in
+`shared/global-config-rules.json`; verify `ai-worklog --runtime python
+--version`; reinstall the editable package. Cost: the frozen tree has drifted
+from any shared-contract changes made since the deferral, and no guard detects
+this, so every shared JSON file changed in the interim must be reviewed against
+the Python implementation by hand.
+
+**Windows support.** Restore steps: remove the notice blocks from the four
+launchers; resynchronise any known-command list found in step 5.2; restore the
+Windows entries to the verification baseline. Cost: the nine unit and fifteen
+parity Windows failures were dormant, not fixed, and return unchanged; the
+Groovy Windows branches were retained and require no work.
+
+**Cross-runtime parity suite.** Restore steps: emptying `disabled_runtimes`
+re-enables the suite automatically through `tests/parity/conftest.py`; no test
+edits are required. Cost: features added to Groovy during the deferral have no
+Python counterpart, so parity failures on re-enablement are expected and
+enumerate the porting backlog.
+
+### 7.4 Automox entry
+
+Add Automox to Implemented Capabilities once `automox-module-plan` is executed,
+and record in Known Limitations that the module is Groovy-only with no Python
+implementation and no parity coverage. This overlaps with checklist step 25 of
+that plan; whichever plan runs second satisfies it.
+
+## 8. `README.md`
+
+- Line 17: annotate the `ai-worklog-python` tree entry as deferred
+- Lines 31–32 and 46–47: annotate the `python/` and `tests/parity/` tree entries as frozen and skipped respectively
+- Lines 71–73: replace the dual-runtime paragraph with a statement that Groovy is the only dispatchable runtime, that the Python implementation is retained frozen, and a pointer to the upgrade-plan deferred section
+- Line 77: leave `macOS or Linux` as the supported platform line, and add an explicit sentence that Windows entry points ship but are unsupported as of 1.0.0
+- Line 80: restate the Python requirement as optional and needed only for the frozen tree
+- Lines 101–115: remove the `--runtime python` and `AI_WORKLOG_RUNTIME=python` selection examples; keep the explicit `--runtime groovy` form
+- Line 122: remove the `config runtime python` example
+- Lines 129–131: restate the direct-launcher paragraph so `ai-worklog-python` is described as present but refusing to run
+- Lines 446–453: restate the validation section around the Groovy suite as the release gate, noting the Python and parity commands as deferred
+- Add a short `## Supported Surface` section stating: Groovy runtime, macOS and Linux, version 1.0.0, with Python and Windows deferred and pointers to the upgrade-plan section
+
+## 9. Tests for the gate
+
+### 9.1 Modified: `groovy/src/test/groovy/ai/worklog/framework/GlobalConfigTest.groovy`
+
+Add cases proving that `setRuntime('python')` raises with a disabled message;
+that `validate` still accepts a configuration whose persisted runtime is
+`python`; and that `load` returns that value unchanged.
+
+### 9.2 Modified: `groovy/src/test/groovy/ai/worklog/framework/SetupTest.groovy`
+
+Add a case proving `setup init --runtime python` fails through the
+`Runtime unavailable` path.
+
+### 9.3 Shell-level verification
+
+Manual, recorded in the release notes rather than automated: with a persisted
+`python` runtime, confirm that a bare command refuses with the recovery line,
+that the printed recovery command succeeds, and that `bin/ai-worklog-python`
+invoked directly refuses.
+
+## 10. Sequencing with the Automox plan
+
+The two plans are independent except at two points. The Automox plan's step 19
+inspects the Windows launchers, and this plan's step 5.1 adds notices to them;
+running this plan first means the Automox inspection sees the final file state.
+The Automox plan's step 25 and this plan's section 7.4 both edit
+`upgrade-plan`. Recommended order is this plan first, then Automox.
+
+IMPLEMENTATION CHECKLIST:
+
+1. Add the `disabled_runtimes` key with value `["python"]` to `shared/global-config-rules.json` after `supported_runtimes`.
+2. Add the `_read_disabled_runtimes` helper to `bin/ai-worklog`, mirroring the existing `_read_config_runtime` fallback structure.
+3. Add the non-groovy-only gate to the `case "$RUNTIME"` block in `bin/ai-worklog`, emitting the three-line refusal and exiting 1.
+4. Add the direct-invocation guard to the top of `bin/ai-worklog-python`.
+5. Replace the Python-fallback sentence in the error message at line 27 of `bin/ai-worklog-groovy`.
+6. Add the `DISABLED_RUNTIMES` constant to `GlobalConfig.groovy` beside `ALLOWED_RUNTIMES`.
+7. Add `disabled_runtimes` defaulting to `['python']` to the inline fallback map in `GlobalConfig.loadRules`.
+8. Add the disabled-runtime rejection to `GlobalConfig.setRuntime`, leaving `validate` unchanged.
+9. Add the `DISABLED_RUNTIMES` check to `SetupResolver.validateRuntime`.
+10. Create `tests/parity/conftest.py` with the shared-rules-driven module-level skip helper.
+11. Add the module-level guard call to `tests/parity/test_cli_parity.py`.
+12. Add the module-level guard call to `tests/parity/test_global_config_parity.py`.
+13. Add the module-level guard call to `tests/parity/test_jenkins_parity.py`.
+14. Add the module-level guard call to `tests/parity/test_setup_parity.py`.
+15. Add the support-notice comment block to `bin/ai-worklog.cmd`.
+16. Add the support-notice comment block to `bin/ai-worklog.ps1`.
+17. Add the support-notice comment block to `bin/ai-worklog-groovy.cmd`.
+18. Add the support-notice comment block to `bin/ai-worklog-groovy.ps1`.
+19. Inspect the two Windows dispatchers for a known-command list and record any divergence for step 27.
+20. Change `VERSION` in `Main.groovy` from `0.7.0` to `1.0.0`.
+21. Add the disabled-runtime cases to `GlobalConfigTest.groovy`.
+22. Add the `setup init --runtime python` rejection case to `SetupTest.groovy`.
+23. Run the Groovy test suite and resolve failures.
+24. Run the Python unit suite to confirm the frozen tree is unaffected, and confirm the parity suite reports skips rather than failures.
+25. Apply the line-level corrections to `upgrade-plan` listed in section 7.1.
+26. Replace the verification baseline block in `upgrade-plan` per section 7.2.
+27. Add the `Deferred Capabilities and Re-enablement` section to `upgrade-plan` per section 7.3, including the divergences from steps 19 and 6.2.
+28. Apply the `README.md` changes listed in section 8, including the new `Supported Surface` section.
+29. Perform the three manual shell verifications from section 9.3 and record the results.
+30. Append this planning session to `prompt.log` with a timestamp.

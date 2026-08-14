@@ -1,0 +1,347 @@
+# Automox Operator Module Plan
+
+Status: approved, not yet implemented
+Created: 2026-08-15
+
+## Scope
+
+Read-only Automox API surface plus two API write operations behind a
+dry-run/`--apply` gate. Credentials keyed by profile. Groovy runtime only,
+consistent with the Groovy-only route recorded in `runtime-deferral-plan`.
+No Python implementation and no parity tests, per the frozen-Python decision.
+
+Out of scope for this pass: Automox SSH agent operations, batch enrollment,
+and the `setup-agents.sh` wrappers.
+
+## 1. Shared contracts
+
+### 1.1 New file: `shared/automox-operator-rules.json`
+
+Non-secret, versioned, single source for both the adapter and reports.
+
+Top-level keys:
+
+- `api_base_url` — default `https://console.automox.com/api`
+- `timeouts` — object with `http_seconds` (default 10) and `process_seconds` (default 15)
+- `limits` — object with `devices_default` 500, `devices_max` 500, `groups_default` 500, `groups_max` 500, `policies_default` 500, `policies_max` 500, `packages_preview` 30
+- `api_paths` — object mapping logical operation to path template with `{}` placeholders: `orgs`, `servers`, `server`, `server_packages`, `server_groups`, `policies`, `policy`, `policy_stats`
+- `schedule` — object with `day_bits` (map of bit value to day name: 1 Sun, 2 Mon, 4 Tue, 8 Wed, 16 Thu, 32 Fri, 64 Sat), `week_bits` (weeks 1–5 as 2^(n-1)), `all_months_value` 8190
+- `policy_update` — object with `required_fields` (ordered list: `name`, `organization_id`, `policy_type_name`, `configuration`, `schedule_days`, `schedule_weeks_of_month`, `schedule_months`, `schedule_time`, `notes`, `server_groups`), `rename_suffix` `-TMP`, `success_codes` `[200, 204]`
+- `device_move` — object with `success_codes` `[200, 204]`
+- `unreliable_fields` — list containing `next_remediation`, used to annotate report output
+- `default_profile` — `default`
+
+### 1.2 New file: `schemas/automox-operator-report.schema.json`
+
+Modelled on `schemas/jenkins-operator-report.schema.json`.
+
+- `required`: `operation`, `fetched_at`, `status`, `items`
+- `operation` enum: `profiles`, `auth-test`, `orgs`, `groups`, `group`, `devices`, `device`, `policies`, `policy`, `policy-stats`, `device-move`, `policy-add-group`
+- `status` enum: `ready`, `degraded`, `blocked`, `error`, `unknown` (unchanged)
+- `fetched_at`: string, date-time
+- Optional string properties: `profile`, `org`, `message`, `query`, `group`, `device`, `policy`
+- Optional object property `schedule` with properties `days` (array of string), `weeks_of_month` (array of integer), `time` (string), `use_scheduled_timezone` (boolean), `next_remediation_reliable` (boolean); `additionalProperties` false
+- Optional object property `change` with properties `applied` (boolean), `dry_run` (boolean), `from` (string), `to` (string), `steps` (array of object); `additionalProperties` false
+- `items`: array of object
+- `additionalProperties` false
+
+### 1.3 Modified: `shared/workspace-init.json`
+
+Add `"automox"` to the `services` array, positioned alphabetically after
+`artifactory` and before `datadog`, matching the existing list style.
+
+### 1.4 Modified: `shared/preflight-checks.json`
+
+Add entry `"automox": ["automox"]` to `service_checks`.
+
+### 1.5 Modified: `shared/redaction-patterns.json`
+
+The current `sensitive_key_pattern` does not match `enrollment_key` or
+`setkey`, so those values would render in cleartext.
+
+- Extend `sensitive_key_pattern` alternation with `enrollment_key`, `setkey`, `accesskey`, `access_key`
+- Append to `sensitive_value_patterns` a pattern matching `accesskey=` query values, in the same shape as the existing `(?i)(token|api_key|apikey|password|secret)=[^&\s]+` entry
+
+## 2. Credential resolution
+
+### 2.1 New file: `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxCredentials.groovy`
+
+Responsible for producing a resolved profile and for guaranteeing that no
+secret leaves it except through explicit accessor methods.
+
+Resolution precedence per field, highest first:
+
+1. Environment variables: `AUTOMOX_API_TOKEN`, `AUTOMOX_ENROLLMENT_KEY`, `AUTOMOX_ORG`, `AUTOMOX_API_BASE_URL`
+2. Profile entry in `integrations/automox/automox.properties`
+3. Legacy files in `integrations/automox/`: `token` and `server-id`
+4. Shared-rules or workspace-config defaults for non-secret fields only
+
+Profile selection precedence: `--profile` option, then `AUTOMOX_PROFILE`, then
+`adapters.automox.default_profile` from workspace config, then
+`default_profile` from shared rules.
+
+Properties file format, parsed by the existing `PropertiesSupport.load` and
+grouped by the existing `PropertiesSupport.controllers` prefix-splitting
+behaviour. Recognised fields per profile: `org`, `api_token`,
+`enrollment_key`, `api_base_url`, `domain`, `ssh_user`.
+
+Legacy file parsing rules:
+
+- `token` — take the last non-empty, non-comment line, trimmed
+- `server-id` — parse with a line-oriented regular expression for an assignment to `AUTOMOX_SETKEY`, stripping surrounding single or double quotes. The file must never be executed or sourced.
+
+Public methods:
+
+- `resolve(FrameworkPaths paths, Map config, String requestedProfile)` returning a resolved profile object
+- `publicProfile(String id, resolved)` returning a map with `id`, `org`, `api_base_url`, `source` (one of `env`, `properties`, `legacy`, `default` per field group), `has_api_token`, `has_enrollment_key` — and no secret values
+- `publicProfiles(...)` returning the sorted list of the above
+- `authorizationHeaders(resolved)` returning the `Authorization` and `Accept` headers, called only from inside the adapter
+
+The existing `PropertiesSupport.publicController` and `publicControllers` must
+not be modified, to avoid disturbing Jenkins behaviour and its Groovy tests.
+
+### 2.2 New file: `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxWriteClient.groovy`
+
+Wraps `ReadOnlyHttp.request` for non-GET methods so that read-only semantics of
+`ReadOnlyHttp` remain truthful.
+
+- Constructor takes a `ReadOnlyHttp` instance and a boolean `apply`
+- A `send(method, url, headers, body, timeoutSeconds)` method that throws `IllegalStateException` when `apply` is false, so a dry-run can never issue a mutating request even through a coding mistake
+- No changes to `ReadOnlyHttp.groovy`
+
+## 3. Adapter
+
+### 3.1 New file: `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxAdapter.groovy`
+
+Constructor parameters mirroring `JenkinsAdapter`: `FrameworkPaths paths`,
+`ReadOnlyHttp http`, `Map overrides`, `File frameworkRoot`, `Map config`, and
+additionally a boolean `apply`.
+
+`settings()` returns a map merging, in order, shared-rules defaults then
+`config.adapters.automox`: `timeout_seconds`, `api_base_url`, `org`, `domain`,
+`default_profile`, `devices_limit`, `groups_limit`, `policies_limit`.
+
+`operatorRules()` reads `shared/automox-operator-rules.json` through
+`JsonFiles.read` with an inline default map, following the
+`JenkinsAdapter.operatorRules` pattern.
+
+Read operations, each returning a payload map shaped for
+`AutomoxOperatorReport`:
+
+| Method | HTTP | Notes |
+|---|---|---|
+| `operatorProfiles()` | none | Lists redacted profiles; BLOCKED when none configured, message `No automox.properties found or no profiles configured` |
+| `operatorAuthTest(profile, timeout)` | GET orgs with limit 1 | READY on 200, BLOCKED on 401/403, DEGRADED on other non-200 |
+| `operatorOrgs(profile, timeout)` | GET orgs | Items carry `id`, `name`, `device_count` |
+| `operatorGroups(profile, query, limit, timeout)` | GET server groups | Client-side case-insensitive substring filter on name; unnamed groups rendered as `(unnamed)` |
+| `operatorGroup(profile, groupId, timeout)` | GET server groups then servers by group | Group metadata plus member devices; ERROR with message `Group not found` when absent |
+| `operatorDevices(profile, groupId, query, limit, timeout)` | GET servers | Optional `groupId` query parameter; client-side name filter |
+| `operatorDevice(profile, reference, withPackages, timeout)` | GET server, optionally packages | Reference resolution per 3.2; packages summarised as pending count, total count, and first `packages_preview` entries |
+| `operatorPolicies(profile, limit, timeout)` | GET policies | Items carry `id`, `name`, `policy_type_name`, `schedule_time`, `server_groups`, and `auto_patch`/`auto_reboot` from `configuration` |
+| `operatorPolicy(profile, policyId, timeout)` | GET policy | Populates the report `schedule` object per 3.3 |
+| `operatorPolicyStats(profile, policyId, timeout)` | GET policy stats | Optional client-side filter by policy id; ERROR `Policy stats not found` when a requested id is absent |
+
+Write operations:
+
+| Method | Behaviour |
+|---|---|
+| `operatorDeviceMove(profile, reference, groupId, timeout)` | Resolves device, reads current `server_group_id`, produces a `change` object with `from`, `to`, `dry_run`, `applied`. When `apply` is false it returns the planned change with status READY and performs no request. When true it issues PUT with body containing only `server_group_id`, validates the response code against `device_move.success_codes`, then re-reads the device to confirm |
+| `operatorPolicyAddGroup(profile, policyId, groupId, timeout)` | Reads the policy, computes the target `server_groups` list, and builds the payload from `policy_update.required_fields` only. When `apply` is false it returns the planned group list and the two-step plan with no request. When true it performs the rename round-trip: first PUT with `name` suffixed by `rename_suffix`, then PUT with the original name and updated groups; both codes validated against `policy_update.success_codes`; on failure of the second step the report status is ERROR and the message names the policy as left in the renamed state |
+
+All write payload construction must go through `AutomoxWriteClient`, and no
+temporary files may be used; payloads are built and held in memory.
+
+### 3.2 Device reference resolution
+
+A private method taking a reference string:
+
+1. If it matches digits only, treat as a device id
+2. Otherwise, expand to an FQDN by appending the configured `domain` when the reference contains no dot and is not an IPv4 literal
+3. Fetch the device list once and match, in priority order: exact case-insensitive name equality with the FQDN, then name starting with the short hostname followed by a dot, then case-insensitive substring containment of the short hostname
+4. When no match is found, raise an error carrying the message `Device not found: <reference>`, which maps to a user-error exit code through the existing message-keyword rule
+
+### 3.3 Schedule decoding
+
+A private method taking a policy map and the shared `schedule` rules, producing
+the report `schedule` object: `days` derived from `schedule_days` against
+`day_bits`, `weeks_of_month` derived from `schedule_weeks_of_month` against
+`week_bits`, `time` from `schedule_time`, `use_scheduled_timezone` from
+`configuration`, and `next_remediation_reliable` set false whenever
+`next_remediation` appears in `unreliable_fields`. When a bitmask decodes to an
+empty set the raw integer is preserved in the report message rather than
+silently dropped.
+
+## 4. Report
+
+### 4.1 New file: `groovy/src/main/groovy/ai/worklog/framework/automox/AutomoxOperatorReport.groovy`
+
+Structural copy of `JenkinsOperatorReport` with these differences:
+
+- Fields: `operation`, `fetchedAt`, `status`, `profile`, `org`, `message`, `query`, `group`, `device`, `policy`, `schedule`, `change`, `items`
+- `fromPayload(Map)` following the same null-tolerant construction
+- `toMap(Redaction)` emitting optional keys only when populated, matching the existing conditional-append style
+- `renderJson(Redaction)` identical in shape, pretty-printed with a trailing line separator
+- `renderHuman(Redaction)` with header `Automox <operation>` and indented lines for Profile, Org, Query, Group, Device, Policy, Fetched, Status, Message, then decoded schedule lines when present, then a change summary when present, then items
+- `exitCodeFor(report, exitCodes)` reusing the Jenkins mapping: BLOCKED to blocked; ERROR to user error when the message contains `not found`, `invalid`, or `missing`, otherwise system error; anything else success
+- `redactItem` preserving these boolean and identifier keys after redaction: `has_api_token`, `has_enrollment_key`, `connected`, `compliant`, `needs_reboot`, `applied`, `dry_run`, `installed`, `id`, `server_group_id`, `policy_id`
+
+## 5. Command surface
+
+### 5.1 New file: `groovy/src/main/groovy/ai/worklog/framework/commands/AutomoxCommands.groovy`
+
+Structural copy of `JenkinsCommands` including its argument-parsing helpers,
+error-report construction, and `rejectUnknownArgs` behaviour with the word
+`automox` substituted in messages.
+
+Usage line:
+`Usage: ai-worklog automox {profiles|auth-test|orgs|groups|group|devices|device|policies|policy|policy-stats|device-move|policy-add-group} ...`
+
+Global options consumed before dispatch: `--json`, `--profile <NAME>`,
+`--apply`.
+
+Dispatch table:
+
+| Action | Positional | Options |
+|---|---|---|
+| `profiles` | none | none |
+| `auth-test` | none | none |
+| `orgs` | none | none |
+| `groups` | none | `--query`, `--limit` |
+| `group` | group id | none |
+| `devices` | none | `--group`, `--query`, `--limit` |
+| `device` | id or FQDN | `--packages` |
+| `policies` | none | `--limit` |
+| `policy` | policy id | none |
+| `policy-stats` | none | `--policy` |
+| `device-move` | id or FQDN, then group id | `--apply` |
+| `policy-add-group` | policy id, then group id | `--apply` |
+
+`--apply` must be rejected with `Unknown option for automox <action>: --apply`
+on every action other than the two write actions.
+
+Limit values are validated by the existing `parseLimit` helper semantics and
+additionally clamped against the corresponding `limits.*_max` value from shared
+rules, reporting `Invalid --limit: <value>` when above the maximum.
+
+### 5.2 Modified: `groovy/src/main/groovy/ai/worklog/framework/Main.groovy`
+
+- Add the import for `AutomoxCommands`
+- Add `'automox'` to the command list inside `commandIndex`
+- Add a `case 'automox'` branch in the main switch, passing `action`, `args`, `frameworkRoot`, `paths`, and `config`, placed immediately after the `jenkins` case
+- Add `automox` to both printed usage lines in `help()` and add the description line `  automox      Automox operator (read-only, gated writes)`
+
+### 5.3 Modified: `bin/ai-worklog`
+
+Add `automox` to the `KNOWN_COMMANDS` string on line 8. Without this the
+dispatcher will not recognise the subcommand boundary and `--runtime` parsing
+before the command will misbehave.
+
+### 5.4 Windows launchers
+
+`bin/ai-worklog.cmd` and `bin/ai-worklog.ps1` must be inspected for an
+equivalent known-command list. If one exists, it is left unchanged and the
+divergence is recorded in the upgrade-plan deferred section, consistent with
+the decision to unship Windows.
+
+## 6. Workspace configuration
+
+### 6.1 Modified: `config/workspace-config.example.json`
+
+Add an `automox` object under `adapters`, after the `jenkins` object, with keys
+`timeout_seconds` 10, `org` set to the placeholder string `000000`,
+`api_base_url` set to the console API base, `domain` set to the placeholder
+`example.internal`, `default_profile` `default`, `devices_limit` 500,
+`groups_limit` 500, `policies_limit` 500.
+
+No credential values may appear in this example file.
+
+### 6.2 Preflight integration
+
+In `groovy/src/main/groovy/ai/worklog/framework/commands/PreflightCommands.groovy`,
+add a selected-scope branch for `automox` that calls the existing
+`checkServiceFile` helper with service `automox` and filename
+`automox.properties`. Placement is immediately after the existing `jenkins`
+branch. No new helper is required, and the check must not read the file
+contents.
+
+## 7. Tests
+
+### 7.1 New file: `groovy/src/test/groovy/ai/worklog/framework/AutomoxOperatorTest.groovy`
+
+Follows the stubbing approach used by `JenkinsOperatorTest`, injecting a
+closure into `ReadOnlyHttp.requestHandler` so no network access occurs.
+
+Required cases:
+
+1. Profiles listing with no properties file returns BLOCKED
+2. Profiles listing redacts secrets and exposes only the `has_api_token` and `has_enrollment_key` booleans
+3. Environment variable overrides the properties value for the same profile
+4. Legacy `token` and `server-id` files are used when the properties file is absent, and `server-id` is parsed rather than executed
+5. Device reference resolution by numeric id, by FQDN, and by short hostname, plus the not-found error message
+6. Schedule decoding for a representative bitmask combination, including the weeks-of-month value 10 decoding to weeks two and four
+7. `device-move` without `--apply` performs no request and reports a planned change
+8. `device-move` with `--apply` issues exactly one PUT and re-reads the device
+9. `policy-add-group` without `--apply` reports the two-step plan and performs no request
+10. `policy-add-group` with `--apply` issues exactly two PUTs in the documented order and reports ERROR naming the renamed state when the second step fails
+11. Report JSON for each operation validates against `schemas/automox-operator-report.schema.json`
+12. A payload containing an `enrollment_key` field is redacted in both JSON and human output
+
+No Python unit tests and no parity tests are added.
+
+## 8. Documentation
+
+### 8.1 Modified: `README.md`
+
+- Add `automox` to the repository tree description where shared and schema files are listed
+- Add a section titled `### Automox Operator` after the Jenkins Operator section, listing the read-only commands, the two gated write commands, the dry-run default, the properties file location and profile-scoped key names, the environment variable names, and the statement that legacy `token` and `server-id` files are read as a fallback
+- State explicitly that write operations are the only non-read-only external behaviour in the framework and that they default to dry run
+
+### 8.2 Modified: `upgrade-plan`
+
+- Add Automox to the Implemented Capabilities section under a new subsection heading
+- Record in the Known Limitations section that Automox SSH agent operations, batch enrollment, and the `setup-agents.sh` wrappers are intentionally out of scope, and that the Automox module exists only in the Groovy runtime with no Python implementation and no parity coverage
+
+## 9. Operator setup steps required before first use
+
+The source directory currently lives outside the workspace at
+`/Users/twojda/work-temp/temporary/automox`. For `workspace init` to link it, a
+directory or symlink named `automox` must exist at the workspace root, after
+which `ai-worklog workspace init /Users/twojda/workspace --apply` will create
+`integrations/automox`. The framework `.gitignore` already excludes
+`*.properties`, `**/token`, and `**/server-id`, so no ignore-rule change is
+required.
+
+## Sequencing
+
+`runtime-deferral-plan` should be executed first. Step 19 below inspects the
+Windows launchers that plan modifies, and step 25 edits the same `upgrade-plan`
+section that plan creates.
+
+IMPLEMENTATION CHECKLIST:
+
+1. Create `shared/automox-operator-rules.json` with the keys specified in section 1.1.
+2. Create `schemas/automox-operator-report.schema.json` with the operations enum and optional properties specified in section 1.2.
+3. Add `"automox"` to the `services` array in `shared/workspace-init.json`.
+4. Add `"automox": ["automox"]` to `service_checks` in `shared/preflight-checks.json`.
+5. Extend `sensitive_key_pattern` in `shared/redaction-patterns.json` with `enrollment_key`, `setkey`, `accesskey`, and `access_key`.
+6. Append the `accesskey=` value pattern to `sensitive_value_patterns` in `shared/redaction-patterns.json`.
+7. Create `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxCredentials.groovy` implementing the precedence chain, profile selection, non-executing legacy parsers, and the redacted public-profile accessors from section 2.1.
+8. Create `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxWriteClient.groovy` implementing the apply-gated send method from section 2.2.
+9. Create `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxAdapter.groovy` with the constructor, `settings`, and `operatorRules` methods from section 3.1.
+10. Implement the ten read operations listed in section 3.1 within `AutomoxAdapter`.
+11. Implement the device reference resolution method from section 3.2 within `AutomoxAdapter`.
+12. Implement the schedule decoding method from section 3.3 within `AutomoxAdapter`.
+13. Implement `operatorDeviceMove` in `AutomoxAdapter` with dry-run default, success-code validation, and post-write confirmation read.
+14. Implement `operatorPolicyAddGroup` in `AutomoxAdapter` with the in-memory rename round-trip, ordered required-field payload, and the renamed-state error message.
+15. Create `groovy/src/main/groovy/ai/worklog/framework/automox/AutomoxOperatorReport.groovy` with the fields, renderers, exit-code mapping, and `redactItem` key preservation from section 4.1.
+16. Create `groovy/src/main/groovy/ai/worklog/framework/commands/AutomoxCommands.groovy` with the usage line, global option consumption, dispatch table, `--apply` rejection rule, and limit clamping from section 5.1.
+17. Modify `groovy/src/main/groovy/ai/worklog/framework/Main.groovy` to add the import, the `commandIndex` entry, the switch case, and the three help-text changes from section 5.2.
+18. Add `automox` to `KNOWN_COMMANDS` in `bin/ai-worklog`.
+19. Inspect `bin/ai-worklog.cmd` and `bin/ai-worklog.ps1` for a known-command list; leave unchanged and note any divergence for step 25.
+20. Add the `automox` object under `adapters` in `config/workspace-config.example.json` per section 6.1.
+21. Add the `automox` branch calling `checkServiceFile` in `PreflightCommands.groovy` per section 6.2.
+22. Create `groovy/src/test/groovy/ai/worklog/framework/AutomoxOperatorTest.groovy` covering the twelve cases in section 7.1.
+23. Run the Groovy test suite and resolve failures.
+24. Update `README.md` with the tree entry and the Automox Operator section per section 8.1.
+25. Update `upgrade-plan` with the Implemented Capabilities subsection and the Known Limitations entries per section 8.2, including any Windows launcher divergence found in step 19.
+26. Append this planning session to `prompt.log` with a timestamp.
