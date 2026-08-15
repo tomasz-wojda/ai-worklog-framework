@@ -301,15 +301,61 @@ No Python unit tests and no parity tests are added.
 - Add Automox to the Implemented Capabilities section under a new subsection heading
 - Record in the Known Limitations section that Automox SSH agent operations, batch enrollment, and the `setup-agents.sh` wrappers are intentionally out of scope, and that the Automox module exists only in the Groovy runtime with no Python implementation and no parity coverage
 
-## 9. Operator setup steps required before first use
+## 9. Operator setup — COMPLETED 2026-08-15
 
-The source directory currently lives outside the workspace at
-`/Users/twojda/work-temp/temporary/automox`. For `workspace init` to link it, a
-directory or symlink named `automox` must exist at the workspace root, after
-which `ai-worklog workspace init /Users/twojda/workspace --apply` will create
-`integrations/automox`. The framework `.gitignore` already excludes
-`*.properties`, `**/token`, and `**/server-id`, so no ignore-rule change is
-required.
+Correction to the original text: a symlink at the workspace root does **not**
+work. `WorkspacePlanner.planInit` line 54 computes
+`rootReady = rootSource.isDirectory() && !Files.isSymbolicLink(rootSource.toPath())`,
+which excludes symlinks explicitly. The workspace-root service entry must be a
+real directory; `integrations/<service>` is the managed symlink pointing back
+to it at `../<service>`.
+
+Completed setup:
+
+- `/Users/twojda/workspace/automox/` created as a real directory holding
+  `automox.properties` (mode 600) plus copies of the legacy `token` and
+  `server-id` files, so the legacy fallback path can be exercised against real
+  input
+- `integrations/automox -> ../automox` created by
+  `ai-worklog workspace init /Users/twojda/workspace --apply`
+- Profile `default` populated with `org=121224`,
+  `api_base_url=https://console.automox.com/api`, `domain=pl.grupa.iti`,
+  `api_token`, and `enrollment_key`
+- `domain` value taken from the `AMOX_DOMAIN` default in `amox-cli.sh`
+- Token verified against the live API: `GET /orgs` returned HTTP 200 and five
+  organizations; `121224` is `EMEA_T2_GTO_TVN_DEVOPS` with 102 devices, which
+  confirms the `ORG=121224` value used throughout the compendium
+
+The framework `.gitignore` already excludes `*.properties`, `**/token`, and
+`**/server-id`. The credential directory lives in the workspace, outside both
+public repositories.
+
+## 10. Test harness
+
+`groovy/build.gradle` pins a Java 17 toolchain, but this machine has only
+JDK 26 (`/opt/java/openjdk-26`) and Gradle is not installed, with no wrapper in
+the repository. Gradle is therefore not a usable entry point here.
+
+The Groovy distribution at `/opt/groovy/current/lib` bundles `junit-4.13.2.jar`
+and `hamcrest-core-1.3.jar`, so the suite runs directly. It must be run from
+`groovy/`, because `CoreTest.setUp` resolves the repository root as
+`new File('..')` — an assumption Gradle satisfied implicitly through its
+working directory. Running from the repository root instead produces three
+spurious failures in `CoreTest` that look like catalog, state, and redaction
+bugs but are purely path resolution.
+
+Baseline recorded 2026-08-15: 118 tests, 0 failures, on JDK 26 with
+Groovy 6.0.0-beta-1.
+
+```bash
+cd repos/ai-worklog-framework/groovy
+AI_WORKLOG_FRAMEWORK_ROOT="$(cd .. && pwd)" groovy \
+  -cp "src/main/groovy:src/test/groovy" \
+  -e 'def names = ["CoreTest","DiagnosticsTest","GlobalConfigTest","JenkinsOperatorTest","ReconciliationTest","SetupTest","WorkspaceStateTest","AutomoxOperatorTest"]
+      def r = org.junit.runner.JUnitCore.runClasses(names.collect { Class.forName("ai.worklog.framework." + it) } as Class[])
+      println "run=${r.runCount} failures=${r.failureCount}"
+      r.failures.each { println "FAIL: ${it.testHeader} :: ${it.message}" }'
+```
 
 ## Sequencing
 
@@ -321,8 +367,8 @@ IMPLEMENTATION CHECKLIST:
 
 1. Create `shared/automox-operator-rules.json` with the keys specified in section 1.1.
 2. Create `schemas/automox-operator-report.schema.json` with the operations enum and optional properties specified in section 1.2.
-3. Add `"automox"` to the `services` array in `shared/workspace-init.json`.
-4. Add `"automox": ["automox"]` to `service_checks` in `shared/preflight-checks.json`.
+3. DONE 2026-08-15 — Added `"automox"` to the `services` array in `shared/workspace-init.json`.
+4. DONE 2026-08-15 — Added `"automox": ["automox"]` to `service_checks` in `shared/preflight-checks.json`.
 5. Extend `sensitive_key_pattern` in `shared/redaction-patterns.json` with `enrollment_key`, `setkey`, `accesskey`, and `access_key`.
 6. Append the `accesskey=` value pattern to `sensitive_value_patterns` in `shared/redaction-patterns.json`.
 7. Create `groovy/src/main/groovy/ai/worklog/framework/adapters/AutomoxCredentials.groovy` implementing the precedence chain, profile selection, non-executing legacy parsers, and the redacted public-profile accessors from section 2.1.
@@ -341,7 +387,7 @@ IMPLEMENTATION CHECKLIST:
 20. Add the `automox` object under `adapters` in `config/workspace-config.example.json` per section 6.1.
 21. Add the `automox` branch calling `checkServiceFile` in `PreflightCommands.groovy` per section 6.2.
 22. Create `groovy/src/test/groovy/ai/worklog/framework/AutomoxOperatorTest.groovy` covering the twelve cases in section 7.1.
-23. Run the Groovy test suite and resolve failures.
+23. Run the Groovy test suite using the command in section 10, from `groovy/`, and resolve failures. Do not use Gradle; it is unusable on this machine.
 24. Update `README.md` with the tree entry and the Automox Operator section per section 8.1.
 25. Update `upgrade-plan` with the Implemented Capabilities subsection and the Known Limitations entries per section 8.2, including any Windows launcher divergence found in step 19.
 26. Append this planning session to `prompt.log` with a timestamp.

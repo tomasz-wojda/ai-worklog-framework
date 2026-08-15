@@ -191,11 +191,13 @@ surface. This divergence is recorded in the deferred section.
 
 ### 7.2 Restated verification baseline
 
-Replace the baseline block at lines 281–286 with a Groovy-only baseline: the
-Groovy unit test count on macOS, an explicit statement that the 259 Python unit
-tests still pass against the frozen tree but are not part of the release gate,
-and that the 186 parity assertions are skipped by design. The limitations list
-keeps the note that no CI enforces the baseline.
+Replace the baseline block at lines 281–286 with a Groovy-only baseline: 118
+Groovy tests passing on macOS with JDK 26 and Groovy 6.0.0-beta-1, an explicit
+statement that the 259 Python unit tests still pass against the frozen tree but
+are not part of the release gate, and that the 186 parity assertions are
+skipped by design. Record the exact invocation from section 9.4 and the
+requirement to run it from `groovy/`. The limitations list keeps the note that
+no CI enforces the baseline, and gains the note that Gradle cannot run it.
 
 ### 7.3 New section: `## Deferred Capabilities and Re-enablement`
 
@@ -205,7 +207,7 @@ An introductory paragraph stating that each entry below was deferred
 deliberately to shorten the path to production on the Groovy runtime, and that
 each records its own restore procedure.
 
-Three subsections, each with the same four headings — *What was deferred*,
+Four subsections, each with the same four headings — *What was deferred*,
 *Why*, *Exact restore steps*, *Known restoration cost*:
 
 **Python runtime.** Restore steps: empty `disabled_runtimes` in
@@ -226,6 +228,19 @@ re-enables the suite automatically through `tests/parity/conftest.py`; no test
 edits are required. Cost: features added to Groovy during the deferral have no
 Python counterpart, so parity failures on re-enablement are expected and
 enumerate the porting backlog.
+
+**Supported build entry point.** What was deferred: a working Gradle build.
+`groovy/build.gradle` declares a Java 17 toolchain that cannot be satisfied on
+the development machine, Gradle is not installed, and no wrapper is committed,
+so the 1.0.0 release gate runs through the hand-assembled classpath in section
+9.4 instead. Why: installing a second JDK and a build tool was not on the
+critical path to a working Groovy CLI. Restore steps: commit a Gradle wrapper
+or add `scripts/run-tests.sh` wrapping the section 9.4 invocation; reconcile
+the declared toolchain with the JDK actually in use; verify the suite reports
+the same 118 tests. Cost: low, but until it is done the test command is
+undiscoverable to anyone who has not read this document, and `CoreTest`'s
+`new File('..')` root resolution silently makes results depend on the working
+directory.
 
 ### 7.4 Automox entry
 
@@ -267,6 +282,39 @@ Manual, recorded in the release notes rather than automated: with a persisted
 that the printed recovery command succeeds, and that `bin/ai-worklog-python`
 invoked directly refuses.
 
+## 9.4 Test harness
+
+Verified 2026-08-15. `groovy/build.gradle` pins a Java 17 toolchain, but this
+machine has only JDK 26 (`/opt/java/openjdk-26`) and Gradle is not installed,
+with no wrapper in the repository. Gradle is not a usable entry point here.
+
+The Groovy distribution at `/opt/groovy/current/lib` bundles `junit-4.13.2.jar`
+and `hamcrest-core-1.3.jar`, so the suite runs directly. It must be run from
+`groovy/`, because `CoreTest.setUp` resolves the repository root as
+`new File('..')` — an assumption Gradle satisfied implicitly through its
+working directory. Running from the repository root instead produces three
+spurious `CoreTest` failures that resemble catalog, state, and redaction bugs
+but are purely path resolution.
+
+Baseline: 118 tests, 0 failures, JDK 26, Groovy 6.0.0-beta-1.
+
+```bash
+cd repos/ai-worklog-framework/groovy
+AI_WORKLOG_FRAMEWORK_ROOT="$(cd .. && pwd)" groovy \
+  -cp "src/main/groovy:src/test/groovy" \
+  -e 'def names = ["CoreTest","DiagnosticsTest","GlobalConfigTest","JenkinsOperatorTest","ReconciliationTest","SetupTest","WorkspaceStateTest"]
+      def r = org.junit.runner.JUnitCore.runClasses(names.collect { Class.forName("ai.worklog.framework." + it) } as Class[])
+      println "run=${r.runCount} failures=${r.failureCount}"
+      r.failures.each { println "FAIL: ${it.testHeader} :: ${it.message}" }'
+```
+
+This is a gap, not a solution: the release gate for 1.0.0 currently depends on
+a hand-assembled classpath rather than a supported build entry point, and
+`build.gradle` advertises a toolchain that cannot be satisfied. Section 7.2
+must record this, and section 7.3 must carry it as a deferred item with its own
+restore steps, namely adding a Gradle wrapper or a `scripts/run-tests.sh` and
+reconciling the declared Java toolchain with the JDK actually in use.
+
 ## 10. Sequencing with the Automox plan
 
 The two plans are independent except at two points. The Automox plan's step 19
@@ -299,7 +347,7 @@ IMPLEMENTATION CHECKLIST:
 20. Change `VERSION` in `Main.groovy` from `0.7.0` to `1.0.0`.
 21. Add the disabled-runtime cases to `GlobalConfigTest.groovy`.
 22. Add the `setup init --runtime python` rejection case to `SetupTest.groovy`.
-23. Run the Groovy test suite and resolve failures.
+23. Run the Groovy test suite using the command in section 9.4, from `groovy/`, and resolve failures. Do not use Gradle; it is unusable on this machine.
 24. Run the Python unit suite to confirm the frozen tree is unaffected, and confirm the parity suite reports skips rather than failures.
 25. Apply the line-level corrections to `upgrade-plan` listed in section 7.1.
 26. Replace the verification baseline block in `upgrade-plan` per section 7.2.

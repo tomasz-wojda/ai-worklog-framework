@@ -11,7 +11,8 @@
     "snow": ["servicenow"],
     "servicenow": ["servicenow"],
     "newrelic": ["newrelic"],
-    "datadog": ["datadog"]
+    "datadog": ["datadog"],
+    "automox": ["automox"]
   },
   "derived_checks": ["repositories", "catalog_binaries"]
 }

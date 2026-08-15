@@ -27,6 +27,7 @@
     "github",
     "argocd",
     "artifactory",
+    "automox",
     "ssh",
     "snow",
     "datadog"
