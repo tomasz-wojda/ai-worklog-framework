@@ -1,5 +1,5 @@
 {
-  "global_checks": ["workspace", "git", "toolchain"],
+  "global_checks": ["workspace", "git"],
   "service_checks": {
     "jira": ["jira"],
     "jenkins": ["jenkins"],

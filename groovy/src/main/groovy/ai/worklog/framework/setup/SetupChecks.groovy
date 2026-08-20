@@ -2,7 +2,6 @@ package ai.worklog.framework.setup
 
 import ai.worklog.framework.adapters.PreflightScope
 import ai.worklog.framework.commands.PreflightCommands
-import ai.worklog.framework.commands.ToolchainCommands
 import ai.worklog.framework.core.CheckResult
 import ai.worklog.framework.core.ConfigLoader
 import ai.worklog.framework.core.JsonFiles
@@ -91,16 +90,6 @@ class SetupChecks {
             checks << check(Status.BLOCKED.value, 'runtime', "${runtime} unavailable (${runtimeSource})")
         }
 
-        Map wsConfig = ConfigLoader.load(workspace)
-        Status toolchainStatus = toolchainOverallStatus(frameworkRoot, wsConfig)
-        if (toolchainStatus == Status.READY) {
-            checks << check(Status.READY.value, 'toolchain', 'Compatible')
-        } else if (toolchainStatus == Status.BLOCKED) {
-            checks << check(Status.BLOCKED.value, 'toolchain', 'Blocked compatibility issues')
-        } else {
-            checks << check(Status.DEGRADED.value, 'toolchain', 'Degraded compatibility')
-        }
-
         List vaultResolution = SetupResolver.resolveAiVaultRoot(workspace)
         File vaultRoot = vaultResolution[0] as File
         String vaultSource = vaultResolution[1]?.toString()
@@ -160,6 +149,7 @@ class SetupChecks {
 
         if (includePreflight) {
             try {
+                Map wsConfig = ConfigLoader.load(workspace)
                 ResultSet preflight = executePreflight(frameworkRoot, paths, wsConfig)
                 Status status = preflight.overallStatus()
                 if (status == Status.UNKNOWN) {
@@ -222,46 +212,6 @@ class SetupChecks {
         stale
     }
 
-    private static Status toolchainOverallStatus(File frameworkRoot, Map wsConfig) {
-        Map rules = ai.worklog.framework.core.JsonFiles.read(
-            new File(frameworkRoot, 'shared/toolchain-tools.json'),
-            [tools: [:], compatibility: [:]]
-        )
-        Map toolchain = wsConfig.toolchain instanceof Map ? (Map) wsConfig.toolchain : [:]
-        ResultSet results = new ResultSet()
-        String python = ToolchainCommands.detectPythonVersion()
-        results.add(new CheckResult(
-            status: python ? Status.READY : Status.BLOCKED,
-            source: 'python3',
-            message: python ?: 'Not detected'
-        ))
-        ToolchainCommands.detectJava(toolchain).each { major, runtime ->
-            results.add(new CheckResult(status: Status.READY, source: "java:${major}", message: runtime.version))
-        }
-        ToolchainCommands.detectGroovy(toolchain).each { major, runtime ->
-            results.add(new CheckResult(
-                status: Status.READY,
-                source: "groovy:${major}",
-                message: "${runtime.version} @ ${runtime.executable}"
-            ))
-        }
-        ((Map) rules.tools).each { name, ignored ->
-            Map resolved = ToolchainCommands.resolve(
-                name.toString(),
-                rules,
-                toolchain,
-                ToolchainCommands.detectJava(toolchain),
-                ToolchainCommands.detectGroovy(toolchain)
-            )
-            results.add(new CheckResult(
-                status: resolved.ready ? Status.READY : Status.BLOCKED,
-                source: "tool:${name}",
-                message: resolved.message
-            ))
-        }
-        results.overallStatus()
-    }
-
     private static ResultSet executePreflight(File frameworkRoot, FrameworkPaths paths, Map config) {
         PreflightScope scope = PreflightScope.resolve(frameworkRoot, paths, null, [])
         ResultSet results = new ResultSet()
@@ -318,9 +268,6 @@ class SetupChecks {
         }
         if (PreflightCommands.selected(scope, 'catalog_binaries')) {
             PreflightCommands.checkCatalogBinaries(results, frameworkRoot, scope)
-        }
-        if (PreflightCommands.selected(scope, 'toolchain')) {
-            PreflightCommands.checkToolchain(results, frameworkRoot, config)
         }
         results
     }

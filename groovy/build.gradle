@@ -17,12 +17,6 @@ application {
     mainClass = 'ai.worklog.framework.Main'
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-}
-
 tasks.withType(Test).configureEach {
     useJUnit()
 }

@@ -477,6 +477,7 @@ def test_setup_check_json(
     payload = _normalize_setup_json(python.stdout, markers)
     assert payload["operation"] == "check"
     assert payload["workspace"]["registered"] is True
+    assert all(check["layer"] != "toolchain" for check in payload["checks"])
 
 
 def test_setup_repair_dry_run_and_idempotent_apply(

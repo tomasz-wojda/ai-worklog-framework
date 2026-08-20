@@ -3,25 +3,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GROOVY_EXECUTABLE="${AI_WORKLOG_GROOVY:-groovy}"
-JAVA_17_HOME="${AI_WORKLOG_JAVA_HOME:-${JAVA17_HOME:-${JAVA_HOME_17_X64:-}}}"
-
-if [[ -z "$JAVA_17_HOME" ]] && [[ "$(uname -s)" == "Darwin" ]] && [[ -x /usr/libexec/java_home ]]; then
-  JAVA_17_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
-fi
-
-if [[ -z "$JAVA_17_HOME" ]] && [[ "$(uname -s)" == "Linux" ]]; then
-  for CANDIDATE in /usr/lib/jvm/java-17-openjdk* /usr/lib/jvm/temurin-17*; do
-    if [[ -d "$CANDIDATE" ]]; then
-      JAVA_17_HOME="$CANDIDATE"
-      break
-    fi
-  done
-fi
-
-if [[ -n "$JAVA_17_HOME" ]]; then
-  export JAVA_HOME="$JAVA_17_HOME"
-  export PATH="$JAVA_HOME/bin:$PATH"
-fi
 
 if ! command -v "$GROOVY_EXECUTABLE" >/dev/null 2>&1; then
   echo "Groovy is required for the default runtime. Use --runtime python as fallback." >&2

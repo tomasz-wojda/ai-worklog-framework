@@ -93,9 +93,7 @@ def _framework_defaults() -> Dict[str, Any]:
             "optional_binaries": ["groovy", "java", "argocd", "helm"],
         },
         "toolchain": {
-            "java": {},
             "groovy": {},
-            "tools": {},
         },
     }
 

@@ -304,15 +304,12 @@ def build_parser() -> argparse.ArgumentParser:
     diag_run.add_argument("--output", type=str, help="Evidence output path")
     diag_run.add_argument("--json", action="store_true", help="Print evidence JSON")
 
-    # toolchain
     toolchain_parser = subparsers.add_parser(
-        "toolchain", help="Python/Java/Groovy version detection and routing", parents=[parent_parser]
+        "toolchain", help="Python/Java/Groovy runtime detection", parents=[parent_parser]
     )
     toolchain_sub = toolchain_parser.add_subparsers(dest="toolchain_action")
-    toolchain_sub.add_parser("check", help="Detect runtimes and validate tool compatibility", parents=[parent_parser])
-    toolchain_sub.add_parser("list", help="List tools and resolved environments", parents=[parent_parser])
-    toolchain_env = toolchain_sub.add_parser("env", help="Print shell exports for a tool", parents=[parent_parser])
-    toolchain_env.add_argument("tool", help="Tool name (e.g. jira-cli, newrelic-cli)")
+    toolchain_sub.add_parser("check", help="Check active runtimes", parents=[parent_parser])
+    toolchain_sub.add_parser("list", help="List active runtimes", parents=[parent_parser])
 
     jenkins_parser = subparsers.add_parser("jenkins", help="Jenkins operator", parents=[parent_parser])
     jenkins_sub = jenkins_parser.add_subparsers(dest="jenkins_action")

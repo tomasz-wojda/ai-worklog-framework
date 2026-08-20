@@ -44,7 +44,6 @@ class PreflightCommands {
         if (selected(scope, 'catalog_binaries')) {
             checkCatalogBinaries(results, frameworkRoot, scope)
         }
-        if (selected(scope, 'toolchain')) checkToolchain(results, frameworkRoot, config)
 
         println results.summary()
         println()
@@ -238,40 +237,6 @@ class PreflightCommands {
             source: 'servicenow',
             message: hours > 24 ? "Cookie is ${hours}h old (likely expired)" : "Cookie age: ${hours}h"
         ))
-    }
-
-    static void checkToolchain(ResultSet results, File frameworkRoot, Map config) {
-        Map rules = (Map) JsonFiles.read(new File(frameworkRoot, 'shared/toolchain-tools.json'), [:])
-        Map toolchain = config.toolchain instanceof Map ? (Map) config.toolchain : [:]
-        Map javaRuntimes = ToolchainCommands.detectJava(toolchain)
-        Map groovyRuntimes = ToolchainCommands.detectGroovy(toolchain)
-
-        String python = ToolchainCommands.detectPythonVersion()
-        results.add(new CheckResult(
-            status: python ? Status.READY : Status.BLOCKED,
-            source: 'python3',
-            message: python ?: 'Not detected'
-        ))
-        javaRuntimes.each { major, runtime ->
-            results.add(new CheckResult(status: Status.READY, source: "java:${major}", message: runtime.version))
-        }
-        groovyRuntimes.each { major, runtime ->
-            results.add(new CheckResult(
-                status: Status.READY,
-                source: "groovy:${major}",
-                message: "${runtime.version} @ ${runtime.executable}"
-            ))
-        }
-        ((Map) rules.tools).each { name, ignored ->
-            Map resolved = ToolchainCommands.resolve(
-                name.toString(), rules, toolchain, javaRuntimes, groovyRuntimes
-            )
-            results.add(new CheckResult(
-                status: resolved.ready ? Status.READY : Status.BLOCKED,
-                source: "tool:${name}",
-                message: resolved.message
-            ))
-        }
     }
 
     static boolean available(String binary) {

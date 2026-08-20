@@ -17,14 +17,6 @@ if [ -z "${AI_WORKLOG_WORKSPACE:-}" ]; then
     AI_WORKLOG_WORKSPACE="$(cd "${FRAMEWORK_ROOT}/../.." && pwd)"
 fi
 
-ENV_OUTPUT="$("${FRAMEWORK_ROOT}/bin/ai-worklog" toolchain env "${TOOL}" --workspace "${AI_WORKLOG_WORKSPACE}" 2>/dev/null || true)"
-if echo "${ENV_OUTPUT}" | grep -q "^# BLOCKED"; then
-    echo "${ENV_OUTPUT}" >&2
-    exit 1
-fi
-
-eval "$(echo "${ENV_OUTPUT}" | grep '^export ')"
-
 case "${TOOL}" in
     jira-cli)
         GROOVY_SCRIPT="${AI_WORKLOG_WORKSPACE}/jira/jira-ticket-info.groovy"

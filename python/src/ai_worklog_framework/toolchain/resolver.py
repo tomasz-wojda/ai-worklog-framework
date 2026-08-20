@@ -1,15 +1,13 @@
 """
-resolver.py — Detects installed runtimes and resolves per-tool environments.
+resolver.py — Detects active Python, Java, and Groovy runtimes.
 
-Maps workspace tools (Jira CLI, New Relic CLI, Jenkins syntax check) to the
-Java and Groovy versions they require. Groovy 3 is incompatible with Java 25;
-Java 17 is the safe default for existing Groovy scripts in the workspace.
+Detects the active Python, system Java, and configured Groovy runtimes.
 
 Inputs:
-  - Optional workspace toolchain configuration from config.json/local.json.
+  - Optional workspace Groovy configuration from config.json/local.json.
 
 Outputs:
-  - DetectedRuntime inventory and ToolEnvironment for each named tool.
+  - Runtime inventory results.
 """
 
 import os
@@ -17,12 +15,11 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ai_worklog_framework.result import Result, ResultSet, Status
-from ai_worklog_framework.shared import load_shared
 
 
 JAVA_MAJOR_RE = re.compile(r'version "(\d+)')
@@ -48,39 +45,6 @@ class GroovyRuntime:
 class PythonRuntime:
     executable: Path
     version_string: str
-
-
-@dataclass
-class ToolSpec:
-    name: str
-    java_major: int
-    groovy_major: Optional[int] = None
-    description: str = ""
-
-
-@dataclass
-class ToolEnvironment:
-    tool: str
-    java_home: Optional[Path]
-    groovy_executable: Optional[Path]
-    ready: bool
-    message: str
-
-
-_TOOLCHAIN_RULES = load_shared("toolchain-tools.json", {})
-DEFAULT_TOOL_SPECS: Dict[str, ToolSpec] = {
-    name: ToolSpec(
-        name=name,
-        java_major=int(spec["java"]),
-        groovy_major=int(spec["groovy"]) if spec.get("groovy") is not None else None,
-        description=spec.get("description", ""),
-    )
-    for name, spec in _TOOLCHAIN_RULES.get("tools", {}).items()
-}
-GROOVY_JAVA_COMPAT: Dict[int, Tuple[int, int]] = {
-    int(major): (int(bounds["min_java"]), int(bounds["max_java"]))
-    for major, bounds in _TOOLCHAIN_RULES.get("compatibility", {}).items()
-}
 
 
 def _run(cmd: List[str], env: Optional[Dict[str, str]] = None, timeout: int = 10) -> Tuple[int, str, str]:
@@ -123,52 +87,31 @@ def _java_version_at_home(java_home: Path) -> Optional[JavaRuntime]:
     return JavaRuntime(major=major, home=java_home, version_string=text.splitlines()[0] if text else "")
 
 
-def detect_java_runtimes(config: Dict[str, Any]) -> List[JavaRuntime]:
-    found: Dict[int, JavaRuntime] = {}
-    configured = config.get("java", {})
-
-    for key, path_str in configured.items():
-        try:
-            major = int(str(key).replace("java", ""))
-        except ValueError:
-            continue
-        home = Path(os.path.expanduser(str(path_str)))
-        runtime = _java_version_at_home(home)
-        if runtime:
-            found[major] = runtime
-
-    if shutil.which("/usr/libexec/java_home"):
-        code, out, err = _run(["/usr/libexec/java_home", "-V"])
-        combined = out + err
-        for line in combined.splitlines():
-            match = re.search(r"(\d+)(?:\.\d+)*.*\((.+)\)", line)
-            if not match:
-                continue
-            major = int(match.group(1))
-            if major in found:
-                continue
-            code2, home_out, _ = _run(["/usr/libexec/java_home", "-v", str(major)])
-            if code2 == 0 and home_out.strip():
-                runtime = _java_version_at_home(Path(home_out.strip()))
-                if runtime:
-                    found[major] = runtime
-
-    if not found and os.environ.get("JAVA_HOME"):
+def detect_java_runtimes() -> List[JavaRuntime]:
+    if os.environ.get("JAVA_HOME"):
         runtime = _java_version_at_home(Path(os.environ["JAVA_HOME"]))
         if runtime:
-            found[runtime.major] = runtime
+            return [runtime]
 
-    if not found and shutil.which("java"):
+    java_home_tool = Path("/usr/libexec/java_home")
+    if java_home_tool.is_file():
+        code, out, _ = _run([str(java_home_tool)])
+        if code == 0 and out.strip():
+            runtime = _java_version_at_home(Path(out.strip()))
+            if runtime:
+                return [runtime]
+
+    java_executable = shutil.which("java")
+    if java_executable:
         code, out, err = _run(["java", "-version"])
         text = out + err
         match = JAVA_MAJOR_RE.search(text)
         if match:
             major = int(match.group(1))
-            java_home = os.environ.get("JAVA_HOME", "")
-            home = Path(java_home) if java_home else Path("/")
-            found[major] = JavaRuntime(major=major, home=home, version_string=text.splitlines()[0])
+            home = Path(java_executable).resolve().parent.parent
+            return [JavaRuntime(major=major, home=home, version_string=text.splitlines()[0])]
 
-    return sorted(found.values(), key=lambda r: r.major)
+    return []
 
 
 def detect_groovy_runtimes(config: Dict[str, Any]) -> List[GroovyRuntime]:
@@ -211,98 +154,6 @@ def detect_groovy_runtimes(config: Dict[str, Any]) -> List[GroovyRuntime]:
     return sorted(found, key=lambda r: r.major)
 
 
-def _pick_java(runtimes: List[JavaRuntime], major: int) -> Optional[JavaRuntime]:
-    for runtime in runtimes:
-        if runtime.major == major:
-            return runtime
-    return None
-
-
-def _pick_groovy(runtimes: List[GroovyRuntime], major: Optional[int], java_major: int) -> Optional[GroovyRuntime]:
-    if major is None:
-        return None
-    compatible = [r for r in runtimes if r.major == major]
-    if not compatible:
-        compatible = [r for r in runtimes if r.major >= major]
-    for runtime in compatible:
-        bounds = GROOVY_JAVA_COMPAT.get(runtime.major)
-        if bounds and bounds[0] <= java_major <= bounds[1]:
-            return runtime
-    return compatible[0] if compatible else None
-
-
-def resolve_tool_environment(
-    tool_name: str,
-    toolchain_config: Dict[str, Any],
-    java_runtimes: List[JavaRuntime],
-    groovy_runtimes: List[GroovyRuntime],
-) -> ToolEnvironment:
-    tool_overrides = toolchain_config.get("tools", {})
-    spec = DEFAULT_TOOL_SPECS.get(tool_name)
-    if not spec:
-        return ToolEnvironment(tool=tool_name, java_home=None, groovy_executable=None, ready=False, message="Unknown tool")
-
-    override = tool_overrides.get(tool_name, {})
-    java_major = int(override.get("java", spec.java_major))
-    groovy_major = override.get("groovy", spec.groovy_major)
-    if groovy_major is not None:
-        groovy_major = int(groovy_major)
-
-    java_rt = _pick_java(java_runtimes, java_major)
-    if not java_rt:
-        return ToolEnvironment(
-            tool=tool_name,
-            java_home=None,
-            groovy_executable=None,
-            ready=False,
-            message=f"Java {java_major} not found",
-        )
-
-    groovy_rt = _pick_groovy(groovy_runtimes, groovy_major, java_rt.major)
-    if spec.groovy_major is not None and not groovy_rt:
-        return ToolEnvironment(
-            tool=tool_name,
-            java_home=java_rt.home,
-            groovy_executable=None,
-            ready=False,
-            message=f"Groovy {spec.groovy_major} not found for Java {java_rt.major}",
-        )
-
-    if groovy_rt:
-        bounds = GROOVY_JAVA_COMPAT.get(groovy_rt.major, (8, 25))
-        if not (bounds[0] <= java_rt.major <= bounds[1]):
-            return ToolEnvironment(
-                tool=tool_name,
-                java_home=java_rt.home,
-                groovy_executable=groovy_rt.executable,
-                ready=False,
-                message=(
-                    f"Incompatible: Groovy {groovy_rt.major} with Java {java_rt.major} "
-                    f"(supported Java {bounds[0]}-{bounds[1]})"
-                ),
-            )
-
-    parts = [f"Java {java_rt.major} @ {java_rt.home}"]
-    if groovy_rt:
-        parts.append(f"Groovy {groovy_rt.version_string} @ {groovy_rt.executable}")
-    return ToolEnvironment(
-        tool=tool_name,
-        java_home=java_rt.home,
-        groovy_executable=groovy_rt.executable if groovy_rt else None,
-        ready=True,
-        message="; ".join(parts),
-    )
-
-
-def build_toolchain_env(tool_env: ToolEnvironment) -> Dict[str, str]:
-    env = os.environ.copy()
-    if tool_env.java_home:
-        env["JAVA_HOME"] = str(tool_env.java_home)
-        java_bin = tool_env.java_home / "bin"
-        env["PATH"] = f"{java_bin}{os.pathsep}{env.get('PATH', '')}"
-    return env
-
-
 def check_toolchain(toolchain_config: Dict[str, Any]) -> ResultSet:
     results = ResultSet()
 
@@ -317,7 +168,7 @@ def check_toolchain(toolchain_config: Dict[str, Any]) -> ResultSet:
     else:
         results.add(Result(status=Status.BLOCKED, source="python3", message="Not detected"))
 
-    java_runtimes = detect_java_runtimes(toolchain_config)
+    java_runtimes = detect_java_runtimes()
     if java_runtimes:
         for rt in java_runtimes:
             results.add(Result(
@@ -339,10 +190,5 @@ def check_toolchain(toolchain_config: Dict[str, Any]) -> ResultSet:
             ))
     else:
         results.add(Result(status=Status.DEGRADED, source="groovy", message="No Groovy runtimes detected"))
-
-    for tool_name in DEFAULT_TOOL_SPECS:
-        tool_env = resolve_tool_environment(tool_name, toolchain_config, java_runtimes, groovy_runtimes)
-        status = Status.READY if tool_env.ready else Status.BLOCKED
-        results.add(Result(status=status, source=f"tool:{tool_name}", message=tool_env.message))
 
     return results

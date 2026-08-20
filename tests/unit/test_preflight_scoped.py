@@ -32,9 +32,10 @@ def test_ticket_scope_resolves_catalog_services(tmp_path):
     scope = resolve_scope(workspace(tmp_path), "TEST-1", None)
     assert scope.service_ids == ["service-one"]
     assert {
-        "workspace", "git", "toolchain", "jenkins", "argocd",
+        "workspace", "git", "jenkins", "argocd",
         "aws", "kubectl", "repositories", "catalog_binaries",
     }.issubset(scope.checks)
+    assert "toolchain" not in scope.checks
 
 
 def test_explicit_service_unions_with_ticket_state(tmp_path):

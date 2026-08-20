@@ -181,6 +181,8 @@ def test_scoped_preflight_status_matches() -> None:
         if line.strip().startswith("[")
     )
     assert python_statuses == groovy_statuses
+    assert "tool:" not in python.stdout
+    assert "tool:" not in groovy.stdout
 
 
 @pytest.mark.parametrize(

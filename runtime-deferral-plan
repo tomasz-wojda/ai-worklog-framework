@@ -230,17 +230,14 @@ Python counterpart, so parity failures on re-enablement are expected and
 enumerate the porting backlog.
 
 **Supported build entry point.** What was deferred: a working Gradle build.
-`groovy/build.gradle` declares a Java 17 toolchain that cannot be satisfied on
-the development machine, Gradle is not installed, and no wrapper is committed,
-so the 1.0.0 release gate runs through the hand-assembled classpath in section
-9.4 instead. Why: installing a second JDK and a build tool was not on the
-critical path to a working Groovy CLI. Restore steps: commit a Gradle wrapper
-or add `scripts/run-tests.sh` wrapping the section 9.4 invocation; reconcile
-the declared toolchain with the JDK actually in use; verify the suite reports
-the same 118 tests. Cost: low, but until it is done the test command is
-undiscoverable to anyone who has not read this document, and `CoreTest`'s
-`new File('..')` root resolution silently makes results depend on the working
-directory.
+Gradle is not installed and no wrapper is committed, so the 1.0.0 release gate
+runs through the hand-assembled classpath in section 9.4 instead. Why:
+installing a build tool was not on the critical path to a working Groovy CLI.
+Restore steps: commit a Gradle wrapper or add `scripts/run-tests.sh` wrapping
+the section 9.4 invocation; verify the suite reports the same 118 tests. Cost:
+low, but until it is done the test command is undiscoverable to anyone who has
+not read this document, and `CoreTest`'s `new File('..')` root resolution
+silently makes results depend on the working directory.
 
 ### 7.4 Automox entry
 
@@ -284,9 +281,9 @@ invoked directly refuses.
 
 ## 9.4 Test harness
 
-Verified 2026-08-15. `groovy/build.gradle` pins a Java 17 toolchain, but this
-machine has only JDK 26 (`/opt/java/openjdk-26`) and Gradle is not installed,
-with no wrapper in the repository. Gradle is not a usable entry point here.
+Verified 2026-08-15. This machine uses JDK 26 (`/opt/java/openjdk-26`), but
+Gradle is not installed and no wrapper exists in the repository. Gradle is not
+a usable entry point here.
 
 The Groovy distribution at `/opt/groovy/current/lib` bundles `junit-4.13.2.jar`
 and `hamcrest-core-1.3.jar`, so the suite runs directly. It must be run from
@@ -310,10 +307,9 @@ AI_WORKLOG_FRAMEWORK_ROOT="$(cd .. && pwd)" groovy \
 
 This is a gap, not a solution: the release gate for 1.0.0 currently depends on
 a hand-assembled classpath rather than a supported build entry point, and
-`build.gradle` advertises a toolchain that cannot be satisfied. Section 7.2
-must record this, and section 7.3 must carry it as a deferred item with its own
-restore steps, namely adding a Gradle wrapper or a `scripts/run-tests.sh` and
-reconciling the declared Java toolchain with the JDK actually in use.
+Gradle is not installed. Section 7.2 must record this, and section 7.3 must
+carry it as a deferred item with its own restore steps, namely adding a Gradle
+wrapper or a `scripts/run-tests.sh`.
 
 ## 10. Sequencing with the Automox plan
 

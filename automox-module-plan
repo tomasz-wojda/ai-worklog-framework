@@ -332,9 +332,9 @@ public repositories.
 
 ## 10. Test harness
 
-`groovy/build.gradle` pins a Java 17 toolchain, but this machine has only
-JDK 26 (`/opt/java/openjdk-26`) and Gradle is not installed, with no wrapper in
-the repository. Gradle is therefore not a usable entry point here.
+This machine uses JDK 26 (`/opt/java/openjdk-26`), but Gradle is not installed
+and no wrapper exists in the repository. Gradle is therefore not a usable
+entry point here.
 
 The Groovy distribution at `/opt/groovy/current/lib` bundles `junit-4.13.2.jar`
 and `hamcrest-core-1.3.jar`, so the suite runs directly. It must be run from

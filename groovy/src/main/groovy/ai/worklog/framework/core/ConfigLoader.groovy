@@ -11,7 +11,7 @@ class ConfigLoader {
                 required_binaries: ['python3', 'git', 'gh', 'kubectl', 'aws', 'jq'],
                 optional_binaries: ['groovy', 'java', 'argocd', 'helm']
             ],
-            toolchain    : [java: [:], groovy: [:], tools: [:]]
+            toolchain    : [groovy: [:]]
         ]
     }
 

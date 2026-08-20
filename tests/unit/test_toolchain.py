@@ -1,64 +1,60 @@
-"""
-Unit tests for ai_worklog_framework.toolchain.resolver module.
-"""
-
 from pathlib import Path
 
-import pytest
-
+from ai_worklog_framework.result import Status
+from ai_worklog_framework.toolchain import resolver
 from ai_worklog_framework.toolchain.resolver import (
     GroovyRuntime,
     JavaRuntime,
-    resolve_tool_environment,
-    GROOVY_JAVA_COMPAT,
+    PythonRuntime,
+    check_toolchain,
 )
 
 
-class TestResolveToolEnvironment:
-    def test_jira_cli_java17_groovy3(self):
-        java_rts = [JavaRuntime(major=17, home=Path("/java17"))]
-        groovy_rts = [GroovyRuntime(major=3, executable=Path("/groovy3"), version_string="3.0.21")]
-        env = resolve_tool_environment("jira-cli", {}, java_rts, groovy_rts)
-        assert env.ready is True
-        assert env.java_home == Path("/java17")
-        assert env.groovy_executable == Path("/groovy3")
+def test_check_toolchain_reports_active_runtimes_without_named_tools(monkeypatch):
+    monkeypatch.setattr(
+        resolver,
+        "detect_python",
+        lambda: PythonRuntime(Path("/python"), "Python 3.14.6"),
+    )
+    monkeypatch.setattr(
+        resolver,
+        "detect_java_runtimes",
+        lambda: [JavaRuntime(major=26, home=Path("/java"), version_string="openjdk 26")],
+    )
+    monkeypatch.setattr(
+        resolver,
+        "detect_groovy_runtimes",
+        lambda config: [
+            GroovyRuntime(
+                major=6,
+                executable=Path("/groovy"),
+                version_string="6.0.0",
+            )
+        ],
+    )
 
-    def test_groovy3_rejects_java25(self):
-        java_rts = [
-            JavaRuntime(major=17, home=Path("/java17")),
-            JavaRuntime(major=25, home=Path("/java25")),
-        ]
-        groovy_rts = [GroovyRuntime(major=3, executable=Path("/groovy3"), version_string="3.0.21")]
-        env = resolve_tool_environment("jira-cli", {"tools": {"jira-cli": {"java": 25, "groovy": 3}}}, java_rts, groovy_rts)
-        assert env.ready is False
-        assert "Incompatible" in env.message
+    results = check_toolchain({"groovy": {"default": "/groovy"}})
+    sources = [result.source for result in results.results]
 
-    def test_gradle_java17_no_groovy(self):
-        java_rts = [
-            JavaRuntime(major=17, home=Path("/java17")),
-        ]
-        env = resolve_tool_environment("gradle", {}, java_rts, [])
-        assert env.ready is True
-        assert env.java_home == Path("/java17")
-        assert env.groovy_executable is None
-
-    def test_missing_java_blocked(self):
-        env = resolve_tool_environment("jira-cli", {}, [], [])
-        assert env.ready is False
-        assert "Java 17 not found" in env.message
-
-    def test_config_override_java17_for_gradle(self):
-        java_rts = [JavaRuntime(major=17, home=Path("/java17"))]
-        cfg = {"tools": {"gradle": {"java": 17}}}
-        env = resolve_tool_environment("gradle", cfg, java_rts, [])
-        assert env.ready is True
+    assert sources == ["python3", "java:26", "groovy:6"]
+    assert all(not source.startswith("tool:") for source in sources)
+    assert results.overall_status == Status.READY
 
 
-class TestGroovyJavaCompat:
-    def test_groovy5_supports_java25(self):
-        low, high = GROOVY_JAVA_COMPAT[5]
-        assert low <= 25 <= high
+def test_check_toolchain_marks_missing_optional_runtimes_degraded(monkeypatch):
+    monkeypatch.setattr(
+        resolver,
+        "detect_python",
+        lambda: PythonRuntime(Path("/python"), "Python 3.14.6"),
+    )
+    monkeypatch.setattr(resolver, "detect_java_runtimes", lambda: [])
+    monkeypatch.setattr(resolver, "detect_groovy_runtimes", lambda config: [])
 
-    def test_groovy3_does_not_support_java25(self):
-        low, high = GROOVY_JAVA_COMPAT[3]
-        assert not (low <= 25 <= high)
+    results = check_toolchain({})
+    statuses = {result.source: result.status for result in results.results}
+
+    assert statuses == {
+        "python3": Status.READY,
+        "java": Status.DEGRADED,
+        "groovy": Status.DEGRADED,
+    }

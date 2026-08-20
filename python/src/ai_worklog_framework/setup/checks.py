@@ -13,7 +13,6 @@ from ai_worklog_framework.setup.manifest import load_manifest
 from ai_worklog_framework.setup.materialize import plan_skill_materialization
 from ai_worklog_framework.setup.resolver import ide_materialization, resolve_ai_vault_root, resolve_runtime_selection
 from ai_worklog_framework.setup.vault import validate_vault_root
-from ai_worklog_framework.toolchain.resolver import check_toolchain
 from ai_worklog_framework.workspace.planner import legacy_integration_status
 
 
@@ -79,15 +78,6 @@ def run_setup_checks(
     else:
         checks.append(_check(Status.BLOCKED, "runtime", f"{runtime} unavailable ({runtime_source})"))
 
-    ws_config = load_config(workspace)
-    toolchain = check_toolchain(ws_config.toolchain)
-    if toolchain.overall_status == Status.READY:
-        checks.append(_check(Status.READY, "toolchain", "Compatible"))
-    elif toolchain.overall_status == Status.BLOCKED:
-        checks.append(_check(Status.BLOCKED, "toolchain", "Blocked compatibility issues"))
-    else:
-        checks.append(_check(Status.DEGRADED, "toolchain", "Degraded compatibility"))
-
     vault_root, vault_source = resolve_ai_vault_root(workspace)
     vault_manifest: Dict[str, Any] = {}
     if vault_root is None:
@@ -131,6 +121,7 @@ def run_setup_checks(
 
     if include_preflight:
         try:
+            ws_config = load_config(workspace)
             preflight = execute_preflight(paths, ws_config)
             status = preflight.overall_status
             checks.append(

@@ -23,7 +23,6 @@ from ai_worklog_framework.cli import EXIT_BLOCKED, EXIT_SUCCESS, EXIT_USER_ERROR
 from ai_worklog_framework.config import load_config
 from ai_worklog_framework.paths import resolve_workspace, WorkspacePaths
 from ai_worklog_framework.result import Result, ResultSet, Status
-from ai_worklog_framework.toolchain.resolver import check_toolchain
 from ai_worklog_framework.shared import load_shared
 
 
@@ -114,8 +113,6 @@ def execute_preflight(
         _check_repositories(results, paths, scope.service_ids, scope.catalog)
     if selected("catalog_binaries"):
         _check_catalog_binaries(results, scope.service_ids, scope.catalog)
-    if selected("toolchain"):
-        _check_toolchain(results, config)
 
     return results
 
@@ -180,13 +177,6 @@ def _check_catalog_binaries(
             binaries.update(packs.get(pack_id, {}).get("prerequisites", []))
     for binary in sorted(binaries):
         _check_binary(results, binary)
-
-
-def _check_toolchain(results: ResultSet, config) -> None:
-    """Reports Python/Java/Groovy compatibility for legacy Groovy tools."""
-    toolchain_results = check_toolchain(config.toolchain)
-    for item in toolchain_results.results:
-        results.add(item)
 
 
 def _check_workspace_structure(paths: WorkspacePaths) -> Result:

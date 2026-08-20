@@ -80,30 +80,15 @@
     },
     "toolchain": {
       "type": "object",
-      "description": "Multi-version Python/Java/Groovy routing for legacy workspace tools",
+      "description": "Runtime discovery configuration",
       "properties": {
-        "java": {
-          "type": "object",
-          "description": "Java major version to JAVA_HOME path (e.g. \"17\", \"25\")",
-          "additionalProperties": { "type": "string" }
-        },
         "groovy": {
           "type": "object",
           "description": "Groovy major version or 'default' to executable path",
           "additionalProperties": { "type": "string" }
-        },
-        "tools": {
-          "type": "object",
-          "description": "Per-tool overrides for required java/groovy majors",
-          "additionalProperties": {
-            "type": "object",
-            "properties": {
-              "java": { "type": "integer" },
-              "groovy": { "type": "integer" }
-            }
-          }
         }
-      }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

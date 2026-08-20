@@ -75,8 +75,7 @@ Python remains a supported fallback and parity reference.
 ## Requirements
 
 - macOS or Linux
-- Groovy 3, 4, or 5
-- Java 17 for Groovy 3/4, or Java 17–25 for Groovy 5
+- Groovy with a compatible system JVM
 - Python 3.10 or newer for the fallback runtime and parity tests
 - Git
 - Optional tools used by individual adapters:
@@ -97,9 +96,9 @@ export PATH="$PWD/bin:$PATH"
 ai-worklog --version
 ```
 
-Groovy is the default runtime. The launcher selects Java 17 on macOS when it is
-available, which keeps Groovy 3 and 4 compatible. Install the optional Python
-fallback and test environment with:
+Groovy is the default runtime. The launcher uses the active system JVM selected
+by the Groovy installation. Install the optional Python fallback and test
+environment with:
 
 ```bash
 python3 -m venv .venv
@@ -243,39 +242,16 @@ reported instead of silently selecting another workspace.
 
 ## Python, Java, and Groovy Toolchains
 
-The framework does not force one global `JAVA_HOME`. It resolves a runtime for
-each tool.
-
-| Tool | Java | Groovy |
-|------|------|--------|
-| `jira-cli` | 17 | 3+ |
-| `newrelic-cli` | 17 | 3+ |
-| `jenkins-syntax-check` | 17 | Not required |
-| `gradle-java25` | 25 | Not required |
-| `framework-groovy` | 17 | 3+ |
-
-Compatibility policy:
-
-| Groovy | Supported Java range |
-|--------|----------------------|
-| 3 | 8–17 |
-| 4 | 8–21 |
-| 5 | 17–25 |
-
-Detect installed runtimes and validate mappings:
+The framework, workspace Groovy tools, and Gradle use the active system JVM.
+Runtime inventory is available as an explicit diagnostic and is not part of
+workspace preflight or setup readiness.
 
 ```bash
 ai-worklog toolchain check
 ai-worklog toolchain list
 ```
 
-Print shell exports for a specific tool:
-
-```bash
-ai-worklog toolchain env jira-cli
-```
-
-Run a mapped Groovy tool:
+Run a workspace Groovy tool:
 
 ```bash
 ./scripts/run-groovy-tool.sh jira-cli summary
@@ -451,7 +427,7 @@ Run the test suite:
 
 ```bash
 python3 -m pytest -c python/pyproject.toml tests/ -q
-JAVA_HOME=$(/usr/libexec/java_home -v 17) gradle -p groovy test
+gradle -p groovy test
 ```
 
 The parity suite invokes both launchers and compares stable output, JSON
