@@ -174,9 +174,17 @@ def env_home(isolated_home: Path) -> dict[str, str]:
 def work_workspace(tmp_path: Path) -> Path:
     workspace = tmp_path / "work"
     workspace.mkdir()
-    (workspace / "jira").mkdir()
+    (workspace / ".ai-worklog").mkdir()
     sentinel = workspace / "sentinel.txt"
     sentinel.write_text("keep")
+    return workspace
+
+
+@pytest.fixture
+def legacy_workspace(tmp_path: Path) -> Path:
+    workspace = tmp_path / "legacy"
+    workspace.mkdir()
+    (workspace / "worklog").mkdir()
     return workspace
 
 
@@ -608,6 +616,19 @@ def test_workspace_current_cwd_marker(
     python = _run("python", env_home, *arguments, cwd=work_workspace)
     groovy = _run("groovy", env_home, *arguments, cwd=work_workspace)
     _assert_parity_json(python, groovy)
+    assert json.loads(python.stdout)["source"] == "cwd_marker"
+
+
+def test_workspace_current_cwd_legacy(
+    env_home: dict[str, str],
+    seeded_registry: None,
+    legacy_workspace: Path,
+) -> None:
+    arguments = ("workspace", "current", "--json")
+    python = _run("python", env_home, *arguments, cwd=legacy_workspace)
+    groovy = _run("groovy", env_home, *arguments, cwd=legacy_workspace)
+    _assert_parity_json(python, groovy)
+    assert json.loads(python.stdout)["source"] == "cwd_legacy"
 
 
 def test_workspace_current_default_workspace(

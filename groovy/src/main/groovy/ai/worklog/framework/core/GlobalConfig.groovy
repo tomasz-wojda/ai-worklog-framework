@@ -487,11 +487,11 @@ class GlobalConfig {
         if (envName) {
             return resolveRegisteredWorkspace(envName, 'env_name')
         }
-        File discovered = discoverWorkspaceFromCwd(frameworkRoot)
+        Map discovered = discoverWorkspaceFromCwd(frameworkRoot)
         if (discovered) {
             return [
-                path: discovered,
-                source: 'cwd_marker',
+                path: discovered.path,
+                source: discovered.source,
                 name: null
             ]
         }
@@ -567,16 +567,31 @@ class GlobalConfig {
         ]
     }
 
-    private static File discoverWorkspaceFromCwd(File frameworkRoot) {
+    private static Map discoverWorkspaceFromCwd(File frameworkRoot) {
         Map rules = (Map) JsonFiles.read(
             new File(frameworkRoot, 'shared/workspace-markers.json'),
-            [markers: ['.ai-worklog', 'worklog', 'prompt.log', 'jira'], max_parent_depth: 20]
+            [
+                primary_markers: ['.ai-worklog'],
+                legacy_markers: ['worklog', 'integrations'],
+                max_parent_depth: 20
+            ]
         )
         File current = new File(System.getProperty('user.dir')).canonicalFile
+        File excluded = configHome()
         int depth = (rules.max_parent_depth ?: 20) as int
+        List<List> tiers = [
+            [(List) (rules.primary_markers ?: []), 'cwd_marker'],
+            [(List) (rules.legacy_markers ?: []), 'cwd_legacy']
+        ]
         for (int i = 0; i < depth; i++) {
-            if (((List) rules.markers).any { new File(current, it.toString()).exists() }) {
-                return current
+            for (List tier in tiers) {
+                boolean matched = ((List) tier[0]).any {
+                    File candidate = new File(current, it.toString())
+                    candidate.exists() && candidate.canonicalFile != excluded
+                }
+                if (matched) {
+                    return [path: current, source: tier[1].toString()]
+                }
             }
             if (current.parentFile == null || current.parentFile == current) {
                 break

@@ -8,7 +8,6 @@ import pytest
 from ai_worklog_framework import global_config as gc
 from ai_worklog_framework.paths import (
     WorkspaceResolution,
-    find_workspace_root,
     resolve_workspace,
     resolve_workspace_detailed,
 )
@@ -29,25 +28,6 @@ def home(tmp_path, monkeypatch):
     root.mkdir()
     monkeypatch.setenv("AI_WORKLOG_HOME", str(root))
     return root
-
-
-class TestFindWorkspaceRoot:
-    def test_finds_by_worklog_marker(self, mock_workspace):
-        subdir = mock_workspace / "repos" / "some-project"
-        subdir.mkdir(parents=True)
-        found = find_workspace_root(subdir)
-        assert found == mock_workspace
-
-    def test_finds_by_prompt_log(self, tmp_path):
-        (tmp_path / "prompt.log").touch()
-        found = find_workspace_root(tmp_path)
-        assert found == tmp_path
-
-    def test_returns_none_when_not_found(self, tmp_path):
-        empty = tmp_path / "empty"
-        empty.mkdir()
-        found = find_workspace_root(empty)
-        assert found is None
 
 
 class TestResolveWorkspace:

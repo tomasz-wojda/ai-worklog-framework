@@ -6,12 +6,6 @@ from typing import Optional
 from ai_worklog_framework.global_config import resolve_workspace_selection
 from ai_worklog_framework.shared import load_shared
 
-_PATH_RULES = load_shared(
-    "workspace-markers.json",
-    {"markers": [".ai-worklog", "worklog", "integrations", "prompt.log", "jira"], "max_parent_depth": 20},
-)
-WORKSPACE_MARKERS = _PATH_RULES["markers"]
-MAX_PARENT_DEPTH = _PATH_RULES["max_parent_depth"]
 SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _WORKSPACE_LAYOUT = load_shared("workspace-init.json", {})
 _INTEGRATIONS_PATH = _WORKSPACE_LAYOUT.get("integrations_path", "integrations")
@@ -28,20 +22,6 @@ def _validate_component(value: str, label: str) -> str:
     if not SAFE_COMPONENT.fullmatch(value) or value in (".", ".."):
         raise ValueError(f"Invalid {label}: {value}")
     return value
-
-
-def find_workspace_root(start: Optional[Path] = None) -> Optional[Path]:
-    current = start or Path.cwd()
-    current = current.resolve()
-    for _ in range(MAX_PARENT_DEPTH):
-        for marker in WORKSPACE_MARKERS:
-            if (current / marker).exists():
-                return current
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None
 
 
 def resolve_workspace_detailed(

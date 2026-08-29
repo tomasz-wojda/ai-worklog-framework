@@ -364,4 +364,105 @@ class GlobalConfigTest extends GroovyTestCase {
         }
         buffer.toString('UTF-8').trim()
     }
+
+    private Map resolveFrom(File directory) {
+        String originalUserDir = System.getProperty('user.dir')
+        System.setProperty('user.dir', directory.canonicalFile.path)
+        try {
+            return GlobalConfig.resolveWorkspaceSelection(null, null, repository, [:])
+        } finally {
+            System.setProperty('user.dir', originalUserDir)
+        }
+    }
+
+    private File candidateDir(String name, List<String> children) {
+        File directory = new File(work.parentFile, name)
+        directory.mkdirs()
+        children.each { new File(directory, it).mkdirs() }
+        directory
+    }
+
+    void testPromptLogIsNotAMarker() {
+        GlobalConfig.addWorkspace('work', work.path, true)
+        File candidate = candidateDir('only-prompt-log', [])
+        new File(candidate, 'prompt.log').text = 'x'
+        Map resolved = resolveFrom(candidate)
+        assertEquals(work.canonicalFile, resolved.path)
+        assertEquals('default_workspace', resolved.source)
+        candidate.deleteDir()
+    }
+
+    void testJiraDirectoryIsNotAMarker() {
+        GlobalConfig.addWorkspace('work', work.path, true)
+        File candidate = candidateDir('only-jira', ['jira'])
+        Map resolved = resolveFrom(candidate)
+        assertEquals(work.canonicalFile, resolved.path)
+        assertEquals('default_workspace', resolved.source)
+        candidate.deleteDir()
+    }
+
+    void testAiWorklogResolvesWithSourceCwdMarker() {
+        File candidate = candidateDir('primary-marker', ['.ai-worklog'])
+        Map resolved = resolveFrom(candidate)
+        assertEquals(candidate.canonicalFile, resolved.path)
+        assertEquals('cwd_marker', resolved.source)
+        assertNull(resolved.name)
+        candidate.deleteDir()
+    }
+
+    void testWorklogResolvesAsLegacyWithSourceCwdLegacy() {
+        File candidate = candidateDir('legacy-worklog', ['worklog'])
+        Map resolved = resolveFrom(candidate)
+        assertEquals(candidate.canonicalFile, resolved.path)
+        assertEquals('cwd_legacy', resolved.source)
+        assertNull(resolved.name)
+        candidate.deleteDir()
+    }
+
+    void testIntegrationsResolvesAsLegacy() {
+        File candidate = candidateDir('legacy-integrations', ['integrations'])
+        Map resolved = resolveFrom(candidate)
+        assertEquals(candidate.canonicalFile, resolved.path)
+        assertEquals('cwd_legacy', resolved.source)
+        candidate.deleteDir()
+    }
+
+    void testPrimaryMarkerWinsOverLegacyInSameDirectory() {
+        File candidate = candidateDir('both-tiers', ['.ai-worklog', 'worklog'])
+        Map resolved = resolveFrom(candidate)
+        assertEquals(candidate.canonicalFile, resolved.path)
+        assertEquals('cwd_marker', resolved.source)
+        candidate.deleteDir()
+    }
+
+    void testNearestDirectoryWinsOverDistantPrimary() {
+        File outer = candidateDir('outer-primary', ['.ai-worklog'])
+        File inner = new File(outer, 'inner')
+        new File(inner, 'worklog').mkdirs()
+        Map resolved = resolveFrom(inner)
+        assertEquals(inner.canonicalFile, resolved.path)
+        assertEquals('cwd_legacy', resolved.source)
+        outer.deleteDir()
+    }
+
+    void testGlobalHomeIsNeverAWorkspace() {
+        File outerHome = File.createTempDir('ai-worklog-outer-', '-test')
+        File nestedHome = new File(outerHome, '.ai-worklog')
+        nestedHome.mkdirs()
+        File scratch = new File(outerHome, 'scratch')
+        scratch.mkdirs()
+        String originalUserDir = System.getProperty('user.dir')
+        System.setProperty('ai.worklog.test.home', nestedHome.path)
+        try {
+            GlobalConfig.addWorkspace('work', work.path, true)
+            System.setProperty('user.dir', scratch.canonicalFile.path)
+            Map resolved = GlobalConfig.resolveWorkspaceSelection(null, null, repository, [:])
+            assertEquals(work.canonicalFile, resolved.path)
+            assertEquals('default_workspace', resolved.source)
+            assertEquals('work', resolved.name)
+        } finally {
+            System.setProperty('user.dir', originalUserDir)
+            outerHome.deleteDir()
+        }
+    }
 }

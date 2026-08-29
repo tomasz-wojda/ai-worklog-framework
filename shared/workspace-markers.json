@@ -1,4 +1,5 @@
 {
-  "markers": [".ai-worklog", "worklog", "integrations", "prompt.log", "jira"],
+  "primary_markers": [".ai-worklog"],
+  "legacy_markers": ["worklog", "integrations"],
   "max_parent_depth": 20
 }

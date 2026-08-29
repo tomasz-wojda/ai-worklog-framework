@@ -519,9 +519,10 @@ def resolve_workspace_selection(
         return _resolve_registered_workspace(env_name, "env_name")
     discovered = _discover_workspace_from_cwd()
     if discovered is not None:
+        discovered_path, discovered_source = discovered
         return {
-            "path": discovered,
-            "source": "cwd_marker",
+            "path": discovered_path,
+            "source": discovered_source,
             "name": None,
         }
     config = load_global_config()
@@ -553,17 +554,28 @@ def print_json(value: dict[str, Any]) -> None:
     print(json.dumps(value, indent=4, ensure_ascii=False))
 
 
-def _discover_workspace_from_cwd() -> Path | None:
+def _discover_workspace_from_cwd() -> tuple[Path, str] | None:
     rules = load_shared(
         "workspace-markers.json",
-        {"markers": [".ai-worklog", "worklog", "prompt.log", "jira"], "max_parent_depth": 20},
+        {
+            "primary_markers": [".ai-worklog"],
+            "legacy_markers": ["worklog", "integrations"],
+            "max_parent_depth": 20,
+        },
     )
     current = Path.cwd().resolve()
+    excluded = global_home().resolve()
     depth = int(rules.get("max_parent_depth", 20))
+    tiers = (
+        (rules.get("primary_markers", []), "cwd_marker"),
+        (rules.get("legacy_markers", []), "cwd_legacy"),
+    )
     for _ in range(depth):
-        for marker in rules.get("markers", []):
-            if (current / marker).exists():
-                return current
+        for markers, source in tiers:
+            for marker in markers:
+                candidate = current / marker
+                if candidate.exists() and candidate.resolve() != excluded:
+                    return current, source
         parent = current.parent
         if parent == current:
             break

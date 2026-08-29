@@ -21,6 +21,14 @@ def home(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def nested_home(tmp_path, monkeypatch):
+    root = tmp_path / "fakehome" / ".ai-worklog"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("AI_WORKLOG_HOME", str(root))
+    return root
+
+
+@pytest.fixture
 def work_workspace(tmp_path):
     ws = tmp_path / "work"
     ws.mkdir()
@@ -421,3 +429,80 @@ class TestConfigCommands:
         assert config_commands.run(args) == 0
         assert gc.show_runtime()["runtime"] == "python"
         assert capsys.readouterr().out.strip() == "Runtime: python"
+
+
+class TestWorkspaceDiscovery:
+    def test_global_home_is_never_a_workspace(self, nested_home, work_workspace, monkeypatch):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        scratch = nested_home.parent / "scratch"
+        scratch.mkdir()
+        monkeypatch.chdir(scratch)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == work_workspace.resolve()
+        assert resolved["source"] == "default_workspace"
+        assert resolved["name"] == "work"
+
+    def test_prompt_log_is_not_a_marker(self, home, work_workspace, tmp_path, monkeypatch):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        candidate = tmp_path / "only-prompt-log"
+        candidate.mkdir()
+        (candidate / "prompt.log").touch()
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == work_workspace.resolve()
+        assert resolved["source"] == "default_workspace"
+
+    def test_jira_directory_is_not_a_marker(self, home, work_workspace, tmp_path, monkeypatch):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        candidate = tmp_path / "only-jira"
+        candidate.mkdir()
+        (candidate / "jira").mkdir()
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == work_workspace.resolve()
+        assert resolved["source"] == "default_workspace"
+
+    def test_ai_worklog_resolves_with_source_cwd_marker(self, home, tmp_path, monkeypatch):
+        candidate = tmp_path / "primary"
+        (candidate / ".ai-worklog").mkdir(parents=True)
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == candidate.resolve()
+        assert resolved["source"] == "cwd_marker"
+        assert resolved["name"] is None
+
+    def test_worklog_resolves_as_legacy_with_source_cwd_legacy(self, home, tmp_path, monkeypatch):
+        candidate = tmp_path / "legacy-worklog"
+        (candidate / "worklog").mkdir(parents=True)
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == candidate.resolve()
+        assert resolved["source"] == "cwd_legacy"
+        assert resolved["name"] is None
+
+    def test_integrations_resolves_as_legacy(self, home, tmp_path, monkeypatch):
+        candidate = tmp_path / "legacy-integrations"
+        (candidate / "integrations").mkdir(parents=True)
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == candidate.resolve()
+        assert resolved["source"] == "cwd_legacy"
+
+    def test_primary_marker_wins_over_legacy_in_same_directory(self, home, tmp_path, monkeypatch):
+        candidate = tmp_path / "both"
+        (candidate / ".ai-worklog").mkdir(parents=True)
+        (candidate / "worklog").mkdir()
+        monkeypatch.chdir(candidate)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == candidate.resolve()
+        assert resolved["source"] == "cwd_marker"
+
+    def test_nearest_directory_wins_over_distant_primary(self, home, tmp_path, monkeypatch):
+        outer = tmp_path / "outer"
+        (outer / ".ai-worklog").mkdir(parents=True)
+        inner = outer / "inner"
+        (inner / "worklog").mkdir(parents=True)
+        monkeypatch.chdir(inner)
+        resolved = gc.resolve_workspace_selection()
+        assert resolved["path"] == inner.resolve()
+        assert resolved["source"] == "cwd_legacy"
