@@ -215,7 +215,7 @@ class SetupPlanner {
         List<String> ides,
         Map plan
     ) {
-        WorkspacePlanner.apply((List) plan.workspace_actions)
+        WorkspacePlanner.apply((List) plan.workspace_actions, workspace)
         ((List) plan.skill_actions).each { SetupMaterialize.applySkillAction((Map) it) }
 
         List<Map> skillRecords = new ArrayList<>((List) (plan.skill_records ?: []))

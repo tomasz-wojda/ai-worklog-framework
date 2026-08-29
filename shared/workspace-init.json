@@ -6,7 +6,9 @@
     ".ai-worklog/evidence",
     "worklog",
     "worklog/done",
-    "integrations"
+    "integrations",
+    "repos",
+    "tmp"
   ],
   "files": [
     {

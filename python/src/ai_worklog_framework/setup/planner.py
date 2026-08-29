@@ -110,7 +110,7 @@ def apply_init_or_repair_plan(
     ides: List[str],
     plan: Dict[str, Any],
 ) -> None:
-    apply_plan(plan.get("workspace_actions", []))
+    apply_plan(plan.get("workspace_actions", []), workspace)
     for action in plan.get("skill_actions", []):
         apply_skill_action(action)
 

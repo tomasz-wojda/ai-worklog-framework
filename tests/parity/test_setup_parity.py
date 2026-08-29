@@ -651,6 +651,9 @@ def test_setup_init_conflict_blocked(
     foreign.parent.mkdir(parents=True)
     foreign.mkdir()
     python = _run("python", env_home, *_init_args(workspace, vault, ides=["cursor"], apply=True, json_output=True))
+    _reset_state(isolated_home, workspace)
+    foreign.parent.mkdir(parents=True)
+    foreign.mkdir()
     groovy = _run("groovy", env_home, *_init_args(workspace, vault, ides=["cursor"], apply=True, json_output=True))
     _assert_parity_json(python, groovy, markers)
     assert python.returncode == 3

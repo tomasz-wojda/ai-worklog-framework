@@ -119,7 +119,23 @@ def test_workspace_init_dry_run_matches(tmp_path) -> None:
 
 
 
-def test_workspace_init_blocks_canonical_conflicts_with_parity(tmp_path) -> None:
+def _minimal_vault(root: Path) -> Path:
+    vault = root / "ai-vault"
+    skills = vault / "skills"
+    skills.mkdir(parents=True)
+    (skills / "manifest.json").write_text(
+        json.dumps({"version": 1, "skills": []}), encoding="utf-8"
+    )
+    scripts = vault / "scripts"
+    scripts.mkdir()
+    script = scripts / "validate-skills.sh"
+    script.write_text("#!/bin/sh\n", encoding="utf-8")
+    script.chmod(0o700)
+    return vault
+
+
+def test_workspace_init_preserves_existing_integration_symlink_with_parity(tmp_path) -> None:
+    vault = _minimal_vault(tmp_path)
     results = {}
     for runtime in ("python", "groovy"):
         workspace = tmp_path / f"{runtime}-workspace"
@@ -127,6 +143,12 @@ def test_workspace_init_blocks_canonical_conflicts_with_parity(tmp_path) -> None
         canonical = workspace / "integrations" / "jira"
         canonical.parent.mkdir()
         canonical.symlink_to("../other")
+        env = os.environ.copy()
+        env["AI_WORKLOG_HOME"] = str(tmp_path / f"{runtime}-home")
+        env.pop("AI_WORKLOG_WORKSPACE", None)
+        env.pop("AI_WORKLOG_WORKSPACE_NAME", None)
+        env.pop("AI_WORKLOG_RUNTIME", None)
+        env.pop("AI_WORKLOG_AI_VAULT_ROOT", None)
         results[runtime] = subprocess.run(
             [
                 str(CLI),
@@ -135,13 +157,16 @@ def test_workspace_init_blocks_canonical_conflicts_with_parity(tmp_path) -> None
                 "workspace",
                 "init",
                 str(workspace),
+                "--ai-vault",
+                str(vault),
                 "--apply",
             ],
             capture_output=True,
             text=True,
             timeout=30,
+            env=env,
         )
-        assert results[runtime].returncode == 3
+        assert results[runtime].returncode == 0
         assert canonical.is_symlink()
         assert os.readlink(canonical) == "../other"
 

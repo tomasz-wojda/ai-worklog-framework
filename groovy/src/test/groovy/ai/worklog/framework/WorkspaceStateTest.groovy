@@ -20,33 +20,170 @@ class WorkspaceStateTest extends GroovyTestCase {
         workspace.deleteDir()
     }
 
-    void testWorkspaceInitAndRevert() {
-        new File(workspace, 'jira').mkdir()
+    private List<String> services() {
+        Map rules = (Map) new groovy.json.JsonSlurper().parse(
+            new File(repository, 'shared/workspace-init.json')
+        )
+        ((List) rules.services)*.toString()
+    }
+
+    private void initWorkspace() {
         WorkspacePlanner planner = new WorkspacePlanner(repository)
-        Map initPlan = planner.planInit(workspace)
-        WorkspacePlanner.apply((List) initPlan.actions)
+        WorkspacePlanner.apply((List) planner.planInit(workspace).actions, workspace)
+    }
+
+    private void revertWorkspace() {
+        WorkspacePlanner planner = new WorkspacePlanner(repository)
+        WorkspacePlanner.apply((List) planner.planRevert(workspace).actions, workspace)
+    }
+
+    private void linkService(String service) {
+        new File(workspace, 'integrations').mkdirs()
+        new File(workspace, service).mkdirs()
+        java.nio.file.Files.createSymbolicLink(
+            new File(workspace, "integrations/${service}").toPath(),
+            java.nio.file.Paths.get('..', service)
+        )
+    }
+
+    void testWorkspaceInitAndRevert() {
+        WorkspacePlanner planner = new WorkspacePlanner(repository)
+        initWorkspace()
         assertTrue(new File(workspace, '.ai-worklog/state').isDirectory())
         assertTrue(new File(workspace, '.ai-worklog/config.json').isFile())
         assertTrue(new File(workspace, 'integrations').isDirectory())
+        assertTrue(new File(workspace, 'repos').isDirectory())
+        assertTrue(new File(workspace, 'tmp').isDirectory())
         assertEquals(
             "*${System.lineSeparator()}!.gitignore${System.lineSeparator()}",
             new File(workspace, '.ai-worklog/.gitignore').getText('UTF-8')
         )
-        assertTrue(
-            java.nio.file.Files.isSymbolicLink(
-                new File(workspace, 'integrations/jira').toPath()
-            )
-        )
+        assertTrue(((List) planner.planInit(workspace).actions).every { it.skip })
+
+        revertWorkspace()
+
+        services().each { String service ->
+            assertFalse(service, new File(workspace, "integrations/${service}").exists())
+        }
+    }
+
+    void testWorkspaceRevertNeverRemovesHubsOrState() {
+        initWorkspace()
+        revertWorkspace()
+
+        assertTrue(new File(workspace, 'integrations').isDirectory())
+        assertTrue(new File(workspace, 'worklog').isDirectory())
+        assertTrue(new File(workspace, 'repos').isDirectory())
+        assertTrue(new File(workspace, 'tmp').isDirectory())
+        assertTrue(new File(workspace, '.ai-worklog').isDirectory())
+        assertTrue(new File(workspace, '.ai-worklog/config.json').isFile())
+    }
+
+    void testWorkspaceRevertKeepsADirectoryItDidNotCreate() {
+        File preexisting = new File(workspace, 'integrations/jira')
+        preexisting.mkdirs()
+
+        initWorkspace()
+        revertWorkspace()
+
+        assertTrue(preexisting.isDirectory())
+    }
+
+    void testWorkspaceRevertKeepsAPreexistingSymlink() {
+        linkService('jira')
+
+        initWorkspace()
+        revertWorkspace()
+
+        File canonical = new File(workspace, 'integrations/jira')
+        assertTrue(java.nio.file.Files.isSymbolicLink(canonical.toPath()))
+        assertTrue(new File(workspace, 'jira').isDirectory())
+    }
+
+    void testApplyIsByteIdenticalForPreexistingContent() {
+        Map<String, String> legacy = [
+            'worklog/done/2026-01-01_TICKET.log': 'worklog entry\n',
+            'integrations/jira/credentials': 'token\n',
+            'integrations/confluence/notes.md': '# notes\n',
+            'repos/checkout/README.md': 'readme\n'
+        ]
+        legacy.each { String relative, String content ->
+            File target = new File(workspace, relative)
+            target.parentFile.mkdirs()
+            target.setText(content, 'UTF-8')
+        }
+
+        Map<String, String> before = contents(workspace)
+        initWorkspace()
+        Map<String, String> after = contents(workspace)
+
+        before.each { String relative, String content ->
+            assertEquals(relative, content, after[relative])
+        }
+    }
+
+    private Map<String, String> contents(File root) {
+        Map<String, String> found = [:]
+        root.eachFileRecurse(groovy.io.FileType.FILES) { File file ->
+            if (!java.nio.file.Files.isSymbolicLink(file.toPath())) {
+                String relative = root.toPath().relativize(file.toPath()).toString()
+                found[relative] = file.bytes.encodeHex().toString()
+            }
+        }
+        found
+    }
+
+    void testWorkspaceInitCreatesADirectoryForEveryService() {
+        initWorkspace()
+        services().each { String service ->
+            File target = new File(workspace, "integrations/${service}")
+            assertTrue(service, target.isDirectory())
+            assertFalse(service, java.nio.file.Files.isSymbolicLink(target.toPath()))
+        }
+    }
+
+    void testWorkspaceInitLeavesAnExistingSymlinkAlone() {
+        linkService('jira')
+        initWorkspace()
+        File canonical = new File(workspace, 'integrations/jira')
+        assertTrue(java.nio.file.Files.isSymbolicLink(canonical.toPath()))
         assertEquals(
             java.nio.file.Paths.get('..', 'jira'),
-            java.nio.file.Files.readSymbolicLink(
-                new File(workspace, 'integrations/jira').toPath()
-            )
+            java.nio.file.Files.readSymbolicLink(canonical.toPath())
         )
-        assertTrue(((List) planner.planInit(workspace).actions).every { it.skip })
-        WorkspacePlanner.apply((List) planner.planRevert(workspace).actions)
-        assertFalse(new File(workspace, 'integrations/jira').exists())
-        assertFalse(new File(workspace, 'integrations').exists())
+    }
+
+    void testWorkspaceInitLeavesAnUnknownIntegrationAlone() {
+        File unknown = new File(workspace, 'integrations/confluence')
+        unknown.mkdirs()
+        File sentinel = new File(unknown, 'keep.txt')
+        sentinel.setText('keep', 'UTF-8')
+
+        initWorkspace()
+
+        assertEquals('keep', sentinel.getText('UTF-8'))
+    }
+
+    void testWorkspaceRevertKeepsPopulatedServiceDirectories() {
+        initWorkspace()
+        File credentials = new File(workspace, 'integrations/jira/credentials')
+        credentials.setText('secret', 'UTF-8')
+
+        revertWorkspace()
+
+        assertEquals('secret', credentials.getText('UTF-8'))
+    }
+
+    void testWorkspaceRevertKeepsUnknownIntegrations() {
+        initWorkspace()
+        File unmanaged = new File(workspace, 'integrations/custom')
+        unmanaged.mkdirs()
+        File sentinel = new File(unmanaged, 'keep.txt')
+        sentinel.setText('keep', 'UTF-8')
+
+        revertWorkspace()
+
+        assertEquals('keep', sentinel.getText('UTF-8'))
     }
 
     void testServiceDirResolutionOrder() {
