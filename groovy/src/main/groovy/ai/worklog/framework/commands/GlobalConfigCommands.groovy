@@ -92,6 +92,6 @@ class GlobalConfigCommands {
 
     private static String idesSuffix(Map entry) {
         List ides = entry.ides instanceof List ? (List) entry.ides*.toString() : []
-        ides ? "  ides: ${ides.join(', ')}" : '  ides: none'
+        ides ? "  IDEs: ${ides.join(', ')}" : '  IDEs: none'
     }
 }

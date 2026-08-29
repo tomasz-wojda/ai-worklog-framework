@@ -19,8 +19,8 @@ def _default_suffix(entry: dict) -> str:
 def _ides_suffix(entry: dict) -> str:
     ides = entry.get("ides") or []
     if ides:
-        return f"  ides: {', '.join(ides)}"
-    return "  ides: none"
+        return f"  IDEs: {', '.join(ides)}"
+    return "  IDEs: none"
 
 
 def _render_human(payload: dict) -> None:
