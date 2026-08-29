@@ -300,7 +300,7 @@ class WorkspaceCommands {
             File workspace = context[0] as File
             String name = context[1] as String
             if (!context[2]) {
-                throw new IllegalArgumentException('Workspace is not registered')
+                throw unregisteredError(context[0] as File, context[4] as String)
             }
 
             Map config = GlobalConfig.load()
@@ -401,7 +401,7 @@ class WorkspaceCommands {
             File workspace = context[0] as File
             String name = context[1] as String
             if (!context[2]) {
-                throw new IllegalArgumentException('Workspace is not registered')
+                throw unregisteredError(context[0] as File, context[4] as String)
             }
 
             List vaultResolution = SetupResolver.resolveAiVaultRoot(workspace)
@@ -466,7 +466,7 @@ class WorkspaceCommands {
             File workspace = context[0] as File
             String name = context[1] as String
             if (!context[2]) {
-                throw new IllegalArgumentException('Workspace is not registered')
+                throw unregisteredError(context[0] as File, context[4] as String)
             }
 
             if (!remaining) {
@@ -528,13 +528,16 @@ class WorkspaceCommands {
     private static List workspaceContext(File frameworkRoot, Map options, String positional = null) {
         File workspace
         String name = null
+        String source
         if (positional) {
             Map configData = GlobalConfig.load()
             Map workspaces = (Map) (configData.workspaces ?: [:])
             String target = positional
+            source = 'explicit_path'
             if (workspaces.containsKey(positional)) {
                 name = positional
                 target = ((Map) workspaces[positional]).path
+                source = 'workspace_name'
             }
             workspace = GlobalConfig.canonicalWorkspacePath(target)
             if (!workspace.isDirectory()) {
@@ -548,6 +551,7 @@ class WorkspaceCommands {
             )
             workspace = resolved.path as File
             name = resolved.name?.toString()
+            source = resolved.source?.toString()
         }
         if (!name) {
             name = SetupChecks.findWorkspaceRegistration(workspace)
@@ -555,7 +559,15 @@ class WorkspaceCommands {
         Map config = GlobalConfig.load()
         boolean registered = name && config.workspaces[name]
         boolean isDefault = registered && config.default_workspace == name
-        [workspace, name, registered, isDefault]
+        [workspace, name, registered, isDefault, source]
+    }
+
+    private static IllegalArgumentException unregisteredError(File workspace, String source) {
+        String message = "Workspace is not registered: ${workspace.path} (source: ${source})"
+        if (source == 'cwd_legacy') {
+            message += ". Directory is not initialized; run 'workspace init' to initialize it."
+        }
+        new IllegalArgumentException(message)
     }
 
     private static List resolveVaultOrError(File workspace, String cliOverride) {

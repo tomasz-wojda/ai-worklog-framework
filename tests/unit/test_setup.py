@@ -458,3 +458,39 @@ class TestJenkinsVaultFallback:
         )
         monkeypatch.delenv("AI_VAULT_ROOT", raising=False)
         assert jenkins.resolve_syntax_check_script(WorkspacePaths(ws)) == explicit.resolve()
+
+
+class TestWorkspaceResolutionFailures:
+    def _args(self):
+        return SimpleNamespace(
+            workspace_action="ides",
+            workspace=None,
+            workspace_name=None,
+            ide=None,
+            json=False,
+        )
+
+    def test_unregistered_failure_names_path_and_source(
+        self, home, tmp_path, monkeypatch, capsys
+    ):
+        ws = tmp_path / "unregistered"
+        (ws / ".ai-worklog").mkdir(parents=True)
+        monkeypatch.chdir(ws)
+        assert workspace_commands.run_ides(self._args()) == 1
+        message = capsys.readouterr().out.strip()
+        assert message == (
+            f"Workspace is not registered: {ws.resolve()} (source: cwd_marker)"
+        )
+
+    def test_legacy_hint_failure_reports_cwd_legacy(
+        self, home, tmp_path, monkeypatch, capsys
+    ):
+        ws = tmp_path / "legacy"
+        (ws / "worklog").mkdir(parents=True)
+        monkeypatch.chdir(ws)
+        assert workspace_commands.run_ides(self._args()) == 1
+        message = capsys.readouterr().out.strip()
+        assert message == (
+            f"Workspace is not registered: {ws.resolve()} (source: cwd_legacy). "
+            "Directory is not initialized; run 'workspace init' to initialize it."
+        )

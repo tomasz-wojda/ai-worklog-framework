@@ -354,3 +354,36 @@ def test_reconciliation_redacts_adapter_payloads(tmp_path) -> None:
     assert python.returncode == groovy.returncode == 0
     assert "secret-value" not in python.stdout
     assert "secret-value" not in groovy.stdout
+
+
+@pytest.mark.parametrize(
+    ("marker", "expected_source"),
+    [(".ai-worklog", "cwd_marker"), ("worklog", "cwd_legacy")],
+)
+def test_workspace_failure_messages_match_between_runtimes(
+    tmp_path: Path, marker: str, expected_source: str
+) -> None:
+    workspace = tmp_path / "candidate"
+    (workspace / marker).mkdir(parents=True)
+    env = os.environ.copy()
+    env["AI_WORKLOG_HOME"] = str(tmp_path / "home")
+    env.pop("AI_WORKLOG_WORKSPACE", None)
+    env.pop("AI_WORKLOG_WORKSPACE_NAME", None)
+    env.pop("AI_WORKLOG_RUNTIME", None)
+
+    def invoke(runtime: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(CLI), "--runtime", runtime, "workspace", "ides"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=workspace,
+            env=env,
+        )
+
+    python = invoke("python")
+    groovy = invoke("groovy")
+    assert python.stdout == groovy.stdout
+    assert python.returncode == groovy.returncode
+    assert f"(source: {expected_source})" in python.stdout
+    assert str(workspace.resolve()) in python.stdout

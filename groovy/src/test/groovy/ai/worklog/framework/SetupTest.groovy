@@ -3,6 +3,7 @@ package ai.worklog.framework
 import ai.worklog.framework.adapters.JenkinsAdapter
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.adapters.ReadOnlyProcess
+import ai.worklog.framework.commands.WorkspaceCommands
 import ai.worklog.framework.core.ConfigLoader
 import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.GlobalConfig
@@ -571,5 +572,38 @@ class SetupTest extends GroovyTestCase {
         assertTrue(output.contains('1 applied · 1 skipped'))
         assertFalse(output.contains('skipped:'))
         assertFalse(output.contains('would:'))
+    }
+
+    private String idesFrom(File directory, int expectedCode) {
+        String originalUserDir = System.getProperty('user.dir')
+        System.setProperty('user.dir', directory.canonicalFile.path)
+        try {
+            return captureOutput {
+                assertEquals(expectedCode, WorkspaceCommands.run('ides', [], repository, [:]))
+            }
+        } finally {
+            System.setProperty('user.dir', originalUserDir)
+        }
+    }
+
+    void testUnregisteredFailureNamesPathAndSource() {
+        File workspace = new File(tempRoot, 'unregistered')
+        new File(workspace, '.ai-worklog').mkdirs()
+        String output = idesFrom(workspace, 1)
+        assertEquals(
+            "Workspace is not registered: ${workspace.canonicalFile.path} (source: cwd_marker)".toString(),
+            output
+        )
+    }
+
+    void testLegacyHintFailureReportsCwdLegacy() {
+        File workspace = new File(tempRoot, 'legacy-hint')
+        new File(workspace, 'worklog').mkdirs()
+        String output = idesFrom(workspace, 1)
+        assertEquals(
+            ("Workspace is not registered: ${workspace.canonicalFile.path} (source: cwd_legacy). " +
+                "Directory is not initialized; run 'workspace init' to initialize it.").toString(),
+            output
+        )
     }
 }

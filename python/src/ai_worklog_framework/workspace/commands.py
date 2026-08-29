@@ -73,15 +73,17 @@ def _workspace_context(
     explicit_path: Optional[str],
     explicit_name: Optional[str],
     positional: Optional[str] = None,
-) -> tuple[Path, Optional[str], bool, bool]:
+) -> tuple[Path, Optional[str], bool, bool, str]:
     name: Optional[str] = None
     if positional:
         config = load_global_config()
         workspaces = config.get("workspaces", {})
         target = positional
+        source = "explicit_path"
         if positional in workspaces:
             name = positional
             target = workspaces[positional]["path"]
+            source = "workspace_name"
         workspace = canonical_workspace_path(target)
         if not workspace.is_dir():
             raise ValueError(f"Workspace not found: {positional}")
@@ -89,12 +91,20 @@ def _workspace_context(
         resolved = resolve_workspace_selection(explicit_path, explicit_name)
         workspace = resolved["path"]
         name = resolved.get("name")
+        source = resolved["source"]
     if not name:
         name = find_workspace_registration(workspace)
     config = load_global_config()
     registered = bool(name and name in config.get("workspaces", {}))
     is_default = bool(name and config.get("default_workspace") == name)
-    return workspace, name, registered, is_default
+    return workspace, name, registered, is_default, source
+
+
+def _unregistered_error(workspace: Path, source: str) -> ValueError:
+    message = f"Workspace is not registered: {workspace} (source: {source})"
+    if source == "cwd_legacy":
+        message += ". Directory is not initialized; run 'workspace init' to initialize it."
+    return ValueError(message)
 
 
 def _resolve_vault_or_error(
@@ -253,7 +263,7 @@ def run_check(args) -> int:
     json_output = bool(getattr(args, "json", False))
     try:
         explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, is_default = _workspace_context(
+        workspace, name, registered, is_default, _ = _workspace_context(
             explicit_path,
             explicit_name,
         )
@@ -277,7 +287,7 @@ def run_show(args) -> int:
     json_output = bool(getattr(args, "json", False))
     try:
         explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, is_default = _workspace_context(
+        workspace, name, registered, is_default, _ = _workspace_context(
             explicit_path,
             explicit_name,
             getattr(args, "name", None),
@@ -303,12 +313,12 @@ def run_repair(args) -> int:
     apply = bool(getattr(args, "apply", False))
     try:
         explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, _ = _workspace_context(
+        workspace, name, registered, _, source = _workspace_context(
             explicit_path,
             explicit_name,
         )
         if not registered or not name:
-            raise ValueError("Workspace is not registered")
+            raise _unregistered_error(workspace, source)
 
         config = load_global_config()
         registered_ides = list(config["workspaces"][name].get("ides") or [])
@@ -389,13 +399,13 @@ def run_revert(args) -> int:
     apply = bool(getattr(args, "apply", False))
     try:
         explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, _ = _workspace_context(
+        workspace, name, registered, _, source = _workspace_context(
             explicit_path,
             explicit_name,
             getattr(args, "path", None),
         )
         if not registered or not name:
-            raise ValueError("Workspace is not registered")
+            raise _unregistered_error(workspace, source)
 
         filter_ides = parse_ide_args(getattr(args, "ide", None))
         if filter_ides and "auto" in filter_ides:
@@ -464,12 +474,12 @@ def run_ides(args) -> int:
     json_output = bool(getattr(args, "json", False))
     try:
         explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, _ = _workspace_context(
+        workspace, name, registered, _, source = _workspace_context(
             explicit_path,
             explicit_name,
         )
         if not registered or not name:
-            raise ValueError("Workspace is not registered")
+            raise _unregistered_error(workspace, source)
 
         requested = list(getattr(args, "ide", None) or [])
         if not requested:
