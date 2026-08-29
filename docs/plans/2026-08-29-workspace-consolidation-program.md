@@ -257,6 +257,39 @@ holds.
 
 **Blocked on:** Unit 3.
 
+**Amendments made during execution.**
+
+1. *Sequenced before Unit 4.* Unit 5 depends only on Unit 3, and running it
+   first lets Unit 4 rewrite the README and the audit document once against
+   final behaviour rather than twice.
+
+2. *`not configured` is a new status, not a reuse of `UNKNOWN`.* `UNKNOWN`
+   already exists and is non-actionable, but `overall_status` ranks it above
+   `READY`, so an unused integration would have produced
+   `Preflight: UNKNOWN (0 issue(s))` and exit 1 — a worse outcome than the
+   blocking it replaced. `Status.NOT_CONFIGURED` is added to both runtimes,
+   excluded from the rollup priority and from `actionable`, and rendered as
+   `[NOT CONFIGURED]`. `overall_status` now returns `READY` rather than
+   `UNKNOWN` when results exist but none match a priority level, so a workspace
+   whose only findings are informational reports ready.
+
+3. *The four states are derived by one shared helper.* `_directory_state` and
+   `directoryState` classify a service directory as `BLOCKED` when missing,
+   `ERROR` when unreadable, `NOT_CONFIGURED` when empty, and `READY` when
+   populated. The file-based checks layer `DEGRADED` on top: a populated
+   directory whose required file is absent is degraded, not blocked.
+
+4. *`checkJira` was folded in.* The plan named only `_check_service_directory`
+   and `_check_service_properties`, but the jira check duplicated the same
+   present/absent logic and would have kept blocking on an empty directory.
+
+**Result:** Python unit and contract 302 passed with only the pre-existing
+`test_public_content` failure; Groovy 147 tests, 0 failures; parity unchanged at
+186 passed, 3 pre-existing failures, plus one new parity test. Verified live:
+a freshly applied workspace previously reported four integrations as `[BLOCKED]`
+and blocked overall; it now reports them as `[NOT CONFIGURED]` and the overall
+status reflects only genuine issues, with byte-identical output across runtimes.
+
 ---
 
 ## Cross-unit verification

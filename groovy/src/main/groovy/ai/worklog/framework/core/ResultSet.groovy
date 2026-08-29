@@ -11,7 +11,8 @@ class ResultSet {
         List<Status> priority = [
             Status.ERROR, Status.BLOCKED, Status.DEGRADED, Status.UNKNOWN, Status.READY
         ]
-        priority.find { level -> results.any { it.status == level } } ?: Status.UNKNOWN
+        priority.find { level -> results.any { it.status == level } } ?:
+            (results ? Status.READY : Status.UNKNOWN)
     }
 
     boolean isOk() {
@@ -28,7 +29,8 @@ class ResultSet {
             (Status.DEGRADED): '[DEGRADED]',
             (Status.BLOCKED): '[BLOCKED]',
             (Status.ERROR): '[ERROR]',
-            (Status.UNKNOWN): '[?]'
+            (Status.UNKNOWN): '[?]',
+            (Status.NOT_CONFIGURED): '[NOT CONFIGURED]'
         ]
         results.collect {
             "  ${indicators[it.status]} ${it.source}: ${it.message}"

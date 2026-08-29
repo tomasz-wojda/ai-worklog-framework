@@ -134,6 +134,28 @@ def _minimal_vault(root: Path) -> Path:
     return vault
 
 
+def test_preflight_reports_an_empty_service_directory_as_not_configured(tmp_path) -> None:
+    workspace = tmp_path / "candidate"
+    (workspace / "worklog").mkdir(parents=True)
+    (workspace / "integrations/newrelic").mkdir(parents=True)
+    env = os.environ.copy()
+    env["AI_WORKLOG_HOME"] = str(tmp_path / "home")
+    env.pop("AI_WORKLOG_WORKSPACE", None)
+    env.pop("AI_WORKLOG_WORKSPACE_NAME", None)
+    env.pop("AI_WORKLOG_RUNTIME", None)
+
+    outputs = {}
+    for runtime in ("python", "groovy"):
+        result = run_in_workspace(
+            runtime, workspace, "preflight", "--service", "newrelic", env=env
+        )
+        outputs[runtime] = result.stdout
+        assert "[NOT CONFIGURED] newrelic: Not configured" in result.stdout
+        assert "[BLOCKED]" not in result.stdout
+
+    assert outputs["python"] == outputs["groovy"]
+
+
 def test_workspace_init_preserves_existing_integration_symlink_with_parity(tmp_path) -> None:
     vault = _minimal_vault(tmp_path)
     results = {}

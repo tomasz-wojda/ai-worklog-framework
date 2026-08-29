@@ -20,6 +20,7 @@ class Status(Enum):
     BLOCKED = "blocked"
     ERROR = "error"
     UNKNOWN = "unknown"
+    NOT_CONFIGURED = "not_configured"
 
 
 @dataclass
@@ -62,12 +63,12 @@ class ResultSet:
 
     @property
     def overall_status(self) -> Status:
-        """Returns the worst status across all results."""
+        """Returns the worst status across all results, ignoring informational ones."""
         priority = [Status.ERROR, Status.BLOCKED, Status.DEGRADED, Status.UNKNOWN, Status.READY]
         for level in priority:
             if any(r.status == level for r in self.results):
                 return level
-        return Status.UNKNOWN
+        return Status.READY if self.results else Status.UNKNOWN
 
     @property
     def ok(self) -> bool:
@@ -87,6 +88,7 @@ class ResultSet:
                 Status.BLOCKED: "[BLOCKED]",
                 Status.ERROR: "[ERROR]",
                 Status.UNKNOWN: "[?]",
+                Status.NOT_CONFIGURED: "[NOT CONFIGURED]",
             }.get(r.status, "[?]")
             lines.append(f"  {indicator} {r.source}: {r.message}")
         return "\n".join(lines)

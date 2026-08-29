@@ -16,7 +16,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ai_worklog_framework.adapters.preflight_scope import resolve_scope
 from ai_worklog_framework.cli import EXIT_BLOCKED, EXIT_SUCCESS, EXIT_USER_ERROR
@@ -123,12 +123,22 @@ def _check_binary(results: ResultSet, binary: str) -> None:
     results.add(Result(status=status, source=f"bin:{binary}", message=message))
 
 
+def _directory_state(directory: Path) -> Tuple[Status, str]:
+    if not directory.is_dir():
+        return Status.BLOCKED, "Directory not found"
+    try:
+        populated = any(directory.iterdir())
+    except OSError as exc:
+        return Status.ERROR, f"Directory unreadable: {exc.strerror}"
+    if not populated:
+        return Status.NOT_CONFIGURED, "Not configured"
+    return Status.READY, "Directory present"
+
+
 def _check_service_directory(
     results: ResultSet, paths: WorkspacePaths, service: str
 ) -> None:
-    directory = paths.service_dir(service)
-    status = Status.READY if directory.is_dir() else Status.BLOCKED
-    message = "Directory present" if directory.is_dir() else "Directory not found"
+    status, message = _directory_state(paths.service_dir(service))
     results.add(Result(status=status, source=service, message=message))
 
 
@@ -138,9 +148,15 @@ def _check_service_properties(
     service: str,
     filename: str,
 ) -> None:
-    file = paths.service_dir(service) / filename
-    status = Status.READY if file.is_file() else Status.BLOCKED
-    message = f"{filename} present" if file.is_file() else f"{filename} missing"
+    directory = paths.service_dir(service)
+    if (directory / filename).is_file():
+        results.add(Result(
+            status=Status.READY, source=service, message=f"{filename} present"
+        ))
+        return
+    status, message = _directory_state(directory)
+    if status == Status.READY:
+        status, message = Status.DEGRADED, f"{filename} missing"
     results.add(Result(status=status, source=service, message=message))
 
 
@@ -219,15 +235,14 @@ def _check_jira(results: ResultSet, paths: WorkspacePaths) -> None:
     jira_dir = paths.service_dir("jira")
     props_file = jira_dir / "jira.properties"
 
-    if not jira_dir.is_dir():
-        results.add(Result(status=Status.BLOCKED, source="jira", message="Directory not found"))
+    if props_file.is_file():
+        results.add(Result(status=Status.READY, source="jira", message="Properties file present"))
         return
 
-    if not props_file.is_file():
-        results.add(Result(status=Status.BLOCKED, source="jira", message="jira.properties missing"))
-        return
-
-    results.add(Result(status=Status.READY, source="jira", message="Properties file present"))
+    status, message = _directory_state(jira_dir)
+    if status == Status.READY:
+        status, message = Status.DEGRADED, "jira.properties missing"
+    results.add(Result(status=status, source="jira", message=message))
 
 
 def _check_git(results: ResultSet) -> None:

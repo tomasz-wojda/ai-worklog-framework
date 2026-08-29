@@ -5,7 +5,8 @@ enum Status {
     DEGRADED('degraded'),
     BLOCKED('blocked'),
     ERROR('error'),
-    UNKNOWN('unknown')
+    UNKNOWN('unknown'),
+    NOT_CONFIGURED('not_configured')
 
     final String value
 

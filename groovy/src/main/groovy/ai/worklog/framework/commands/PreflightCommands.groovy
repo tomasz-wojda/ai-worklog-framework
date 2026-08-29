@@ -93,14 +93,20 @@ class PreflightCommands {
 
     static void checkJira(ResultSet results, FrameworkPaths paths) {
         File directory = paths.serviceDir('jira')
-        File properties = new File(directory, 'jira.properties')
-        if (!directory.isDirectory()) {
-            results.add(new CheckResult(status: Status.BLOCKED, source: 'jira', message: 'Directory not found'))
-        } else if (!properties.isFile()) {
-            results.add(new CheckResult(status: Status.BLOCKED, source: 'jira', message: 'jira.properties missing'))
-        } else {
-            results.add(new CheckResult(status: Status.READY, source: 'jira', message: 'Properties file present'))
+        if (new File(directory, 'jira.properties').isFile()) {
+            results.add(new CheckResult(
+                status: Status.READY,
+                source: 'jira',
+                message: 'Properties file present'
+            ))
+            return
         }
+        def (Status status, String message) = directoryState(directory)
+        if (status == Status.READY) {
+            status = Status.DEGRADED
+            message = 'jira.properties missing'
+        }
+        results.add(new CheckResult(status: status, source: 'jira', message: message))
     }
 
     static void checkBinary(ResultSet results, String binary) {
@@ -112,17 +118,27 @@ class PreflightCommands {
         ))
     }
 
+    static List directoryState(File directory) {
+        if (!directory.isDirectory()) {
+            return [Status.BLOCKED, 'Directory not found']
+        }
+        File[] entries = directory.listFiles()
+        if (entries == null) {
+            return [Status.ERROR, 'Directory unreadable']
+        }
+        if (entries.length == 0) {
+            return [Status.NOT_CONFIGURED, 'Not configured']
+        }
+        [Status.READY, 'Directory present']
+    }
+
     static void checkServiceDirectory(
         ResultSet results,
         FrameworkPaths paths,
         String service
     ) {
-        boolean present = paths.serviceDir(service).isDirectory()
-        results.add(new CheckResult(
-            status: present ? Status.READY : Status.BLOCKED,
-            source: service,
-            message: present ? 'Directory present' : 'Directory not found'
-        ))
+        def (Status status, String message) = directoryState(paths.serviceDir(service))
+        results.add(new CheckResult(status: status, source: service, message: message))
     }
 
     static void checkServiceFile(
@@ -131,12 +147,21 @@ class PreflightCommands {
         String service,
         String filename
     ) {
-        boolean present = new File(paths.serviceDir(service), filename).isFile()
-        results.add(new CheckResult(
-            status: present ? Status.READY : Status.BLOCKED,
-            source: service,
-            message: present ? "${filename} present" : "${filename} missing"
-        ))
+        File directory = paths.serviceDir(service)
+        if (new File(directory, filename).isFile()) {
+            results.add(new CheckResult(
+                status: Status.READY,
+                source: service,
+                message: "${filename} present"
+            ))
+            return
+        }
+        def (Status status, String message) = directoryState(directory)
+        if (status == Status.READY) {
+            status = Status.DEGRADED
+            message = "${filename} missing"
+        }
+        results.add(new CheckResult(status: status, source: service, message: message))
     }
 
     static void checkRepositories(
