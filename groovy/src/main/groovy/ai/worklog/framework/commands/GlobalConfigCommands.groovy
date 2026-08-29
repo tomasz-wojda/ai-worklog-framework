@@ -2,6 +2,7 @@ package ai.worklog.framework.commands
 
 import ai.worklog.framework.core.ExitCodes
 import ai.worklog.framework.core.GlobalConfig
+import ai.worklog.framework.setup.SetupResolver
 
 class GlobalConfigCommands {
     static int run(String action, List<String> args, File frameworkRoot) {
@@ -15,7 +16,7 @@ class GlobalConfigCommands {
         try {
             switch (action) {
                 case 'show':
-                    return render(GlobalConfig.showConfiguration(), json, exitCodes)
+                    return render(showConfigurationWithRuntimeAvailability(), json, exitCodes)
                 case 'runtime':
                     if (!remaining) {
                         return render(GlobalConfig.showRuntime(), json, exitCodes)
@@ -47,6 +48,12 @@ class GlobalConfigCommands {
         }
     }
 
+    private static Map showConfigurationWithRuntimeAvailability() {
+        Map payload = GlobalConfig.showConfiguration()
+        payload.runtime_available = SetupResolver.validateRuntime(payload.runtime?.toString())
+        payload
+    }
+
     private static int render(Map payload, boolean json, ExitCodes exitCodes) {
         if (json) {
             GlobalConfig.printJson(payload)
@@ -61,7 +68,7 @@ class GlobalConfigCommands {
             case 'show':
                 println "Global configuration (${GlobalConfig.configFile().path}):"
                 println "  version: ${payload.version}"
-                println "  runtime: ${payload.runtime}"
+                println "  runtime: ${payload.runtime}${payload.runtime_available ? ' [available]' : ' [missing]'}"
                 println "  AI Vault root: ${payload.ai_vault_root ?: 'none'}"
                 println "  default workspace: ${payload.default_workspace ?: 'none'}"
                 if (payload.workspaces) {

@@ -83,7 +83,7 @@ class SetupReport {
         [
             operation: 'show',
             status: Status.READY.value,
-            message: 'Setup summary',
+            message: 'Workspace summary',
             workspace: [
                 name: workspaceName,
                 path: workspace.canonicalFile.path,
@@ -144,7 +144,7 @@ class SetupReport {
         [
             operation: 'check',
             status: status.value,
-            message: "Setup check: ${status.value}",
+            message: "Workspace check: ${status.value}",
             workspace: [
                 name: workspaceName,
                 path: workspace.canonicalFile.path,
@@ -221,7 +221,7 @@ class SetupReport {
         [
             operation: operation,
             status: status,
-            message: "Setup ${operation} ${apply ? 'applied' : 'planned'}",
+            message: "Workspace ${operation} ${apply ? 'applied' : 'planned'}",
             workspace: [
                 name: workspaceName,
                 path: workspace.canonicalFile.path,
@@ -297,7 +297,7 @@ class SetupReport {
             GlobalConfig.printJson(report)
             return
         }
-        println "Setup ${report.operation}: ${report.status}"
+        println "Workspace ${report.operation}: ${report.status}"
         Map workspace = report.workspace instanceof Map ? (Map) report.workspace : [:]
         if (workspace) {
             println "  Workspace: ${workspace.name ?: workspace.path}"

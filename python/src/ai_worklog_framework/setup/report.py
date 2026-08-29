@@ -90,7 +90,7 @@ def build_show_report(
     return {
         "operation": "show",
         "status": Status.READY.value,
-        "message": "Setup summary",
+        "message": "Workspace summary",
         "workspace": {
             "name": workspace_name,
             "path": str(workspace.resolve()),
@@ -145,7 +145,7 @@ def build_check_report(
     return {
         "operation": "check",
         "status": status.value,
-        "message": f"Setup check: {status.value}",
+        "message": f"Workspace check: {status.value}",
         "workspace": {
             "name": workspace_name,
             "path": str(workspace.resolve()),
@@ -247,7 +247,7 @@ def build_action_report(
     return {
         "operation": operation,
         "status": status.value,
-        "message": f"Setup {operation} {'applied' if apply else 'planned'}",
+        "message": f"Workspace {operation} {'applied' if apply else 'planned'}",
         "workspace": {
             "name": workspace_name,
             "path": str(workspace.resolve()),
@@ -278,7 +278,7 @@ def render_report(report: Dict[str, Any], json_output: bool, *, actions_printed:
     if json_output:
         print_json(report)
         return
-    print(f"Setup {report['operation']}: {report['status']}")
+    print(f"Workspace {report['operation']}: {report['status']}")
     workspace = report.get("workspace") or {}
     if workspace:
         label = workspace.get("name") or workspace.get("path")

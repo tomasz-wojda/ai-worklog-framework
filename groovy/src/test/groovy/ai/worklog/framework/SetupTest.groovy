@@ -340,7 +340,7 @@ class SetupTest extends GroovyTestCase {
         File workspace = makeWorkspace()
         String dryRun = captureOutput {
             assertEquals(0, Main.execute([
-                'setup', 'init', 'work', workspace.path,
+                'workspace', 'init', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ai-vault', vault.path
             ]))
@@ -350,7 +350,7 @@ class SetupTest extends GroovyTestCase {
 
         captureOutput {
             assertEquals(0, Main.execute([
-                'setup', 'init', 'work', workspace.path,
+                'workspace', 'init', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ai-vault', vault.path,
                 '--default',
@@ -363,6 +363,20 @@ class SetupTest extends GroovyTestCase {
         assertNotNull(SetupManifest.loadManifest(workspace))
     }
 
+    void testInitFromBarePathPositional() {
+        File vault = makeVault(tempRoot)
+        File workspace = makeWorkspace()
+        String output = captureOutput {
+            assertEquals(0, Main.execute([
+                'workspace', 'init', workspace.path,
+                '--ide', 'cursor',
+                '--ai-vault', vault.path
+            ]))
+        }
+        assertTrue(output.contains('pending actions'))
+        assertTrue(output.contains('Re-run with --apply'))
+    }
+
     void testInitMergesIdes() {
         File vault = makeVault(tempRoot)
         File workspace = makeWorkspace()
@@ -370,7 +384,7 @@ class SetupTest extends GroovyTestCase {
         GlobalConfig.setWorkspaceIdes('work', ['claude'])
         captureOutput {
             assertEquals(0, Main.execute([
-                'setup', 'init', 'work', workspace.path,
+                'workspace', 'init', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ai-vault', vault.path,
                 '--json',
@@ -385,7 +399,7 @@ class SetupTest extends GroovyTestCase {
         File workspace = makeWorkspace()
         captureOutput {
             Main.execute([
-                'setup', 'init', 'work', workspace.path,
+                'workspace', 'init', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ide', 'claude',
                 '--ai-vault', vault.path,
@@ -398,7 +412,7 @@ class SetupTest extends GroovyTestCase {
         captureOutput {
             Main.execute([
                 '--workspace', workspace.path,
-                'setup', 'revert',
+                'workspace', 'revert',
                 '--ide', 'cursor',
                 '--apply'
             ])
@@ -541,7 +555,7 @@ class SetupTest extends GroovyTestCase {
         Map report = [
             operation: 'repair',
             status: 'ready',
-            message: 'Setup repair complete',
+            message: 'Workspace repair complete',
             workspace: [name: 'test'],
             actions: [
                 [kind: 'symlink', target: '/tmp/jira', skip: false],
@@ -553,7 +567,7 @@ class SetupTest extends GroovyTestCase {
             skipped_actions: 1
         ]
         String output = captureOutput { SetupReport.renderReport(report, false, true) }
-        assertTrue(output.contains('Setup repair: ready'))
+        assertTrue(output.contains('Workspace repair: ready'))
         assertTrue(output.contains('1 applied · 1 skipped'))
         assertFalse(output.contains('skipped:'))
         assertFalse(output.contains('would:'))

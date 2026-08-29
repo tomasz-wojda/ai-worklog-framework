@@ -378,7 +378,7 @@ def test_render_report_footer_after_apply(capsys):
     report = {
         "operation": "repair",
         "status": "ready",
-        "message": "Setup repair complete",
+        "message": "Workspace repair complete",
         "workspace": {"name": "test"},
         "actions": [
             {"kind": "symlink", "target": "/tmp/jira", "skip": False},
@@ -391,7 +391,7 @@ def test_render_report_footer_after_apply(capsys):
     }
     render_report(report, False, actions_printed=True)
     output = capsys.readouterr().out
-    assert "Setup repair: ready" in output
+    assert "Workspace repair: ready" in output
     assert "1 applied · 1 skipped" in output
     assert "skipped:" not in output
     assert "would:" not in output

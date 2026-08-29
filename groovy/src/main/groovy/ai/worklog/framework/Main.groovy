@@ -10,7 +10,6 @@ import ai.worklog.framework.commands.GlobalConfigCommands
 import ai.worklog.framework.commands.JenkinsCommands
 import ai.worklog.framework.commands.PreflightCommands
 import ai.worklog.framework.commands.ReconciliationCommands
-import ai.worklog.framework.commands.SetupCommands
 import ai.worklog.framework.commands.StateCommands
 import ai.worklog.framework.commands.TicketCommands
 import ai.worklog.framework.commands.ToolchainCommands
@@ -60,16 +59,7 @@ class Main {
             return GlobalConfigCommands.run(action, args, frameworkRoot)
         }
         if (command == 'workspace') {
-            return WorkspaceCommands.run(
-                action,
-                args,
-                frameworkRoot,
-                options.workspace,
-                options.workspaceName
-            )
-        }
-        if (command == 'setup') {
-            return SetupCommands.run(action, args, frameworkRoot, options)
+            return WorkspaceCommands.run(action, args, frameworkRoot, options)
         }
         File workspaceRoot = FrameworkPaths.resolveWorkspace(
             options.workspace,
@@ -124,7 +114,7 @@ class Main {
 
     private static int commandIndex(List<String> args) {
         List<String> commands = [
-            'setup', 'workspace', 'config', 'catalog', 'ticket', 'state',
+            'workspace', 'config', 'catalog', 'ticket', 'state',
             'preflight', 'reconcile', 'jenkins', 'day', 'delivery',
             'closeout', 'diag', 'toolchain'
         ]
@@ -184,14 +174,13 @@ class Main {
 
     static void help() {
         println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]'
-        println '                  {config,setup,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
+        println '                  {config,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
         println()
         println 'DevOps daily workflow automation framework'
         println()
         println 'commands:'
-        println '  config       Global runtime and workspace registry'
-        println '  setup        Workspace and IDE setup operations'
-        println '  workspace    Workspace setup operations'
+        println '  config       Machine-wide runtime and AI vault settings'
+        println '  workspace    Workspace lifecycle, IDE profiles, and registry'
         println '  catalog      Service catalog operations'
         println '  ticket       Ticket preparation'
         println '  state        Structured ticket state'

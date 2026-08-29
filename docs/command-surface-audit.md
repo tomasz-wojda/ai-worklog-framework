@@ -5,13 +5,36 @@ Verification status of every `ai-worklog` command, subcommand, flag, and option.
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-08-28 |
-| Revised | 2026-08-29 (corrected the `jenkins syntax-check` status) |
+| Revised | 2026-08-29 (corrected the `jenkins syntax-check` status; recorded the `setup` merge) |
 | Repository commit | `e881e43` (`refactor(toolchain): remove Java 17 prerequisite`) |
 | Framework version | 0.7.0 |
 | Groovy runtime | Groovy 6.0.0-beta-2 on OpenJDK 26.0.2.1 (Homebrew) |
 | Python runtime | CPython 3.15.0rc1 |
 | Target workspace | registered name `work` -> `/Users/twojda/workspace` |
 | Method | Live execution of every command group on both runtimes, plus source review of `python/src/ai_worklog_framework/cli.py` and `groovy/src/main/groovy/ai/worklog/framework/Main.groovy` |
+
+## Command surface change, 2026-08-29
+
+The `setup` command group has been removed and merged into `workspace`. The audit
+established that `setup` was a strict superset of `workspace`: `SetupPlanner`
+already folded `WorkspacePlanner.planInit` in as `workspace_actions`, and
+`setup init --apply` additionally performed the work of `workspace add`,
+`config set-ai-vault-root`, and optionally `config runtime`.
+
+The three colliding verbs — `init`, `revert`, and `show` — resolved to setup's
+implementation in every case, since each was verified to be a strict superset.
+As a result `workspace init` widened from 21 actions to 29, the difference being
+eight IDE skill symlinks. A new `workspace ides` subcommand closes a gap where
+per-workspace IDE selection was previously reachable only as a side effect of
+`init` or `revert`.
+
+The boundary is now a single rule: `config` owns machine-wide singletons, and
+`workspace` owns everything scoped to a specific workspace. Internal package and
+class names, the `.ai-worklog/setup.json` manifest, and the setup schemas retain
+their existing names.
+
+The command group count is therefore 13, not the 14 recorded below. Sections
+below that predate this change describe the surface as audited on 2026-08-28.
 
 ## Summary
 
@@ -69,22 +92,18 @@ config                                                              OK
 ├── runtime [groovy|python] --json                                  OK  read and persist
 └── set-ai-vault-root PATH  --json                                  UNVERIFIED
 
-setup                                                               OK
+workspace                                                           OK
 ├── init [name] [path]      --ide auto|cursor|claude|antigravity*    OK  29 actions planned
 │                           --runtime  --ai-vault  --default
 │                           --adopt  --json  --apply
 ├── check                   --json                                  OK  exit 3 outside a workspace
-├── show                    --json                                  OK
+├── show [NAME]             --json                                  OK
 ├── repair                  --ide*  --json  --apply                 OK  dry-run clean, 29 actions
-└── revert                  --ide cursor|claude|antigravity*        OK  dry-run, 17 actions
-                            --json  --apply
-
-workspace                                                           OK
-├── init [name|path]        --apply                                 OK  idempotent, skips existing
-├── revert [name|path]      --apply                                 OK  only unlinks managed links
+├── revert [name|path]      --ide cursor|claude|antigravity*        OK  dry-run, 17 actions
+│                           --json  --apply
+├── ides [IDE...]           --json                                  OK  registry only; repair to apply
 ├── add NAME PATH           --default  --json                       UNVERIFIED
 ├── list                    --json                                  OK
-├── show NAME               --json                                  OK
 ├── default [NAME]          --json                                  OK
 ├── current                 --json                                  OK  reports resolution source
 └── remove NAME             --json                                  UNVERIFIED
@@ -168,9 +187,8 @@ An asterisk after a flag means the flag is repeatable.
 
 | Command | Purpose |
 | --- | --- |
-| `config` | Read and persist global preferences in `~/.ai-worklog/config.json`: default runtime, AI vault root, workspace registry |
-| `setup` | Plan, apply, inspect, repair, and revert workspace and per-IDE skill materialization |
-| `workspace` | Register, resolve, and inspect named workspaces; create and remove managed integration links |
+| `config` | Read and persist machine-wide preferences in `~/.ai-worklog/config.json`: default runtime and AI vault root |
+| `workspace` | Everything scoped to a specific workspace: lifecycle (`init`, `check`, `show`, `repair`, `revert`), IDE profiles (`ides`), and registry (`add`, `list`, `default`, `current`, `remove`) |
 | `catalog` | Validate, display, and search service catalog entries, including workspace-local overlays |
 | `ticket` | Generate a preparation report from local worklogs, cloned repositories, catalog matches, and open pull requests |
 | `state` | Create and mutate structured per-ticket state, including blockers and decisions, with validation and atomic writes |
@@ -219,7 +237,7 @@ human-readable output in the codebase.
 
 ### 2. Flag handling is inconsistent, and Groovy accepts unknown flags
 
-`--json` is implemented for `config`, `setup`, `workspace`, `reconcile status`,
+`--json` is implemented for `config`, `workspace`, `reconcile status`,
 and `diag run`. It is not implemented for `state`, `day`, `toolchain`,
 `diag list`, `preflight`, `ticket`, `delivery`, or `closeout`.
 
@@ -295,15 +313,15 @@ Workspace: /Users/twojda/workspace/repos/ai-worklog-framework
 Source: cwd_marker
 ```
 
-That directory contains no `.ai-worklog/`. This is why bare `setup check`
-returns exit 3 while `-w work setup check` succeeds. Whether the marker set in
+That directory contains no `.ai-worklog/`. This is why bare `workspace check`
+returns exit 3 while `-w work workspace check` succeeds. Whether the marker set in
 `shared/workspace-markers.json` is intended to match the framework repository
 itself is worth confirming.
 
 ## Verification commands
 
 The sweep used the following invocations. All are read-only; every `state` and
-`setup` mutation was run without `--apply` and therefore reported a plan only.
+`workspace` mutation was run without `--apply` and therefore reported a plan only.
 
 ```bash
 ai-worklog --version
@@ -318,12 +336,10 @@ ai-worklog -w work workspace show work
 ai-worklog -w work workspace default
 ai-worklog -w work workspace init work
 ai-worklog -w work workspace revert work
-
-ai-worklog -w work setup check
-ai-worklog -w work setup show
-ai-worklog -w work setup init work
-ai-worklog -w work setup repair
-ai-worklog -w work setup revert
+ai-worklog -w work workspace check
+ai-worklog -w work workspace show
+ai-worklog -w work workspace repair
+ai-worklog -w work workspace ides
 
 ai-worklog -w work catalog validate
 ai-worklog -w work catalog search example

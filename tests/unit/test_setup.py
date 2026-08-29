@@ -10,7 +10,7 @@ import pytest
 from ai_worklog_framework import global_config as gc
 from ai_worklog_framework.adapters import jenkins
 from ai_worklog_framework.paths import WorkspacePaths
-from ai_worklog_framework.setup import commands as setup_commands
+from ai_worklog_framework.workspace import commands as workspace_commands
 from ai_worklog_framework.setup.manifest import load_manifest, manifest_path, save_manifest, tree_checksum
 from ai_worklog_framework.setup.materialize import inspect_destination, plan_skill_materialization
 from ai_worklog_framework.setup.planner import apply_init_or_repair_plan, plan_setup_init, plan_setup_revert
@@ -246,7 +246,7 @@ class TestSetupCommands:
         ws = _make_workspace(tmp_path)
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         args = SimpleNamespace(
-            setup_action="init",
+            workspace_action="init",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -256,13 +256,13 @@ class TestSetupCommands:
             json=False,
             apply=False,
         )
-        assert setup_commands.run_init(args) == 0
+        assert workspace_commands.run_init(args) == 0
         output = capsys.readouterr().out
         assert "pending actions" in output
         assert "Re-run with --apply" in output
 
         args.apply = True
-        assert setup_commands.run_init(args) == 0
+        assert workspace_commands.run_init(args) == 0
         cfg = gc.load_global_config()
         assert cfg["workspaces"]["work"]["ides"] == ["cursor"]
         assert cfg["ai_vault_root"] == str(vault.resolve())
@@ -275,7 +275,7 @@ class TestSetupCommands:
         gc.set_workspace_ides("work", ["claude"])
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         args = SimpleNamespace(
-            setup_action="init",
+            workspace_action="init",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -285,7 +285,7 @@ class TestSetupCommands:
             json=True,
             apply=True,
         )
-        setup_commands.run_init(args)
+        workspace_commands.run_init(args)
         assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["claude", "cursor"]
 
     def test_revert_removes_cursor_only(self, home, tmp_path, monkeypatch):
@@ -293,7 +293,7 @@ class TestSetupCommands:
         ws = _make_workspace(tmp_path)
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         init_args = SimpleNamespace(
-            setup_action="init",
+            workspace_action="init",
             name="work",
             path=str(ws),
             ide=["cursor", "claude"],
@@ -303,19 +303,19 @@ class TestSetupCommands:
             json=False,
             apply=True,
         )
-        setup_commands.run_init(init_args)
+        workspace_commands.run_init(init_args)
         gc.add_workspace("work", str(ws))
         gc.set_workspace_ides("work", ["cursor", "claude"])
 
         revert_args = SimpleNamespace(
-            setup_action="revert",
+            workspace_action="revert",
             workspace=str(ws),
             workspace_name="work",
             ide=["cursor"],
             json=False,
             apply=True,
         )
-        setup_commands.run_revert(revert_args)
+        workspace_commands.run_revert(revert_args)
         assert not (ws / ".cursor/skills/developer-protocol").exists()
         assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["claude"]
 
@@ -328,21 +328,71 @@ class TestSetupCommands:
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
 
         show_args = SimpleNamespace(
-            setup_action="show",
+            workspace_action="show",
             workspace=str(ws),
             workspace_name="work",
             json=True,
         )
-        assert setup_commands.run_show(show_args) == 0
+        assert workspace_commands.run_show(show_args) == 0
 
         check_args = SimpleNamespace(
-            setup_action="check",
+            workspace_action="check",
             workspace=str(ws),
             workspace_name="work",
             json=True,
         )
-        code = setup_commands.run_check(check_args)
+        code = workspace_commands.run_check(check_args)
         assert code in (0, 1, 3)
+
+
+class TestWorkspaceIdes:
+    def _args(self, ws, ide=None, json=False):
+        return SimpleNamespace(
+            workspace_action="ides",
+            workspace=str(ws),
+            workspace_name="work",
+            ide=ide,
+            json=json,
+        )
+
+    def test_display_registered_ides(self, home, tmp_path, capsys):
+        ws = _make_workspace(tmp_path)
+        gc.add_workspace("work", str(ws), make_default=True)
+        gc.set_workspace_ides("work", ["cursor", "claude"])
+        assert workspace_commands.run_ides(self._args(ws)) == 0
+        assert "IDEs for work: claude, cursor" in capsys.readouterr().out
+
+    def test_display_when_none_registered(self, home, tmp_path, capsys):
+        ws = _make_workspace(tmp_path)
+        gc.add_workspace("work", str(ws), make_default=True)
+        assert workspace_commands.run_ides(self._args(ws)) == 0
+        assert "IDEs for work: none" in capsys.readouterr().out
+
+    def test_set_replaces_existing_selection(self, home, tmp_path, capsys):
+        ws = _make_workspace(tmp_path)
+        gc.add_workspace("work", str(ws), make_default=True)
+        gc.set_workspace_ides("work", ["cursor", "claude"])
+        assert workspace_commands.run_ides(self._args(ws, ide=["cursor"])) == 0
+        assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["cursor"]
+        assert "workspace repair --apply" in capsys.readouterr().out
+
+    def test_auto_redetects(self, home, tmp_path):
+        ws = _make_workspace(tmp_path)
+        (ws / ".cursor").mkdir()
+        gc.add_workspace("work", str(ws), make_default=True)
+        assert workspace_commands.run_ides(self._args(ws, ide=["auto"])) == 0
+        assert "cursor" in gc.load_global_config()["workspaces"]["work"]["ides"]
+
+    def test_invalid_ide_rejected(self, home, tmp_path, capsys):
+        ws = _make_workspace(tmp_path)
+        gc.add_workspace("work", str(ws), make_default=True)
+        assert workspace_commands.run_ides(self._args(ws, ide=["bogus"])) == 1
+        assert "Invalid ide: bogus" in capsys.readouterr().out
+
+    def test_unregistered_workspace_rejected(self, home, tmp_path, capsys):
+        ws = _make_workspace(tmp_path)
+        assert workspace_commands.run_ides(self._args(ws)) == 1
+        assert "Workspace is not registered" in capsys.readouterr().out
 
 
 class TestMigrationIntegration:
@@ -368,7 +418,7 @@ class TestMigrationIntegration:
             lambda name: "/usr/bin/groovy" if name == "groovy" else ("/usr/bin/python3" if name == "python3" else None),
         )
         args = SimpleNamespace(
-            setup_action="init",
+            workspace_action="init",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -378,7 +428,7 @@ class TestMigrationIntegration:
             json=False,
             apply=True,
         )
-        setup_commands.run_init(args)
+        workspace_commands.run_init(args)
         saved = json.loads((home / "config.json").read_text(encoding="utf-8"))
         assert saved["version"] == 2
         assert saved["runtime"] == "python"

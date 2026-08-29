@@ -339,14 +339,6 @@ class GlobalConfigTest extends GroovyTestCase {
         assertTrue(GlobalConfig.load().workspaces.isEmpty())
     }
 
-    void testWorkspaceInitCompatibility() {
-        new File(work, 'jira').mkdir()
-        String output = captureOutput {
-            assertEquals(0, Main.execute(['workspace', 'init', work.path]))
-        }
-        assertTrue(output.contains('Dry run only'))
-    }
-
     void testGlobalOptionsAcceptedAnywhere() {
         GlobalConfig.addWorkspace('work', work.path, true)
         Map current = runJson(['workspace', 'current', '-w', 'work', '--json'])

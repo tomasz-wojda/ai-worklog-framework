@@ -357,7 +357,7 @@ class TestWorkspaceCommands:
     def test_show_unknown(self, home, capsys):
         args = SimpleNamespace(workspace_action="show", name="work", json=False)
         assert workspace_commands.run(args) == 1
-        assert "Workspace not registered" in capsys.readouterr().out
+        assert "Workspace not found" in capsys.readouterr().out
 
     def test_default_none(self, home, capsys):
         args = SimpleNamespace(workspace_action="default", name=None, json=False)
@@ -370,6 +370,31 @@ class TestWorkspaceCommands:
         assert workspace_commands.run(args) == 0
         assert "Removed workspace registration: work" in capsys.readouterr().out
         assert gc.load_global_config()["workspaces"] == {}
+
+
+class TestConfigRuntimeMarker:
+    def test_show_marks_available_runtime(self, home, work_workspace, monkeypatch, capsys):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
+        args = SimpleNamespace(config_action="show", json=False)
+        assert config_commands.run(args) == 0
+        assert "runtime: groovy [available]" in capsys.readouterr().out
+
+    def test_show_marks_missing_runtime(self, home, work_workspace, monkeypatch, capsys):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        args = SimpleNamespace(config_action="show", json=False)
+        assert config_commands.run(args) == 0
+        assert "runtime: groovy [missing]" in capsys.readouterr().out
+
+    def test_show_json_includes_runtime_available(self, home, work_workspace, monkeypatch):
+        gc.add_workspace("work", str(work_workspace), make_default=True)
+        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
+        args = SimpleNamespace(config_action="show", json=True)
+        with mock.patch("builtins.print") as printer:
+            assert config_commands.run(args) == 0
+        payload = json.loads(printer.call_args[0][0])
+        assert payload["runtime_available"] is True
 
 
 class TestConfigCommands:

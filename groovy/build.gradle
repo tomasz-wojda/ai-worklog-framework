@@ -7,10 +7,14 @@ repositories {
     mavenCentral()
 }
 
+def groovyLib = file("${System.getenv('GROOVY_HOME') ?: '/opt/groovy/current'}/lib")
+if (!groovyLib.isDirectory()) {
+    throw new GradleException("Groovy library directory not found: ${groovyLib}. Set GROOVY_HOME.")
+}
+
 dependencies {
-    implementation localGroovy()
-    testImplementation localGroovy()
-    testImplementation 'junit:junit:4.13.2'
+    implementation fileTree(dir: groovyLib, include: ['groovy-*.jar'])
+    testImplementation fileTree(dir: groovyLib, include: ['groovy-*.jar', 'junit-4*.jar'])
 }
 
 application {

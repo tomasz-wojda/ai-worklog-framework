@@ -23,7 +23,6 @@ EXIT_BLOCKED = _EXIT_CODES["blocked"]
 
 GLOBAL_OPTION_COMMANDS = frozenset(
     {
-        "setup",
         "workspace",
         "config",
         "catalog",
@@ -105,60 +104,63 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    setup_parser = subparsers.add_parser("setup", help="Workspace and IDE setup operations")
-    setup_sub = setup_parser.add_subparsers(dest="setup_action")
-    setup_init = setup_sub.add_parser("init", help="Initialize workspace setup", parents=[parent_parser])
-    setup_init.add_argument("name", nargs="?", help="Workspace registration name")
-    setup_init.add_argument("path", nargs="?", help="Workspace root path (optional if name is registered)")
-    setup_init.add_argument(
+    workspace_parser = subparsers.add_parser(
+        "workspace", help="Workspace lifecycle, IDE profiles, and registry"
+    )
+    workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
+    workspace_init = workspace_sub.add_parser(
+        "init", help="Initialize workspace and IDE profiles", parents=[parent_parser]
+    )
+    workspace_init.add_argument("name", nargs="?", help="Workspace registration name")
+    workspace_init.add_argument("path", nargs="?", help="Workspace root path (optional if name is registered)")
+    workspace_init.add_argument(
         "--ide",
         action="append",
         choices=["auto", "cursor", "claude", "antigravity"],
         help="IDE profile (repeatable; default auto)",
     )
-    setup_init.add_argument("--runtime", choices=["groovy", "python"])
-    setup_init.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
-    setup_init.add_argument("--default", action="store_true", help="Set as default workspace")
-    setup_init.add_argument("--adopt", action="store_true", help="Adopt existing foreign skill links or directories")
-    setup_init.add_argument("--json", action="store_true")
-    setup_init.add_argument("--apply", action="store_true", help="Apply planned changes")
-    setup_check = setup_sub.add_parser(
-        "check", help="Validate setup readiness", parents=[parent_parser],
+    workspace_init.add_argument("--runtime", choices=["groovy", "python"])
+    workspace_init.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
+    workspace_init.add_argument("--default", action="store_true", help="Set as default workspace")
+    workspace_init.add_argument("--adopt", action="store_true", help="Adopt existing foreign skill links or directories")
+    workspace_init.add_argument("--json", action="store_true")
+    workspace_init.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_check = workspace_sub.add_parser(
+        "check", help="Validate workspace readiness", parents=[parent_parser],
     )
-    setup_check.add_argument("--json", action="store_true")
-    setup_show = setup_sub.add_parser(
-        "show", help="Show setup summary", parents=[parent_parser],
+    workspace_check.add_argument("--json", action="store_true")
+    workspace_repair = workspace_sub.add_parser(
+        "repair", help="Repair workspace-managed artifacts", parents=[parent_parser],
     )
-    setup_show.add_argument("--json", action="store_true")
-    setup_repair = setup_sub.add_parser(
-        "repair", help="Repair setup-managed artifacts", parents=[parent_parser],
-    )
-    setup_repair.add_argument(
+    workspace_repair.add_argument(
         "--ide",
         action="append",
         choices=["auto", "cursor", "claude", "antigravity"],
         help="Limit repair to IDE profiles",
     )
-    setup_repair.add_argument("--json", action="store_true")
-    setup_repair.add_argument("--apply", action="store_true", help="Apply planned changes")
-    setup_revert = setup_sub.add_parser(
-        "revert", help="Revert setup-managed artifacts", parents=[parent_parser],
+    workspace_repair.add_argument("--json", action="store_true")
+    workspace_repair.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_revert = workspace_sub.add_parser(
+        "revert", help="Revert workspace-managed artifacts", parents=[parent_parser],
     )
-    setup_revert.add_argument(
+    workspace_revert.add_argument("path", nargs="?", help="Workspace registration name or root path")
+    workspace_revert.add_argument(
         "--ide",
         action="append",
         choices=["cursor", "claude", "antigravity"],
         help="Limit revert to IDE profiles",
     )
-    setup_revert.add_argument("--json", action="store_true")
-    setup_revert.add_argument("--apply", action="store_true", help="Apply planned changes")
-
-    workspace_parser = subparsers.add_parser("workspace", help="Workspace setup operations")
-    workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
-    for action in ("init", "revert"):
-        workspace_action = workspace_sub.add_parser(action, parents=[parent_parser])
-        workspace_action.add_argument("path", nargs="?", help="Workspace registration name or root path")
-        workspace_action.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_revert.add_argument("--json", action="store_true")
+    workspace_revert.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_ides = workspace_sub.add_parser(
+        "ides", help="Show or set registered IDE profiles", parents=[parent_parser],
+    )
+    workspace_ides.add_argument(
+        "ide",
+        nargs="*",
+        help="IDE profiles to register (omit to display current)",
+    )
+    workspace_ides.add_argument("--json", action="store_true")
     workspace_add = workspace_sub.add_parser("add", help="Register a workspace")
     workspace_add.add_argument("name", help="Workspace name")
     workspace_add.add_argument("path", help="Workspace root path")
@@ -166,8 +168,10 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_add.add_argument("--json", action="store_true")
     workspace_list = workspace_sub.add_parser("list", help="List registered workspaces")
     workspace_list.add_argument("--json", action="store_true")
-    workspace_show = workspace_sub.add_parser("show", help="Show a registered workspace")
-    workspace_show.add_argument("name", help="Workspace name")
+    workspace_show = workspace_sub.add_parser(
+        "show", help="Show workspace summary", parents=[parent_parser],
+    )
+    workspace_show.add_argument("name", nargs="?", help="Workspace name")
     workspace_show.add_argument("--json", action="store_true")
     workspace_default = workspace_sub.add_parser("default", help="Show or set default workspace")
     workspace_default.add_argument("name", nargs="?", help="Workspace name")
@@ -393,13 +397,6 @@ def dispatch(args: argparse.Namespace) -> int:
         build_parser().print_help()
         return EXIT_USER_ERROR
 
-    if args.command == "setup":
-        if not args.setup_action:
-            print("Usage: ai-worklog setup {init|check|show|repair|revert} ...")
-            return EXIT_USER_ERROR
-        from ai_worklog_framework.setup import commands as setup_cmds
-        return setup_cmds.run(args)
-
     if args.command == "catalog":
         from ai_worklog_framework.catalog import commands as catalog_cmds
         return catalog_cmds.run(args)
@@ -408,7 +405,7 @@ def dispatch(args: argparse.Namespace) -> int:
         if not args.workspace_action:
             print(
                 "Usage: ai-worklog workspace "
-                "{init|revert|add|list|show|default|current|remove} ..."
+                "{init|check|show|repair|revert|ides|add|list|default|current|remove} ..."
             )
             return EXIT_USER_ERROR
         from ai_worklog_framework.workspace import commands as workspace_cmds
@@ -416,7 +413,7 @@ def dispatch(args: argparse.Namespace) -> int:
 
     if args.command == "config":
         if not args.config_action:
-            print("Usage: ai-worklog config {show|runtime}")
+            print("Usage: ai-worklog config {show|runtime|set-ai-vault-root}")
             return EXIT_USER_ERROR
         from ai_worklog_framework import global_config_commands as config_cmds
         return config_cmds.run(args)

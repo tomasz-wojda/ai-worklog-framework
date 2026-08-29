@@ -28,7 +28,10 @@ def _render_human(payload: dict) -> None:
     if operation == "show":
         print(f"Global configuration ({config_file_path()}):")
         print(f"  version: {payload['version']}")
-        print(f"  runtime: {payload['runtime']}")
+        print(
+            f"  runtime: {payload['runtime']}"
+            f"{' [available]' if payload.get('runtime_available') else ' [missing]'}"
+        )
         print(f"  AI Vault root: {payload.get('ai_vault_root') or 'none'}")
         print(f"  default workspace: {payload.get('default_workspace') or 'none'}")
         if payload.get("workspaces"):
@@ -54,6 +57,14 @@ def _render(payload: dict, json: bool) -> int:
     return EXIT_SUCCESS
 
 
+def _show_configuration_with_runtime_availability() -> dict:
+    from ai_worklog_framework.setup.resolver import validate_runtime
+
+    payload = show_configuration()
+    payload["runtime_available"] = validate_runtime(payload.get("runtime"))
+    return payload
+
+
 def _handle_error(action: str, json: bool, exc: ValueError) -> int:
     if json:
         print_json({"operation": action, "status": "error", "message": str(exc)})
@@ -70,7 +81,7 @@ def run(args) -> int:
         return EXIT_USER_ERROR
     try:
         if action == "show":
-            return _render(show_configuration(), json)
+            return _render(_show_configuration_with_runtime_availability(), json)
         if action == "runtime":
             if getattr(args, "runtime", None) is None:
                 return _render(show_runtime(), json)

@@ -131,10 +131,13 @@ runtime selection. The Python package installs the fallback command as
 
 ## Workspace Setup
 
-Workspace initialization creates the runtime directories, seeds configuration,
-and links existing service directories under `integrations/`. It accepts either a
-registered workspace short name (`work`) or a directory path. It never reads
-credential contents or overwrites existing targets.
+`ai-worklog workspace init` is the single entry point. It creates the runtime
+directories, seeds configuration, links existing service directories under
+`integrations/`, materializes AI Vault skills into the detected IDE profiles, and
+registers the workspace in the global configuration. Neither `config` nor any
+other command has to be run first. It accepts either a registered workspace short
+name (`work`) or a directory path, and it never reads credential contents or
+overwrites existing targets.
 
 Preview all operations:
 
@@ -162,6 +165,31 @@ wrapper. The following service integrations are supported:
 ```
 jira newrelic aws eks jenkins github argocd artifactory ssh snow datadog
 ```
+
+### Inspecting and Repairing a Workspace
+
+```bash
+ai-worklog workspace check
+ai-worklog workspace show
+ai-worklog workspace repair --apply
+```
+
+`check` validates every layer and exits non-zero when a layer is blocked. `show`
+reports the current state without validating. `repair` re-materializes managed
+artifacts that have drifted.
+
+### IDE Profiles
+
+```bash
+ai-worklog workspace ides
+ai-worklog workspace ides cursor claude
+ai-worklog workspace ides auto
+```
+
+With no arguments the registered profiles are displayed. Supplying one or more of
+`cursor`, `claude`, or `antigravity` replaces the registered set, and `auto`
+re-detects. This updates the registry only; run `ai-worklog workspace repair
+--apply` afterwards to materialize the change.
 
 ## Configuration
 
@@ -233,6 +261,16 @@ Removing a registration never deletes its directory. Global preferences are
 stored in `~/.ai-worklog/config.json`; workspace-specific configuration remains
 under `<workspace>/.ai-worklog/`. The global directory and file use private
 permissions and must not contain service credentials.
+
+The two command groups divide by scope. `config` owns machine-wide settings that
+have a single value: the runtime and the AI Vault root. `workspace` owns
+everything belonging to a specific workspace, including its lifecycle, IDE
+profiles, and registry entry. `config show` marks whether the configured runtime
+is actually present:
+
+```
+  runtime: groovy [available]
+```
 
 Workspace selection uses direct `--workspace`, then `-w` or
 `--workspace-name`, then `AI_WORKLOG_WORKSPACE`, then
