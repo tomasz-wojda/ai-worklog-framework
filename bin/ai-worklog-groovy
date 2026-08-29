@@ -2,6 +2,33 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SRC_DIR="$ROOT/groovy/src/main/groovy"
+COMPILED_DIR="$ROOT/groovy/build/classes/groovy/main"
+MAIN_CLASS_FILE="$COMPILED_DIR/ai/worklog/framework/Main.class"
+STAMP_FILE="$ROOT/groovy/build/ai-worklog-stamp"
+
+export AI_WORKLOG_FRAMEWORK_ROOT="$ROOT"
+
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  JAVA_EXECUTABLE="$JAVA_HOME/bin/java"
+elif command -v java >/dev/null 2>&1; then
+  JAVA_EXECUTABLE="java"
+else
+  JAVA_EXECUTABLE=""
+fi
+
+if [ -n "$JAVA_EXECUTABLE" ] \
+  && [ -n "${GROOVY_HOME:-}" ] \
+  && [ -d "${GROOVY_HOME:-}/lib" ] \
+  && [ -f "$MAIN_CLASS_FILE" ] \
+  && [ -f "$STAMP_FILE" ] \
+  && [ -z "$(find "$SRC_DIR" -name '*.groovy' -newer "$STAMP_FILE" -print -quit)" ]; then
+  exec "$JAVA_EXECUTABLE" \
+    -cp "$COMPILED_DIR:$GROOVY_HOME/lib/*" \
+    ai.worklog.framework.Main \
+    "$@"
+fi
+
 GROOVY_EXECUTABLE="${AI_WORKLOG_GROOVY:-groovy}"
 
 if ! command -v "$GROOVY_EXECUTABLE" >/dev/null 2>&1; then
@@ -9,8 +36,7 @@ if ! command -v "$GROOVY_EXECUTABLE" >/dev/null 2>&1; then
   exit 2
 fi
 
-export AI_WORKLOG_FRAMEWORK_ROOT="$ROOT"
 exec "$GROOVY_EXECUTABLE" \
-  -cp "$ROOT/groovy/src/main/groovy" \
-  "$ROOT/groovy/src/main/groovy/ai/worklog/framework/Main.groovy" \
+  -cp "$SRC_DIR" \
+  "$SRC_DIR/ai/worklog/framework/Main.groovy" \
   "$@"

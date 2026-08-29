@@ -24,3 +24,20 @@ application {
 tasks.withType(Test).configureEach {
     useJUnit()
 }
+
+tasks.register('stampClasses') {
+    def stampFile = layout.buildDirectory.file('ai-worklog-stamp')
+    outputs.upToDateWhen { false }
+    doLast {
+        def stamp = stampFile.get().asFile
+        stamp.parentFile.mkdirs()
+        if (!stamp.exists()) {
+            stamp.createNewFile()
+        }
+        stamp.setLastModified(System.currentTimeMillis())
+    }
+}
+
+tasks.named('classes') {
+    finalizedBy 'stampClasses'
+}
