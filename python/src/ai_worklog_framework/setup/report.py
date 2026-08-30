@@ -180,7 +180,7 @@ def finalize_applied_action_report(report: Dict[str, Any]) -> None:
     report["pending_actions"] = 0
 
 
-_ACTION_OPERATIONS = frozenset({"init", "repair", "revert"})
+_ACTION_OPERATIONS = frozenset({"apply", "revert"})
 
 
 def _render_action_footer(report: Dict[str, Any]) -> None:
@@ -235,7 +235,7 @@ def build_action_report(
 
     conflicts = list(plan.get("conflicts") or [])
     pending = pending_action_count(plan)
-    if conflicts and operation in ("init", "repair"):
+    if conflicts and operation == "apply":
         status = Status.BLOCKED
     elif pending and not apply:
         status = Status.DEGRADED

@@ -316,9 +316,7 @@ class GlobalConfigTest extends GroovyTestCase {
     }
 
     void testConfigAndWorkspaceCommandsViaMain() {
-        Map added = runJson(['workspace', 'add', 'work', work.path, '--default', '--json'])
-        assertEquals('ok', added.status)
-        assertEquals('work', added.name)
+        GlobalConfig.addWorkspace('work', work.path, true)
 
         Map listed = runJson(['workspace', 'list', '--json'])
         assertEquals(1, listed.workspaces.size())
@@ -334,9 +332,25 @@ class GlobalConfigTest extends GroovyTestCase {
         assertEquals('workspace_name', current.source)
         assertEquals('work', current.name)
 
-        Map removed = runJson(['workspace', 'remove', 'work', '--json'])
-        assertEquals('work', removed.name)
-        assertTrue(GlobalConfig.load().workspaces.isEmpty())
+        assertFalse(GlobalConfig.load().workspaces.isEmpty())
+    }
+
+    void testRetiredActionsRedirectWithoutFunctioning() {
+        GlobalConfig.addWorkspace('work', work.path, true)
+        Map replacements = [
+            'init': 'workspace apply',
+            'add': 'workspace apply',
+            'repair': 'workspace apply',
+            'remove': 'workspace revert'
+        ]
+        replacements.each { String action, String replacement ->
+            String output = captureOutput {
+                assertEquals(action, 1, Main.execute(['workspace', action, 'work']))
+            }
+            assertTrue(action, output.contains("workspace ${action} has been removed."))
+            assertTrue(action, output.contains("ai-worklog ${replacement}"))
+        }
+        assertTrue(GlobalConfig.load().workspaces.containsKey('work'))
     }
 
     void testGlobalOptionsAcceptedAnywhere() {

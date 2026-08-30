@@ -204,7 +204,7 @@ def _init_args(
     default: bool = False,
     runtime: str | None = None,
 ) -> tuple[str, ...]:
-    args: list[str] = ["workspace", "init", name, str(workspace), "--ai-vault", str(vault)]
+    args: list[str] = ["workspace", "apply", name, str(workspace), "--ai-vault", str(vault)]
     for ide in ides or ["cursor"]:
         args.extend(["--ide", ide])
     if runtime:
@@ -213,8 +213,8 @@ def _init_args(
         args.append("--default")
     if json_output:
         args.append("--json")
-    if apply:
-        args.append("--apply")
+    if not apply:
+        args.append("--dry-run")
     return tuple(args)
 
 
@@ -227,8 +227,8 @@ def _workspace_args(
     args = ["--workspace", str(workspace), *tail]
     if json_output:
         args.append("--json")
-    if apply:
-        args.append("--apply")
+    if not apply and len(tail) >= 2 and tail[1] in ("apply", "revert"):
+        args.append("--dry-run")
     return tuple(args)
 
 
@@ -360,7 +360,7 @@ def test_setup_init_dry_run_human(
     _assert_parity_human(python, groovy, markers)
     assert python.returncode == 0
     assert "pending actions" in python.stdout
-    assert "Re-run with --apply" in python.stdout
+    assert "Re-run without --dry-run" in python.stdout
 
 
 def test_setup_init_apply_human(
@@ -397,7 +397,7 @@ def test_setup_init_dry_run_json(
     )
     _assert_parity_json(python, groovy, markers)
     payload = _normalize_setup_json(python.stdout, markers)
-    assert payload["operation"] == "init"
+    assert payload["operation"] == "apply"
     assert payload["status"] == "degraded"
     assert payload["pending_actions"] > 0
 
@@ -490,14 +490,14 @@ def test_setup_repair_dry_run_and_idempotent_apply(
     _reset_state(isolated_home, workspace)
     _seed_init(env_home, workspace, vault, ides=["cursor"])
 
-    python_dry = _run("python", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True))
-    groovy_dry = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True))
+    python_dry = _run("python", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True))
+    groovy_dry = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True))
     _assert_parity_json(python_dry, groovy_dry, markers)
 
     _reset_state(isolated_home, workspace)
     _seed_init(env_home, workspace, vault, ides=["cursor"])
-    first = _run("python", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
-    second = _run("python", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
+    first = _run("python", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True, apply=True))
+    second = _run("python", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True, apply=True))
     assert first.returncode == 0
     assert second.returncode == 0
     first_payload = _normalize_setup_json(first.stdout, markers)
@@ -508,8 +508,8 @@ def test_setup_repair_dry_run_and_idempotent_apply(
 
     _reset_state(isolated_home, workspace)
     _seed_init(env_home, workspace, vault, ides=["cursor"])
-    groovy_first = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
-    groovy_second = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
+    groovy_first = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True, apply=True))
+    groovy_second = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "apply", "--ide", "cursor", json_output=True, apply=True))
     _assert_parity_json(groovy_first, groovy_second, markers)
 
 
@@ -541,7 +541,9 @@ def test_setup_revert_selective_and_full(
     assert not (workspace / ".cursor/skills/developer-protocol").exists()
     assert not (workspace / ".claude/skills/developer-protocol").exists()
     config = json.loads((isolated_home / "config.json").read_text(encoding="utf-8"))
-    assert config["workspaces"]["work"]["ides"] == []
+    assert "work" not in config["workspaces"]
+    assert config.get("default_workspace") is None
+    assert workspace.is_dir()
 
 
 def test_setup_init_merges_existing_ides(
@@ -598,8 +600,8 @@ def test_setup_repair_after_missing_symlink(
     elif link.exists():
         shutil.rmtree(link)
 
-    python = _run("python", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True))
-    groovy = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True))
+    python = _run("python", env_home, *_workspace_args(workspace, "workspace", "apply", json_output=True))
+    groovy = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "apply", json_output=True))
     _assert_parity_json(python, groovy, markers)
     payload = _normalize_setup_json(python.stdout, markers)
     assert payload["status"] == "degraded"
@@ -612,7 +614,7 @@ def test_setup_repair_after_missing_symlink(
         link.unlink()
     elif link.exists():
         shutil.rmtree(link)
-    python_apply = _run("python", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
+    python_apply = _run("python", env_home, *_workspace_args(workspace, "workspace", "apply", json_output=True, apply=True))
     _reset_state(isolated_home, workspace)
     _seed_init(env_home, workspace, vault, ides=["cursor"])
     link = workspace / ".cursor/skills/developer-protocol"
@@ -620,7 +622,7 @@ def test_setup_repair_after_missing_symlink(
         link.unlink()
     elif link.exists():
         shutil.rmtree(link)
-    groovy_apply = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "repair", json_output=True, apply=True))
+    groovy_apply = _run("groovy", env_home, *_workspace_args(workspace, "workspace", "apply", json_output=True, apply=True))
     _assert_parity_json(python_apply, groovy_apply, markers)
     assert python_apply.returncode == 0
     assert (workspace / ".cursor/skills/developer-protocol").is_symlink()
@@ -792,9 +794,9 @@ def test_setup_v1_global_config_migration_on_apply(
 @pytest.mark.parametrize(
     "arguments",
     [
-        ("workspace", "init", "../bad", "__WORKSPACE__", "--ai-vault", "__VAULT__", "--json"),
+        ("workspace", "apply", "../bad", "__WORKSPACE__", "--ai-vault", "__VAULT__", "--json"),
         ("--workspace", "__MISSING__", "workspace", "check", "--json"),
-        ("--workspace", "__MISSING__", "workspace", "repair", "--json"),
+        ("--workspace", "__MISSING__", "workspace", "apply", "--json"),
         ("--workspace", "__MISSING__", "workspace", "revert", "--json"),
     ],
 )

@@ -235,6 +235,41 @@ the stale 11-service list in the README, and the audit document.
 
 **Blocked on:** Unit 3.
 
+**Amendments made during execution.**
+
+1. *`apply` no longer adopts foreign content implicitly.* Python passed
+   `adopt=apply` to the planner, so every real apply silently replaced a foreign
+   file or directory at a skills destination with a managed symlink, while Groovy
+   required an explicit `--adopt`. Python already declared the `--adopt` flag and
+   ignored it. Adoption is destructive and contradicts the Unit 3 non-destruction
+   guarantees, so Python now honours the flag and the two runtimes agree. This
+   also fixes `test_setup_init_conflict_blocked`, which had been failing at HEAD.
+
+2. *`revert` unregisters only when unscoped.* A full `revert` removes the
+   registration and clears the default; `revert --ide cursor` removes that one
+   profile and leaves the workspace registered, which the previous unconditional
+   `remove_workspace` call broke.
+
+3. *Registry seeding in the parity tests no longer shells out to `add`.* Six
+   `workspace add` call sites in `test_global_config_parity.py` — two fixtures and
+   four tests — died with the tombstone, taking 25 tests down as fixture errors.
+   The fixtures now call `add_workspace` directly, and the seven `add` tests and
+   four `remove` tests are replaced by one parametrised tombstone parity test
+   across all four retired names. The `remove` tests' distinct guarantee, that
+   unregistering clears the default and leaves the directory alone, moved to the
+   full-revert assertion in `test_setup_parity.py`.
+
+4. *One parity test was host-dependent.* `test_setup_repair_dry_run_and_idempotent_apply`
+   seeded `--ide cursor` and then ran a bare `apply`, which auto-detects IDEs; on
+   a machine with `~/.claude` the apply added claude and the first and second runs
+   no longer matched. The test now names its IDE explicitly. Bare `apply` still
+   auto-detects and unions with the registered set, which is unchanged behaviour
+   inherited from `init` and is not addressed by this program.
+
+5. *Ticket keys sanitised.* `docs/command-surface-audit.md` carried a real ticket
+   key in eleven verification commands, failing the public-content policy test at
+   HEAD. Replaced with the allowed `PROJ` prefix.
+
 ---
 
 ## Unit 5 — Preflight state semantics (spec D7)
@@ -303,3 +338,25 @@ Run after every unit, not only at the end:
 
 Compare human output between runtimes for every command a unit touched. The
 project's convention is byte-identical human output across runtimes.
+
+---
+
+## Program result
+
+All five units are implemented. Python 487 passed, Groovy 148 tests 0 failures.
+
+Two failures remain, both reproduced at the commit this program started from and
+neither caused by it:
+
+- `test_runtime_versions_are_explicit` — the version regex accepts a prerelease
+  suffix for java but not for groovy, and the installed toolchain is
+  `groovy 6.0.0-beta-2`. Environment-specific.
+- `test_setup_init_apply_json_and_state` — the antigravity destination
+  materialises as a symlink where the test expects a copied directory. Both
+  runtimes agree, so this is a materialisation question, not a parity one.
+
+One gap found by live verification and left open because closing it changes the
+created shape: `preflight` reports `[DEGRADED] workspace: Missing: prompt.log`,
+but `prompt.log` is not in the shape `apply` creates and was removed as a
+discovery marker in Unit 3. Either `apply` should create it or `preflight`
+should stop requiring it.

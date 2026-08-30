@@ -131,51 +131,67 @@ runtime selection. The Python package installs the fallback command as
 
 ## Workspace Setup
 
-`ai-worklog workspace init` is the single entry point. It creates the runtime
-directories, seeds configuration, links existing service directories under
+`ai-worklog workspace apply` is the single entry point. It creates the runtime
+directories, seeds configuration, creates the service directories under
 `integrations/`, materializes AI Vault skills into the detected IDE profiles, and
 registers the workspace in the global configuration. Neither `config` nor any
 other command has to be run first. It accepts either a registered workspace short
-name (`work`) or a directory path, and it never reads credential contents or
-overwrites existing targets.
+name (`work`) or a directory path, and with no argument it targets the current
+directory exactly. It never reads credential contents and never overwrites
+existing targets.
 
-Preview all operations:
+`apply` converges: running it on a fresh directory creates the workspace, running
+it on an existing one fills in whatever is missing, and running it twice in a row
+changes nothing the second time.
+
+Apply to the current directory:
 
 ```bash
-ai-worklog workspace init work
+ai-worklog workspace apply
+```
+
+Apply to a named or explicit target:
+
+```bash
+ai-worklog workspace apply work
 # or using an absolute directory path:
-ai-worklog workspace init /absolute/path/to/workspace
+ai-worklog workspace apply /absolute/path/to/workspace
 ```
 
-Create links:
+Preview without changing anything:
 
 ```bash
-ai-worklog workspace init work --apply
+ai-worklog workspace apply work --dry-run
 ```
 
-Remove links created by the framework:
+Remove what the framework created and unregister the workspace:
 
 ```bash
-ai-worklog workspace revert work --apply
+ai-worklog workspace revert work
 ```
+
+`revert` removes only framework-created artifacts that are still empty; service
+directories holding your files, and the `worklog/`, `repos/`, and `tmp/` trees,
+are always left alone. Scope it to one IDE with `--ide`, which leaves the
+workspace registered.
 
 The legacy `scripts/bootstrap.sh` interface remains available as a compatibility
 wrapper. The following service integrations are supported:
 
 ```
-jira newrelic aws eks jenkins github argocd artifactory ssh snow datadog
+jira newrelic aws eks jenkins github argocd artifactory automox ssh snow datadog
 ```
 
-### Inspecting and Repairing a Workspace
+### Inspecting a Workspace
 
 ```bash
 ai-worklog workspace check
 ai-worklog workspace show
-ai-worklog workspace repair --apply
+ai-worklog workspace apply
 ```
 
 `check` validates every layer and exits non-zero when a layer is blocked. `show`
-reports the current state without validating. `repair` re-materializes managed
+reports the current state without validating. `apply` re-materializes managed
 artifacts that have drifted.
 
 ### IDE Profiles
@@ -188,8 +204,8 @@ ai-worklog workspace ides auto
 
 With no arguments the registered profiles are displayed. Supplying one or more of
 `cursor`, `claude`, or `antigravity` replaces the registered set, and `auto`
-re-detects. This updates the registry only; run `ai-worklog workspace repair
---apply` afterwards to materialize the change.
+re-detects. This updates the registry only; run `ai-worklog workspace apply`
+afterwards to materialize the change.
 
 ## Configuration
 
@@ -221,9 +237,9 @@ export AI_WORKLOG_WORKSPACE=/absolute/path/to/workspace
 Register frequently used workspaces once:
 
 ```bash
-ai-worklog workspace add work /Users/example/work --default
-ai-worklog workspace add test /Users/example/work-test
-ai-worklog workspace add personal /Users/example/personal
+ai-worklog workspace apply work /Users/example/work --default
+ai-worklog workspace apply test /Users/example/work-test
+ai-worklog workspace apply personal /Users/example/personal
 ```
 
 Commands run outside a workspace use the saved default:
@@ -253,11 +269,11 @@ ai-worklog workspace list
 ai-worklog workspace show test
 ai-worklog workspace current
 ai-worklog workspace default test
-ai-worklog workspace remove personal
+ai-worklog workspace revert personal
 ai-worklog config show
 ```
 
-Removing a registration never deletes its directory. Global preferences are
+Reverting a registration never deletes user content. Global preferences are
 stored in `~/.ai-worklog/config.json`; workspace-specific configuration remains
 under `<workspace>/.ai-worklog/`. The global directory and file use private
 permissions and must not contain service credentials.

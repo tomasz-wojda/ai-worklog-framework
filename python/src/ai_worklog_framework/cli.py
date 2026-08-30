@@ -108,40 +108,29 @@ def build_parser() -> argparse.ArgumentParser:
         "workspace", help="Workspace lifecycle, IDE profiles, and registry"
     )
     workspace_sub = workspace_parser.add_subparsers(dest="workspace_action")
-    workspace_init = workspace_sub.add_parser(
-        "init", help="Initialize workspace and IDE profiles", parents=[parent_parser]
+    workspace_apply = workspace_sub.add_parser(
+        "apply", help="Create, adopt, and register a workspace", parents=[parent_parser]
     )
-    workspace_init.add_argument("name", nargs="?", help="Workspace registration name")
-    workspace_init.add_argument("path", nargs="?", help="Workspace root path (optional if name is registered)")
-    workspace_init.add_argument(
+    workspace_apply.add_argument("name", nargs="?", help="Workspace registration name")
+    workspace_apply.add_argument("path", nargs="?", help="Workspace root path (optional if name is registered)")
+    workspace_apply.add_argument(
         "--ide",
         action="append",
         choices=["auto", "cursor", "claude", "antigravity"],
         help="IDE profile (repeatable; default auto)",
     )
-    workspace_init.add_argument("--runtime", choices=["groovy", "python"])
-    workspace_init.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
-    workspace_init.add_argument("--default", action="store_true", help="Set as default workspace")
-    workspace_init.add_argument("--adopt", action="store_true", help="Adopt existing foreign skill links or directories")
-    workspace_init.add_argument("--json", action="store_true")
-    workspace_init.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_apply.add_argument("--runtime", choices=["groovy", "python"])
+    workspace_apply.add_argument("--ai-vault", dest="ai_vault", help="AI vault root path")
+    workspace_apply.add_argument("--default", action="store_true", help="Set as default workspace")
+    workspace_apply.add_argument("--adopt", action="store_true", help="Adopt existing foreign skill links or directories")
+    workspace_apply.add_argument("--json", action="store_true")
+    workspace_apply.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show planned changes without making them")
     workspace_check = workspace_sub.add_parser(
         "check", help="Validate workspace readiness", parents=[parent_parser],
     )
     workspace_check.add_argument("--json", action="store_true")
-    workspace_repair = workspace_sub.add_parser(
-        "repair", help="Repair workspace-managed artifacts", parents=[parent_parser],
-    )
-    workspace_repair.add_argument(
-        "--ide",
-        action="append",
-        choices=["auto", "cursor", "claude", "antigravity"],
-        help="Limit repair to IDE profiles",
-    )
-    workspace_repair.add_argument("--json", action="store_true")
-    workspace_repair.add_argument("--apply", action="store_true", help="Apply planned changes")
     workspace_revert = workspace_sub.add_parser(
-        "revert", help="Revert workspace-managed artifacts", parents=[parent_parser],
+        "revert", help="Unmaterialize and unregister a workspace", parents=[parent_parser],
     )
     workspace_revert.add_argument("path", nargs="?", help="Workspace registration name or root path")
     workspace_revert.add_argument(
@@ -151,7 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit revert to IDE profiles",
     )
     workspace_revert.add_argument("--json", action="store_true")
-    workspace_revert.add_argument("--apply", action="store_true", help="Apply planned changes")
+    workspace_revert.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show planned changes without making them")
     workspace_ides = workspace_sub.add_parser(
         "ides", help="Show or set registered IDE profiles", parents=[parent_parser],
     )
@@ -161,11 +150,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="IDE profiles to register (omit to display current)",
     )
     workspace_ides.add_argument("--json", action="store_true")
-    workspace_add = workspace_sub.add_parser("add", help="Register a workspace")
-    workspace_add.add_argument("name", help="Workspace name")
-    workspace_add.add_argument("path", help="Workspace root path")
-    workspace_add.add_argument("--default", action="store_true", help="Set as default workspace")
-    workspace_add.add_argument("--json", action="store_true")
     workspace_list = workspace_sub.add_parser("list", help="List registered workspaces")
     workspace_list.add_argument("--json", action="store_true")
     workspace_show = workspace_sub.add_parser(
@@ -180,9 +164,10 @@ def build_parser() -> argparse.ArgumentParser:
         "current", help="Show resolved workspace", parents=[parent_parser],
     )
     workspace_current.add_argument("--json", action="store_true")
-    workspace_remove = workspace_sub.add_parser("remove", help="Remove a workspace registration")
-    workspace_remove.add_argument("name", help="Workspace name")
-    workspace_remove.add_argument("--json", action="store_true")
+
+    for retired in ("init", "add", "repair", "remove"):
+        tombstone = workspace_sub.add_parser(retired, add_help=False)
+        tombstone.add_argument("rest", nargs=argparse.REMAINDER)
 
     config_parser = subparsers.add_parser("config", help="Global configuration")
     config_sub = config_parser.add_subparsers(dest="config_action")
@@ -405,7 +390,7 @@ def dispatch(args: argparse.Namespace) -> int:
         if not args.workspace_action:
             print(
                 "Usage: ai-worklog workspace "
-                "{init|check|show|repair|revert|ides|add|list|default|current|remove} ..."
+                "{apply|check|show|revert|ides|list|default|current} ..."
             )
             return EXIT_USER_ERROR
         from ai_worklog_framework.workspace import commands as workspace_cmds

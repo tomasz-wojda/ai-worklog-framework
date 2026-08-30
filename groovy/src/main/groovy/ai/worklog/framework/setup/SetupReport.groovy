@@ -208,7 +208,7 @@ class SetupReport {
         List conflicts = new ArrayList<>((List) (plan.conflicts ?: []))
         int pending = SetupPlanner.pendingActionCount(plan)
         String status
-        if (conflicts && operation in ['init', 'repair']) {
+        if (conflicts && operation == 'apply') {
             status = Status.BLOCKED.value
         } else if (pending && !apply) {
             status = Status.DEGRADED.value
@@ -257,7 +257,7 @@ class SetupReport {
         ]
     }
 
-    private static final Set<String> ACTION_OPERATIONS = ['init', 'repair', 'revert'] as Set
+    private static final Set<String> ACTION_OPERATIONS = ['apply', 'revert'] as Set
 
     static void finalizeAppliedActionReport(Map report) {
         List actions = (List) (report.actions ?: [])

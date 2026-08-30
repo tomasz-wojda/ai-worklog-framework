@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,28 @@ def _seed(env: dict[str, str], *arguments: str) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _register(
+    env: dict[str, str],
+    name: str,
+    path: Path,
+    make_default: bool = False,
+) -> None:
+    script = (
+        "from ai_worklog_framework.global_config import add_workspace;"
+        f"add_workspace({name!r}, {str(path)!r}, {make_default!r})"
+    )
+    child = env.copy()
+    child["PYTHONPATH"] = str(ROOT / "python" / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=child,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def _clear_config(env: dict[str, str]) -> None:
     config = Path(env["AI_WORKLOG_HOME"]) / "config.json"
     if config.exists():
@@ -127,15 +150,8 @@ def _reset_registry(
     config = home / "config.json"
     if config.exists():
         config.unlink()
-    _seed(
-        env,
-        "workspace",
-        "add",
-        "work",
-        str(work_workspace),
-        "--default",
-    )
-    _seed(env, "workspace", "add", "test", str(test_workspace))
+    _register(env, "work", work_workspace, True)
+    _register(env, "test", test_workspace)
 
 
 def _run_parity(
@@ -211,97 +227,38 @@ def seeded_registry(
     work_workspace: Path,
     test_workspace: Path,
 ) -> None:
-    _seed(
-        env_home,
-        "workspace",
-        "add",
-        "work",
-        str(work_workspace),
-        "--default",
+    _register(env_home, "work", work_workspace, True)
+    _register(env_home, "test", test_workspace)
+
+
+@pytest.mark.parametrize(
+    "action,replacement",
+    [
+        ("init", "apply"),
+        ("add", "apply"),
+        ("repair", "apply"),
+        ("remove", "revert"),
+    ],
+)
+def test_workspace_retired_action_redirects_with_parity(
+    env_home: dict[str, str],
+    work_workspace: Path,
+    seeded_registry: None,
+    action: str,
+    replacement: str,
+) -> None:
+    arguments = ("workspace", action, "work", str(work_workspace))
+    python = _run("python", env_home, *arguments)
+    groovy = _run("groovy", env_home, *arguments)
+    _assert_parity_human(python, groovy)
+    assert python.returncode == 1
+    assert (
+        python.stdout
+        == f"workspace {action} has been removed. "
+        f"Use 'ai-worklog workspace {replacement}' instead.\n"
     )
-    _seed(env_home, "workspace", "add", "test", str(test_workspace))
-
-
-def test_workspace_add_human(
-    env_home: dict[str, str],
-    work_workspace: Path,
-) -> None:
-    arguments = ("workspace", "add", "work", str(work_workspace), "--default")
-    _clear_config(env_home)
-    python = _run("python", env_home, *arguments)
-    _clear_config(env_home)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-
-
-def test_workspace_add_json(
-    env_home: dict[str, str],
-    work_workspace: Path,
-) -> None:
-    arguments = ("workspace", "add", "work", str(work_workspace), "--default", "--json")
-    _clear_config(env_home)
-    python = _run("python", env_home, *arguments)
-    _clear_config(env_home)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_json(python, groovy)
-
-
-def test_workspace_add_idempotent_human(
-    env_home: dict[str, str],
-    work_workspace: Path,
-) -> None:
-    _seed(env_home, "workspace", "add", "work", str(work_workspace), "--default")
-    arguments = ("workspace", "add", "work", str(work_workspace))
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-
-
-def test_workspace_add_idempotent_json(
-    env_home: dict[str, str],
-    work_workspace: Path,
-) -> None:
-    _seed(env_home, "workspace", "add", "work", str(work_workspace), "--default")
-    arguments = ("workspace", "add", "work", str(work_workspace), "--json")
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_json(python, groovy)
-
-
-def test_workspace_add_conflict(
-    env_home: dict[str, str],
-    work_workspace: Path,
-    test_workspace: Path,
-) -> None:
-    _seed(env_home, "workspace", "add", "work", str(work_workspace))
-    arguments = ("workspace", "add", "work", str(test_workspace))
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-    assert python.returncode == 1
-
-
-def test_workspace_add_missing_path(
-    env_home: dict[str, str],
-    tmp_path: Path,
-) -> None:
-    missing = tmp_path / "missing"
-    arguments = ("workspace", "add", "work", str(missing))
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-    assert python.returncode == 1
-
-
-def test_workspace_add_invalid_name(
-    env_home: dict[str, str],
-    work_workspace: Path,
-) -> None:
-    arguments = ("workspace", "add", "../bad", str(work_workspace))
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-    assert python.returncode == 1
+    config = json.loads((Path(env_home["AI_WORKLOG_HOME"]) / "config.json").read_text())
+    assert config["workspaces"]["work"]["path"] == str(work_workspace)
 
 
 def test_workspace_list_human(
@@ -435,77 +392,6 @@ def test_workspace_default_set_json(
         reset=(work_workspace, test_workspace),
     )
     _assert_parity_json(python, groovy)
-
-
-def test_workspace_remove_human(
-    env_home: dict[str, str],
-    work_workspace: Path,
-    test_workspace: Path,
-    seeded_registry: None,
-) -> None:
-    python, groovy = _run_parity(
-        env_home,
-        "workspace",
-        "remove",
-        "work",
-        reset=(work_workspace, test_workspace),
-    )
-    _assert_parity_human(python, groovy)
-    assert work_workspace.is_dir()
-    assert (work_workspace / "sentinel.txt").read_text() == "keep"
-
-
-def test_workspace_remove_json(
-    env_home: dict[str, str],
-    work_workspace: Path,
-    test_workspace: Path,
-    seeded_registry: None,
-) -> None:
-    python, groovy = _run_parity(
-        env_home,
-        "workspace",
-        "remove",
-        "test",
-        "--json",
-        reset=(work_workspace, test_workspace),
-    )
-    _assert_parity_json(python, groovy)
-    assert test_workspace.is_dir()
-    assert (test_workspace / "sentinel.txt").read_text() == "keep"
-
-
-def test_workspace_remove_unknown(
-    env_home: dict[str, str],
-) -> None:
-    arguments = ("workspace", "remove", "missing")
-    python = _run("python", env_home, *arguments)
-    groovy = _run("groovy", env_home, *arguments)
-    _assert_parity_human(python, groovy)
-    assert python.returncode == 1
-
-
-def test_workspace_remove_clears_default_not_directory(
-    env_home: dict[str, str],
-    work_workspace: Path,
-    test_workspace: Path,
-) -> None:
-    python, groovy = _run_parity(
-        env_home,
-        "workspace",
-        "remove",
-        "work",
-        reset=(work_workspace, test_workspace),
-    )
-    _assert_parity_human(python, groovy)
-    _reset_registry(env_home, work_workspace, test_workspace)
-    _seed(env_home, "workspace", "remove", "work")
-    python_default = _run("python", env_home, "workspace", "default")
-    _reset_registry(env_home, work_workspace, test_workspace)
-    _seed(env_home, "workspace", "remove", "work")
-    groovy_default = _run("groovy", env_home, "workspace", "default")
-    _assert_parity_human(python_default, groovy_default)
-    assert python_default.returncode == 1
-    assert work_workspace.is_dir()
 
 
 @pytest.mark.parametrize(
@@ -692,7 +578,7 @@ def test_workspace_current_stale_registered_path(
     env_home: dict[str, str],
     work_workspace: Path,
 ) -> None:
-    _seed(env_home, "workspace", "add", "work", str(work_workspace), "--default")
+    _register(env_home, "work", work_workspace, True)
     shutil.rmtree(work_workspace)
     arguments = ("workspace", "show", "work", "--json")
     python = _run("python", env_home, *arguments)

@@ -285,7 +285,7 @@ def print_compact_actions(actions: List[Dict[str, Any]], apply: bool) -> None:
 
     if active and not apply:
         noun = "action" if len(active) == 1 else "actions"
-        message = f"{len(active)} pending {noun}. Re-run with --apply to make changes."
+        message = f"{len(active)} pending {noun}. Re-run without --dry-run to make changes."
         if _setup_use_color():
             print(f"\n  \033[2m{message}\033[0m")
         else:

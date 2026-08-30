@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -136,9 +137,9 @@ def _render_human_action_plan(plan: dict, apply: bool, operation: str) -> None:
     print()
 
 
-def run_init(args) -> int:
+def run_apply(args) -> int:
     json_output = bool(getattr(args, "json", False))
-    apply = bool(getattr(args, "apply", False))
+    apply = not bool(getattr(args, "dry_run", False))
     try:
         config = load_global_config()
         workspaces = config.get("workspaces", {})
@@ -153,9 +154,11 @@ def run_init(args) -> int:
             elif explicit_path:
                 target_path = explicit_path
                 target_name = explicit_name or find_workspace_registration(canonical_workspace_path(explicit_path)) or "workspace"
-            elif config.get("default_workspace") and config["default_workspace"] in workspaces:
-                target_name = config["default_workspace"]
-                target_path = workspaces[target_name]["path"]
+            else:
+                target_path = os.getcwd()
+                target_name = find_workspace_registration(
+                    canonical_workspace_path(target_path)
+                ) or Path(target_path).name
         elif target_name and not target_path:
             if target_name in workspaces:
                 target_path = workspaces[target_name]["path"]
@@ -166,7 +169,7 @@ def run_init(args) -> int:
             target_path = workspaces[target_path]["path"]
 
         if not target_name or not target_path:
-            raise ValueError("Usage: ai-worklog workspace init [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]")
+            raise ValueError("Usage: ai-worklog workspace apply [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--dry-run]")
 
         validate_workspace_name(target_name)
         workspace = canonical_workspace_path(target_path)
@@ -199,11 +202,11 @@ def run_init(args) -> int:
             vault_root=vault_root,
             vault_manifest=vault_manifest,
             ides=ides,
-            adopt=apply,
+            adopt=bool(getattr(args, "adopt", False)),
         )
 
         report = build_action_report(
-            operation="init",
+            operation="apply",
             workspace=workspace,
             workspace_name=target_name,
             plan=plan,
@@ -218,7 +221,7 @@ def run_init(args) -> int:
         if apply:
             if plan.get("conflicts"):
                 if not json_output:
-                    _render_human_action_plan(plan, apply=False, operation="init")
+                    _render_human_action_plan(plan, apply=False, operation="apply")
                 render_report(report, json_output)
                 return EXIT_BLOCKED
             try:
@@ -247,13 +250,13 @@ def run_init(args) -> int:
             finalize_applied_action_report(report)
 
         if not json_output:
-            _render_human_action_plan(plan, apply, operation="init")
+            _render_human_action_plan(plan, apply, operation="apply")
 
         render_report(report, json_output, actions_printed=not json_output)
         return exit_code_for_report(report)
     except ValueError as exc:
         if json_output:
-            render_report({"operation": "init", "status": "error", "message": str(exc)}, True)
+            render_report({"operation": "apply", "status": "error", "message": str(exc)}, True)
         else:
             print(str(exc))
         return EXIT_USER_ERROR
@@ -308,95 +311,9 @@ def run_show(args) -> int:
         return EXIT_USER_ERROR
 
 
-def run_repair(args) -> int:
-    json_output = bool(getattr(args, "json", False))
-    apply = bool(getattr(args, "apply", False))
-    try:
-        explicit_path, explicit_name = _selectors(args)
-        workspace, name, registered, _, source = _workspace_context(
-            explicit_path,
-            explicit_name,
-        )
-        if not registered or not name:
-            raise _unregistered_error(workspace, source)
-
-        config = load_global_config()
-        registered_ides = list(config["workspaces"][name].get("ides") or [])
-        if not registered_ides:
-            raise ValueError("No IDE profiles registered for workspace")
-
-        filter_ides = parse_ide_args(getattr(args, "ide", None))
-        ides = registered_ides
-        if filter_ides:
-            invalid = [ide for ide in filter_ides if ide != "auto" and ide not in registered_ides]
-            if invalid:
-                raise ValueError(f"IDE not registered: {', '.join(invalid)}")
-            ides = [ide for ide in filter_ides if ide != "auto"]
-
-        vault_root, vault_source, vault_manifest = _resolve_vault_or_error(workspace, None)
-        runtime, runtime_source, _ = resolve_runtime_selection()
-
-        plan = plan_setup_repair(
-            workspace=workspace,
-            vault_root=vault_root,
-            vault_manifest=vault_manifest,
-            ides=ides,
-            adopt=apply,
-        )
-
-        report = build_action_report(
-            operation="repair",
-            workspace=workspace,
-            workspace_name=name,
-            plan=plan,
-            runtime=runtime,
-            runtime_source=runtime_source,
-            vault_root=vault_root,
-            vault_source=vault_source,
-            ides=ides,
-            apply=apply,
-        )
-
-        if apply:
-            if plan.get("conflicts"):
-                if not json_output:
-                    _render_human_action_plan(plan, apply=False, operation="repair")
-                render_report(report, json_output)
-                return EXIT_BLOCKED
-            try:
-                apply_init_or_repair_plan(
-                    workspace=workspace,
-                    workspace_name=name,
-                    vault_root=vault_root,
-                    ides=ides,
-                    plan=plan,
-                )
-            except OSError as exc:
-                if json_output:
-                    render_report({**report, "status": "error", "message": str(exc)}, True)
-                else:
-                    print(f"Workspace operation failed: {exc}")
-                return EXIT_SYSTEM_ERROR
-            report["status"] = "ready"
-            report["message"] = "Workspace repair complete"
-            finalize_applied_action_report(report)
-
-        if not json_output:
-            _render_human_action_plan(plan, apply, operation="repair")
-
-        render_report(report, json_output, actions_printed=not json_output)
-        return exit_code_for_report(report)
-    except ValueError as exc:
-        if json_output:
-            render_report({"operation": "repair", "status": "error", "message": str(exc)}, True)
-        else:
-            print(str(exc))
-        return EXIT_USER_ERROR
-
-
 def run_revert(args) -> int:
     json_output = bool(getattr(args, "json", False))
-    apply = bool(getattr(args, "apply", False))
+    apply = not bool(getattr(args, "dry_run", False))
     try:
         explicit_path, explicit_name = _selectors(args)
         workspace, name, registered, _, source = _workspace_context(
@@ -440,6 +357,8 @@ def run_revert(args) -> int:
                     plan=plan,
                 )
                 _persist_revert_ides(name, list(plan.get("remaining_ides") or []))
+                if not filter_ides:
+                    remove_workspace(name)
             except OSError as exc:
                 if json_output:
                     render_report({**report, "status": "error", "message": str(exc)}, True)
@@ -447,7 +366,11 @@ def run_revert(args) -> int:
                     print(f"Workspace operation failed: {exc}")
                 return EXIT_SYSTEM_ERROR
             report["status"] = "ready"
-            report["message"] = "Workspace revert complete"
+            report["message"] = (
+                "Workspace revert complete"
+                if filter_ides
+                else "Workspace revert complete; registration removed"
+            )
             finalize_applied_action_report(report)
 
         if not json_output:
@@ -562,16 +485,28 @@ def _handle_error(action: str, json: bool, exc: ValueError) -> int:
     return EXIT_USER_ERROR
 
 
+RETIRED_ACTIONS = {
+    "init": "workspace apply",
+    "add": "workspace apply",
+    "repair": "workspace apply",
+    "remove": "workspace revert",
+}
+
+
 def run(args) -> int:
     action = args.workspace_action
-    if action == "init":
-        return run_init(args)
+    if action in RETIRED_ACTIONS:
+        replacement = RETIRED_ACTIONS[action]
+        print(
+            f"workspace {action} has been removed. Use 'ai-worklog {replacement}' instead."
+        )
+        return EXIT_USER_ERROR
+    if action == "apply":
+        return run_apply(args)
     if action == "check":
         return run_check(args)
     if action == "show":
         return run_show(args)
-    if action == "repair":
-        return run_repair(args)
     if action == "revert":
         return run_revert(args)
     if action == "ides":
@@ -579,9 +514,7 @@ def run(args) -> int:
 
     json = bool(getattr(args, "json", False))
     try:
-        if action == "add":
-            payload = add_workspace(args.name, args.path, make_default=bool(args.default))
-        elif action == "list":
+        if action == "list":
             payload = list_workspaces()
         elif action == "default":
             payload = (
@@ -592,12 +525,10 @@ def run(args) -> int:
         elif action == "current":
             explicit_path, explicit_name = _selectors(args)
             payload = current_workspace(explicit_path, explicit_name)
-        elif action == "remove":
-            payload = remove_workspace(args.name)
         else:
             print(
                 "Usage: ai-worklog workspace "
-                "{init|check|show|repair|revert|ides|add|list|default|current|remove} ..."
+                "{apply|check|show|revert|ides|list|default|current} ..."
             )
             return EXIT_USER_ERROR
         return _render(payload, json)

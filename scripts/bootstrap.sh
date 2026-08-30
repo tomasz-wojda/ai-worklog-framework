@@ -12,13 +12,13 @@ fi
 
 case "$MODE" in
   --dry-run)
-    exec "$ROOT/bin/ai-worklog" workspace init "$WORKSPACE"
+    exec "$ROOT/bin/ai-worklog" workspace apply "$WORKSPACE" --dry-run
     ;;
   --link)
-    exec "$ROOT/bin/ai-worklog" workspace init "$WORKSPACE" --apply
+    exec "$ROOT/bin/ai-worklog" workspace apply "$WORKSPACE"
     ;;
   --revert)
-    exec "$ROOT/bin/ai-worklog" workspace revert "$WORKSPACE" --apply
+    exec "$ROOT/bin/ai-worklog" workspace revert "$WORKSPACE"
     ;;
   *)
     echo "Unknown mode: $MODE" >&2

@@ -5,7 +5,7 @@ Verification status of every `ai-worklog` command, subcommand, flag, and option.
 | Field | Value |
 | --- | --- |
 | Audit date | 2026-08-28 |
-| Revised | 2026-08-29 (corrected the `jenkins syntax-check` status; recorded the `setup` merge) |
+| Revised | 2026-08-29 (corrected the `jenkins syntax-check` status; recorded the `setup` merge); 2026-08-30 (recorded the workspace verb consolidation) |
 | Repository commit | `e881e43` (`refactor(toolchain): remove Java 17 prerequisite`) |
 | Framework version | 0.7.0 |
 | Groovy runtime | Groovy 6.0.0-beta-2 on OpenJDK 26.0.2.1 (Homebrew) |
@@ -35,6 +35,33 @@ their existing names.
 
 The command group count is therefore 13, not the 14 recorded below. Sections
 below that predate this change describe the surface as audited on 2026-08-28.
+
+## Command surface change, 2026-08-30
+
+The `workspace` group has been reduced to eight subcommands: `apply`, `check`,
+`show`, `revert`, `ides`, `list`, `default`, and `current`.
+
+`init` is renamed to `apply`, and `add`, `repair`, and `remove` are removed. The
+merge recorded above had left four verbs doing overlapping work: `init` created
+and registered, `add` registered only, `repair` re-materialized, and `remove`
+unregistered. `apply` now converges a directory to the desired state whatever its
+starting point, which subsumes all four. The removed names survive as tombstones
+that accept any arguments, emit a message naming the replacement, and exit with
+the user-error code without functioning.
+
+The `--apply` flag is replaced by `--dry-run` on `apply` and `revert`. Mutation is
+now the default and previewing is opt-in, which reverses the previous default. The
+`state` group keeps `--apply`; only the two workspace verbs changed.
+
+Bare `workspace apply` targets the current directory exactly and no longer walks
+upward to find a marker, so it can never act on an unintended parent. `revert`
+unregisters the workspace when run unscoped, and leaves the registration in place
+when scoped with `--ide`.
+
+`apply` no longer adopts foreign files or directories implicitly. Adoption is
+destructive — it replaces existing content with a managed symlink — so it now
+requires the explicit `--adopt` flag on both runtimes. Previously the Python
+runtime adopted on every apply while Groovy required the flag.
 
 ## Summary
 
@@ -93,20 +120,23 @@ config                                                              OK
 └── set-ai-vault-root PATH  --json                                  UNVERIFIED
 
 workspace                                                           OK
-├── init [name] [path]      --ide auto|cursor|claude|antigravity*    OK  29 actions planned
+├── apply [name] [path]     --ide auto|cursor|claude|antigravity*    OK  bare form targets cwd exactly
 │                           --runtime  --ai-vault  --default
-│                           --adopt  --json  --apply
+│                           --adopt  --json  --dry-run
 ├── check                   --json                                  OK  exit 3 outside a workspace
 ├── show [NAME]             --json                                  OK
-├── repair                  --ide*  --json  --apply                 OK  dry-run clean, 29 actions
-├── revert [name|path]      --ide cursor|claude|antigravity*        OK  dry-run, 17 actions
-│                           --json  --apply
-├── ides [IDE...]           --json                                  OK  registry only; repair to apply
-├── add NAME PATH           --default  --json                       UNVERIFIED
+├── revert [name|path]      --ide cursor|claude|antigravity*        OK  unregisters unless --ide given
+│                           --json  --dry-run
+├── ides [IDE...]           --json                                  OK  registry only; apply to materialize
 ├── list                    --json                                  OK
 ├── default [NAME]          --json                                  OK
-├── current                 --json                                  OK  reports resolution source
-└── remove NAME             --json                                  UNVERIFIED
+└── current                 --json                                  OK  reports resolution source
+
+retired (tombstones, exit 1 with a redirecting message)
+├── init                                                            → apply
+├── add                                                             → apply
+├── repair                                                          → apply
+└── remove                                                          → revert
 
 catalog                                                             OK  3 fictional entries
 ├── validate                                                        OK  PASS (3 entries)
@@ -188,7 +218,7 @@ An asterisk after a flag means the flag is repeatable.
 | Command | Purpose |
 | --- | --- |
 | `config` | Read and persist machine-wide preferences in `~/.ai-worklog/config.json`: default runtime and AI vault root |
-| `workspace` | Everything scoped to a specific workspace: lifecycle (`init`, `check`, `show`, `repair`, `revert`), IDE profiles (`ides`), and registry (`add`, `list`, `default`, `current`, `remove`) |
+| `workspace` | Everything scoped to a specific workspace: lifecycle (`apply`, `check`, `show`, `revert`), IDE profiles (`ides`), and registry (`list`, `default`, `current`) |
 | `catalog` | Validate, display, and search service catalog entries, including workspace-local overlays |
 | `ticket` | Generate a preparation report from local worklogs, cloned repositories, catalog matches, and open pull requests |
 | `state` | Create and mutate structured per-ticket state, including blockers and decisions, with validation and atomic writes |
@@ -320,8 +350,9 @@ itself is worth confirming.
 
 ## Verification commands
 
-The sweep used the following invocations. All are read-only; every `state` and
-`workspace` mutation was run without `--apply` and therefore reported a plan only.
+The sweep used the following invocations. All are read-only; every `state`
+mutation was run without `--apply`, and every `workspace` mutation with
+`--dry-run`, and therefore reported a plan only.
 
 ```bash
 ai-worklog --version
@@ -334,11 +365,10 @@ ai-worklog -w work workspace current
 ai-worklog -w work workspace list
 ai-worklog -w work workspace show work
 ai-worklog -w work workspace default
-ai-worklog -w work workspace init work
-ai-worklog -w work workspace revert work
+ai-worklog -w work workspace apply work --dry-run
+ai-worklog -w work workspace revert work --dry-run
 ai-worklog -w work workspace check
 ai-worklog -w work workspace show
-ai-worklog -w work workspace repair
 ai-worklog -w work workspace ides
 
 ai-worklog -w work catalog validate
@@ -346,27 +376,27 @@ ai-worklog -w work catalog search example
 ai-worklog -w work catalog show example-eks-platform
 ai-worklog -w work catalog show nope-missing
 
-ai-worklog -w work ticket prepare KD-7289
+ai-worklog -w work ticket prepare PROJ-1234
 
 ai-worklog -w work state list
-ai-worklog -w work state show KD-7289
-ai-worklog -w work state init ZZZ-1 --summary test --service example-eks-platform
-ai-worklog -w work state set KD-7289 --path implementation.state --value in_progress
-ai-worklog -w work state blocker add KD-7289 --description "probe"
-ai-worklog -w work state decision add KD-7289 --id d1 --description "probe"
+ai-worklog -w work state show PROJ-1234
+ai-worklog -w work state init PROJ-9999 --summary test --service example-eks-platform
+ai-worklog -w work state set PROJ-1234 --path implementation.state --value in_progress
+ai-worklog -w work state blocker add PROJ-1234 --description "probe"
+ai-worklog -w work state decision add PROJ-1234 --id d1 --description "probe"
 
 ai-worklog -w work preflight
 ai-worklog -w work preflight --service jira
-ai-worklog -w work preflight --ticket KD-7289
+ai-worklog -w work preflight --ticket PROJ-1234
 
 ai-worklog -w work day start
 ai-worklog -w work day end
 
-ai-worklog -w work delivery status KD-7289
-ai-worklog -w work closeout report KD-7289
+ai-worklog -w work delivery status PROJ-1234
+ai-worklog -w work closeout report PROJ-1234
 
-ai-worklog -w work reconcile status KD-7289
-ai-worklog -w work reconcile status KD-7289 --system jenkins --json
+ai-worklog -w work reconcile status PROJ-1234
+ai-worklog -w work reconcile status PROJ-1234 --system jenkins --json
 
 ai-worklog -w work diag list
 ai-worklog -w work diag run k8s-workload --namespace example --app example-worker

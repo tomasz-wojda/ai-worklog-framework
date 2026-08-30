@@ -101,10 +101,10 @@ def test_state_json_matches() -> None:
     assert json.loads(python.stdout) == json.loads(groovy.stdout)
 
 
-def test_workspace_init_dry_run_matches(tmp_path) -> None:
+def test_workspace_apply_dry_run_matches(tmp_path) -> None:
     def execute(runtime: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [str(CLI), "--runtime", runtime, "workspace", "init", str(tmp_path)],
+            [str(CLI), "--runtime", runtime, "workspace", "apply", str(tmp_path), "--dry-run"],
             capture_output=True,
             text=True,
             timeout=30,
@@ -156,7 +156,7 @@ def test_preflight_reports_an_empty_service_directory_as_not_configured(tmp_path
     assert outputs["python"] == outputs["groovy"]
 
 
-def test_workspace_init_preserves_existing_integration_symlink_with_parity(tmp_path) -> None:
+def test_workspace_apply_preserves_existing_integration_symlink_with_parity(tmp_path) -> None:
     vault = _minimal_vault(tmp_path)
     results = {}
     for runtime in ("python", "groovy"):
@@ -177,11 +177,10 @@ def test_workspace_init_preserves_existing_integration_symlink_with_parity(tmp_p
                 "--runtime",
                 runtime,
                 "workspace",
-                "init",
+                "apply",
                 str(workspace),
                 "--ai-vault",
                 str(vault),
-                "--apply",
             ],
             capture_output=True,
             text=True,

@@ -246,7 +246,7 @@ class TestSetupCommands:
         ws = _make_workspace(tmp_path)
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         args = SimpleNamespace(
-            workspace_action="init",
+            workspace_action="apply",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -254,15 +254,15 @@ class TestSetupCommands:
             ai_vault=str(vault),
             default=True,
             json=False,
-            apply=False,
+            dry_run=True,
         )
-        assert workspace_commands.run_init(args) == 0
+        assert workspace_commands.run_apply(args) == 0
         output = capsys.readouterr().out
         assert "pending actions" in output
-        assert "Re-run with --apply" in output
+        assert "Re-run without --dry-run" in output
 
-        args.apply = True
-        assert workspace_commands.run_init(args) == 0
+        args.dry_run = False
+        assert workspace_commands.run_apply(args) == 0
         cfg = gc.load_global_config()
         assert cfg["workspaces"]["work"]["ides"] == ["cursor"]
         assert cfg["ai_vault_root"] == str(vault.resolve())
@@ -275,7 +275,7 @@ class TestSetupCommands:
         gc.set_workspace_ides("work", ["claude"])
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         args = SimpleNamespace(
-            workspace_action="init",
+            workspace_action="apply",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -283,9 +283,9 @@ class TestSetupCommands:
             ai_vault=str(vault),
             default=False,
             json=True,
-            apply=True,
+            dry_run=False,
         )
-        workspace_commands.run_init(args)
+        workspace_commands.run_apply(args)
         assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["claude", "cursor"]
 
     def test_revert_removes_cursor_only(self, home, tmp_path, monkeypatch):
@@ -293,7 +293,7 @@ class TestSetupCommands:
         ws = _make_workspace(tmp_path)
         monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/groovy" if name == "groovy" else None)
         init_args = SimpleNamespace(
-            workspace_action="init",
+            workspace_action="apply",
             name="work",
             path=str(ws),
             ide=["cursor", "claude"],
@@ -301,9 +301,9 @@ class TestSetupCommands:
             ai_vault=str(vault),
             default=True,
             json=False,
-            apply=True,
+            dry_run=False,
         )
-        workspace_commands.run_init(init_args)
+        workspace_commands.run_apply(init_args)
         gc.add_workspace("work", str(ws))
         gc.set_workspace_ides("work", ["cursor", "claude"])
 
@@ -313,7 +313,7 @@ class TestSetupCommands:
             workspace_name="work",
             ide=["cursor"],
             json=False,
-            apply=True,
+            dry_run=False,
         )
         workspace_commands.run_revert(revert_args)
         assert not (ws / ".cursor/skills/developer-protocol").exists()
@@ -418,7 +418,7 @@ class TestMigrationIntegration:
             lambda name: "/usr/bin/groovy" if name == "groovy" else ("/usr/bin/python3" if name == "python3" else None),
         )
         args = SimpleNamespace(
-            workspace_action="init",
+            workspace_action="apply",
             name="work",
             path=str(ws),
             ide=["cursor"],
@@ -426,9 +426,9 @@ class TestMigrationIntegration:
             ai_vault=str(vault),
             default=False,
             json=False,
-            apply=True,
+            dry_run=False,
         )
-        workspace_commands.run_init(args)
+        workspace_commands.run_apply(args)
         saved = json.loads((home / "config.json").read_text(encoding="utf-8"))
         assert saved["version"] == 2
         assert saved["runtime"] == "python"

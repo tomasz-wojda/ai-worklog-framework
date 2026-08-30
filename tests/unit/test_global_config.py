@@ -372,12 +372,27 @@ class TestWorkspaceCommands:
         assert workspace_commands.run(args) == 1
         assert "No default workspace configured" in capsys.readouterr().out
 
-    def test_remove_success(self, home, work_workspace, capsys):
+    @pytest.mark.parametrize(
+        "action,replacement",
+        [
+            ("init", "workspace apply"),
+            ("add", "workspace apply"),
+            ("repair", "workspace apply"),
+            ("remove", "workspace revert"),
+        ],
+    )
+    def test_retired_action_redirects_without_functioning(
+        self, home, work_workspace, capsys, action, replacement
+    ):
         gc.add_workspace("work", str(work_workspace))
-        args = SimpleNamespace(workspace_action="remove", name="work", json=False)
-        assert workspace_commands.run(args) == 0
-        assert "Removed workspace registration: work" in capsys.readouterr().out
-        assert gc.load_global_config()["workspaces"] == {}
+        args = SimpleNamespace(workspace_action=action, rest=["work"], json=False)
+
+        assert workspace_commands.run(args) == 1
+
+        output = capsys.readouterr().out
+        assert f"workspace {action} has been removed." in output
+        assert f"ai-worklog {replacement}" in output
+        assert "work" in gc.load_global_config()["workspaces"]
 
 
 class TestConfigRuntimeMarker:

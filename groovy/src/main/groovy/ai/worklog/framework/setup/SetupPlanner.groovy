@@ -102,7 +102,7 @@ class SetupPlanner {
         }
         if (active && !apply) {
             String noun = active.size() == 1 ? 'action' : 'actions'
-            String message = "${active.size()} pending ${noun}. Re-run with --apply to make changes."
+            String message = "${active.size()} pending ${noun}. Re-run without --dry-run to make changes."
             if (setupUseColor()) {
                 println "\n  \u001B[2m${message}\u001B[0m"
             } else {

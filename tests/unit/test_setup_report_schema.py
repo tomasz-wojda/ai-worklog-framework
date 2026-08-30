@@ -28,7 +28,7 @@ _REPORT_TOP_KEYS = {
     "skipped_actions",
     "manifest",
 }
-_REPORT_OPERATIONS = {"init", "check", "show", "repair", "revert"}
+_REPORT_OPERATIONS = {"apply", "check", "show", "revert"}
 _REPORT_STATUSES = {"ready", "degraded", "blocked", "error"}
 _CHECK_STATUSES = _REPORT_STATUSES
 
@@ -296,7 +296,7 @@ class TestSetupReportSchema:
             adopt=False,
         )
         report = build_action_report(
-            operation="init",
+            operation="apply",
             workspace=ws,
             workspace_name="work",
             plan=plan,
@@ -376,9 +376,9 @@ def test_print_compact_action_plan_summarizes_skipped(capsys):
 
 def test_render_report_footer_after_apply(capsys):
     report = {
-        "operation": "repair",
+        "operation": "apply",
         "status": "ready",
-        "message": "Workspace repair complete",
+        "message": "Workspace apply complete",
         "workspace": {"name": "test"},
         "actions": [
             {"kind": "symlink", "target": "/tmp/jira", "skip": False},
@@ -391,7 +391,7 @@ def test_render_report_footer_after_apply(capsys):
     }
     render_report(report, False, actions_printed=True)
     output = capsys.readouterr().out
-    assert "Workspace repair: ready" in output
+    assert "Workspace apply: ready" in output
     assert "1 applied · 1 skipped" in output
     assert "skipped:" not in output
     assert "would:" not in output
@@ -399,9 +399,9 @@ def test_render_report_footer_after_apply(capsys):
 
 def test_render_report_compact_for_planned_actions(capsys):
     report = {
-        "operation": "repair",
+        "operation": "apply",
         "status": "degraded",
-        "message": "Setup repair planned",
+        "message": "Setup apply planned",
         "workspace": {"name": "test"},
         "actions": [
             {"kind": "symlink", "target": "/tmp/jira", "skip": False, "source": "../../jira"},

@@ -9,6 +9,14 @@ import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.setup.SetupVault
 
 class WorkspaceCommands {
+
+    private static final Map<String, String> RETIRED_ACTIONS = [
+        'init': 'workspace apply',
+        'add': 'workspace apply',
+        'repair': 'workspace apply',
+        'remove': 'workspace revert'
+    ]
+
     static int run(
         String action,
         List<String> args,
@@ -20,15 +28,18 @@ class WorkspaceCommands {
             usage()
             return exitCodes.userError
         }
+        if (RETIRED_ACTIONS.containsKey(action)) {
+            println "workspace ${action} has been removed. " +
+                "Use 'ai-worklog ${RETIRED_ACTIONS[action]}' instead."
+            return exitCodes.userError
+        }
         switch (action) {
-            case 'init':
-                return runInit(args, frameworkRoot, options, exitCodes)
+            case 'apply':
+                return runApply(args, frameworkRoot, options, exitCodes)
             case 'check':
                 return runCheck(frameworkRoot, options, args, exitCodes)
             case 'show':
                 return runShow(frameworkRoot, options, args, exitCodes)
-            case 'repair':
-                return runRepair(frameworkRoot, options, args, exitCodes)
             case 'revert':
                 return runRevert(frameworkRoot, options, args, exitCodes)
             case 'ides':
@@ -49,9 +60,6 @@ class WorkspaceCommands {
         try {
             Map payload
             switch (action) {
-                case 'add':
-                    payload = runAdd(remaining)
-                    break
                 case 'list':
                     rejectExtraArgs(remaining, action)
                     payload = GlobalConfig.listWorkspaces()
@@ -69,10 +77,6 @@ class WorkspaceCommands {
                         options.workspaceName,
                         frameworkRoot
                     )
-                    break
-                case 'remove':
-                    payload = GlobalConfig.removeWorkspace(requireArg(remaining, action))
-                    rejectExtraArgs(remaining, action)
                     break
                 default:
                     usage()
@@ -93,10 +97,10 @@ class WorkspaceCommands {
         }
     }
 
-    private static int runInit(List<String> args, File frameworkRoot, Map options, ExitCodes exitCodes) {
+    private static int runApply(List<String> args, File frameworkRoot, Map options, ExitCodes exitCodes) {
         List<String> remaining = new ArrayList<>(args)
         boolean jsonOutput = remaining.remove('--json')
-        boolean apply = remaining.remove('--apply')
+        boolean apply = !remaining.remove('--dry-run')
         boolean makeDefault = remaining.remove('--default')
         boolean adopt = remaining.remove('--adopt')
         List<String> ideValues = takeRepeatedOption(remaining, '--ide')
@@ -129,17 +133,20 @@ class WorkspaceCommands {
                     path = ((Map) workspaces[explicitName]).path
                 } else if (explicitPath) {
                     path = explicitPath
-                    name = explicitName ?: 'workspace'
-                } else if (config.default_workspace && workspaces.containsKey(config.default_workspace)) {
-                    name = config.default_workspace?.toString()
-                    path = ((Map) workspaces[name])?.path
+                    name = explicitName ?:
+                        SetupChecks.findWorkspaceRegistration(new File(explicitPath)) ?:
+                        'workspace'
+                } else {
+                    File cwd = new File('.').canonicalFile
+                    path = cwd.path
+                    name = SetupChecks.findWorkspaceRegistration(cwd) ?: cwd.name
                 }
             }
 
-            rejectExtraArgs(remaining, 'init')
+            rejectExtraArgs(remaining, 'apply')
 
             if (!name || !path) {
-                throw new IllegalArgumentException('Usage: ai-worklog workspace init [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--apply]')
+                throw new IllegalArgumentException('Usage: ai-worklog workspace apply [<name>] [<path>] [-w workspace] [--ide IDE] [--runtime groovy|python] [--ai-vault PATH] [--default] [--json] [--dry-run]')
             }
 
             GlobalConfig.validateWorkspaceName(name)
@@ -179,7 +186,7 @@ class WorkspaceCommands {
             )
 
             Map report = SetupReport.buildActionReport(
-                'init',
+                'apply',
                 workspace,
                 name,
                 plan,
@@ -194,7 +201,7 @@ class WorkspaceCommands {
             if (apply) {
                 if (plan.conflicts) {
                     if (!jsonOutput) {
-                        renderHumanActionPlan(plan, false, 'init')
+                        renderHumanActionPlan(plan, false, 'apply')
                     }
                     SetupReport.renderReport(report, jsonOutput)
                     return exitCodes.blocked
@@ -223,14 +230,14 @@ class WorkspaceCommands {
             }
 
             if (!jsonOutput) {
-                renderHumanActionPlan(plan, apply, 'init')
+                renderHumanActionPlan(plan, apply, 'apply')
             }
 
             SetupReport.renderReport(report, jsonOutput, !jsonOutput)
             return SetupReport.exitCodeForReport(report, exitCodes)
         } catch (IllegalArgumentException exception) {
             if (jsonOutput) {
-                SetupReport.renderReport([operation: 'init', status: 'error', message: exception.message], true)
+                SetupReport.renderReport([operation: 'apply', status: 'error', message: exception.message], true)
             } else {
                 println exception.message
             }
@@ -288,107 +295,10 @@ class WorkspaceCommands {
         }
     }
 
-    private static int runRepair(File frameworkRoot, Map options, List<String> args, ExitCodes exitCodes) {
-        List<String> remaining = new ArrayList<>(args)
-        boolean jsonOutput = remaining.remove('--json')
-        boolean apply = remaining.remove('--apply')
-        try {
-            List<String> filterIdes = SetupResolver.parseIdeArgs(takeRepeatedOption(remaining, '--ide'))
-            rejectExtraArgs(remaining, 'repair')
-
-            List context = workspaceContext(frameworkRoot, options)
-            File workspace = context[0] as File
-            String name = context[1] as String
-            if (!context[2]) {
-                throw unregisteredError(context[0] as File, context[4] as String)
-            }
-
-            Map config = GlobalConfig.load()
-            List<String> registeredIdes = ((List) ((Map) config.workspaces[name]).ides)*.toString()
-            if (!registeredIdes) {
-                throw new IllegalArgumentException('No IDE profiles registered for workspace')
-            }
-
-            List<String> ides = registeredIdes
-            if (filterIdes) {
-                List<String> invalid = filterIdes.findAll { it != 'auto' && !(it in registeredIdes) }
-                if (invalid) {
-                    throw new IllegalArgumentException("IDE not registered: ${invalid.join(', ')}")
-                }
-                ides = filterIdes.findAll { it != 'auto' }
-            }
-
-            List vaultResolution = resolveVaultOrError(workspace, null)
-            File vaultRoot = vaultResolution[0] as File
-            String vaultSource = vaultResolution[1]?.toString()
-            Map vaultManifest = vaultResolution[2] as Map
-            List runtimeSelection = SetupResolver.resolveRuntimeSelection()
-
-            Map plan = SetupPlanner.planSetupRepair(
-                workspace,
-                vaultRoot,
-                vaultManifest,
-                ides,
-                apply,
-                frameworkRoot
-            )
-
-            Map report = SetupReport.buildActionReport(
-                'repair',
-                workspace,
-                name,
-                plan,
-                runtimeSelection[0],
-                runtimeSelection[1],
-                vaultRoot,
-                vaultSource,
-                ides,
-                apply
-            )
-
-            if (apply) {
-                if (plan.conflicts) {
-                    if (!jsonOutput) {
-                        renderHumanActionPlan(plan, false, 'repair')
-                    }
-                    SetupReport.renderReport(report, jsonOutput)
-                    return exitCodes.blocked
-                }
-                try {
-                    SetupPlanner.applyInitOrRepairPlan(workspace, name, vaultRoot, ides, plan)
-                } catch (IOException exception) {
-                    if (jsonOutput) {
-                        SetupReport.renderReport(report + [status: 'error', message: exception.message], true)
-                    } else {
-                        println "Workspace operation failed: ${exception.message}"
-                    }
-                    return exitCodes.systemError
-                }
-                report.status = 'ready'
-                report.message = 'Workspace repair complete'
-                SetupReport.finalizeAppliedActionReport(report)
-            }
-
-            if (!jsonOutput) {
-                renderHumanActionPlan(plan, apply, 'repair')
-            }
-
-            SetupReport.renderReport(report, jsonOutput, !jsonOutput)
-            return SetupReport.exitCodeForReport(report, exitCodes)
-        } catch (IllegalArgumentException exception) {
-            if (jsonOutput) {
-                SetupReport.renderReport([operation: 'repair', status: 'error', message: exception.message], true)
-            } else {
-                println exception.message
-            }
-            return exitCodes.userError
-        }
-    }
-
     private static int runRevert(File frameworkRoot, Map options, List<String> args, ExitCodes exitCodes) {
         List<String> remaining = new ArrayList<>(args)
         boolean jsonOutput = remaining.remove('--json')
-        boolean apply = remaining.remove('--apply')
+        boolean apply = !remaining.remove('--dry-run')
         try {
             List<String> filterIdes = SetupResolver.parseIdeArgs(takeRepeatedOption(remaining, '--ide'))
             String target = takePositional(remaining)
@@ -429,6 +339,9 @@ class WorkspaceCommands {
                 try {
                     SetupPlanner.applyRevertPlan(workspace, name, vaultRoot, plan)
                     GlobalConfig.setWorkspaceIdes(name, (List) (plan.remaining_ides ?: []))
+                    if (!filterIdes) {
+                        GlobalConfig.removeWorkspace(name)
+                    }
                 } catch (IOException exception) {
                     if (jsonOutput) {
                         SetupReport.renderReport(report + [status: 'error', message: exception.message], true)
@@ -438,7 +351,9 @@ class WorkspaceCommands {
                     return exitCodes.systemError
                 }
                 report.status = 'ready'
-                report.message = 'Workspace revert complete'
+                report.message = filterIdes ?
+                    'Workspace revert complete' :
+                    'Workspace revert complete; registration removed'
                 SetupReport.finalizeAppliedActionReport(report)
             }
 
@@ -514,7 +429,7 @@ class WorkspaceCommands {
         List ides = payload.ides instanceof List ? (List) payload.ides*.toString() : []
         println "IDEs for ${payload.name}: ${ides ? ides.join(', ') : 'none'}"
         if (changed) {
-            println "Run 'ai-worklog workspace repair --apply' to materialize."
+            println "Run 'ai-worklog workspace apply' to materialize."
         }
     }
 
@@ -582,19 +497,6 @@ class WorkspaceCommands {
             throw new IllegalArgumentException(validation[1]?.toString())
         }
         [vaultRoot, vaultSource ?: 'unknown', validation[2]]
-    }
-
-    private static Map runAdd(List<String> remaining) {
-        if (remaining.size() < 2) {
-            throw new IllegalArgumentException('Usage: ai-worklog workspace add <name> <path> [--default]')
-        }
-        String name = remaining.remove(0)
-        String path = remaining.remove(0)
-        boolean makeDefault = remaining.remove('--default')
-        if (remaining) {
-            throw new IllegalArgumentException('Unexpected arguments for workspace add')
-        }
-        return GlobalConfig.addWorkspace(name, path, makeDefault)
     }
 
     private static int render(Map payload, boolean json, ExitCodes exitCodes) {
@@ -706,6 +608,6 @@ class WorkspaceCommands {
     }
 
     private static void usage() {
-        println 'Usage: ai-worklog workspace {init|check|show|repair|revert|ides|add|list|default|current|remove} ...'
+        println 'Usage: ai-worklog workspace {apply|check|show|revert|ides|list|default|current} ...'
     }
 }

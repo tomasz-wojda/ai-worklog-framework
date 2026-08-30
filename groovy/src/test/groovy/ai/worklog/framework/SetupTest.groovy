@@ -341,21 +341,21 @@ class SetupTest extends GroovyTestCase {
         File workspace = makeWorkspace()
         String dryRun = captureOutput {
             assertEquals(0, Main.execute([
-                'workspace', 'init', 'work', workspace.path,
+                'workspace', 'apply', 'work', workspace.path,
                 '--ide', 'cursor',
-                '--ai-vault', vault.path
+                '--ai-vault', vault.path,
+                '--dry-run'
             ]))
         }
         assertTrue(dryRun.contains('pending actions'))
-        assertTrue(dryRun.contains('Re-run with --apply'))
+        assertTrue(dryRun.contains('Re-run without --dry-run'))
 
         captureOutput {
             assertEquals(0, Main.execute([
-                'workspace', 'init', 'work', workspace.path,
+                'workspace', 'apply', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ai-vault', vault.path,
                 '--default',
-                '--apply'
             ]))
         }
         Map config = GlobalConfig.load()
@@ -369,13 +369,14 @@ class SetupTest extends GroovyTestCase {
         File workspace = makeWorkspace()
         String output = captureOutput {
             assertEquals(0, Main.execute([
-                'workspace', 'init', workspace.path,
+                'workspace', 'apply', workspace.path,
                 '--ide', 'cursor',
-                '--ai-vault', vault.path
+                '--ai-vault', vault.path,
+                '--dry-run'
             ]))
         }
         assertTrue(output.contains('pending actions'))
-        assertTrue(output.contains('Re-run with --apply'))
+        assertTrue(output.contains('Re-run without --dry-run'))
     }
 
     void testInitMergesIdes() {
@@ -385,11 +386,10 @@ class SetupTest extends GroovyTestCase {
         GlobalConfig.setWorkspaceIdes('work', ['claude'])
         captureOutput {
             assertEquals(0, Main.execute([
-                'workspace', 'init', 'work', workspace.path,
+                'workspace', 'apply', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ai-vault', vault.path,
                 '--json',
-                '--apply'
             ]))
         }
         assertEquals(['claude', 'cursor'], GlobalConfig.load().workspaces.work.ides)
@@ -400,11 +400,10 @@ class SetupTest extends GroovyTestCase {
         File workspace = makeWorkspace()
         captureOutput {
             Main.execute([
-                'workspace', 'init', 'work', workspace.path,
+                'workspace', 'apply', 'work', workspace.path,
                 '--ide', 'cursor',
                 '--ide', 'claude',
                 '--ai-vault', vault.path,
-                '--apply'
             ])
         }
         GlobalConfig.addWorkspace('work', workspace.path, true)
@@ -415,7 +414,6 @@ class SetupTest extends GroovyTestCase {
                 '--workspace', workspace.path,
                 'workspace', 'revert',
                 '--ide', 'cursor',
-                '--apply'
             ])
         }
         assertFalse(new File(workspace, '.cursor/skills/developer-protocol').exists())
@@ -554,9 +552,9 @@ class SetupTest extends GroovyTestCase {
 
     void testRenderReportFooterAfterApply() {
         Map report = [
-            operation: 'repair',
+            operation: 'apply',
             status: 'ready',
-            message: 'Workspace repair complete',
+            message: 'Workspace apply complete',
             workspace: [name: 'test'],
             actions: [
                 [kind: 'symlink', target: '/tmp/jira', skip: false],
@@ -568,7 +566,7 @@ class SetupTest extends GroovyTestCase {
             skipped_actions: 1
         ]
         String output = captureOutput { SetupReport.renderReport(report, false, true) }
-        assertTrue(output.contains('Workspace repair: ready'))
+        assertTrue(output.contains('Workspace apply: ready'))
         assertTrue(output.contains('1 applied · 1 skipped'))
         assertFalse(output.contains('skipped:'))
         assertFalse(output.contains('would:'))
