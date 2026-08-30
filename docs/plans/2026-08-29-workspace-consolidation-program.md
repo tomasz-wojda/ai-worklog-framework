@@ -355,8 +355,41 @@ neither caused by it:
   materialises as a symlink where the test expects a copied directory. Both
   runtimes agree, so this is a materialisation question, not a parity one.
 
-One gap found by live verification and left open because closing it changes the
-created shape: `preflight` reports `[DEGRADED] workspace: Missing: prompt.log`,
-but `prompt.log` is not in the shape `apply` creates and was removed as a
-discovery marker in Unit 3. Either `apply` should create it or `preflight`
-should stop requiring it.
+## Known gaps, out of scope for this program
+
+Recorded here rather than fixed, because each one changes behaviour this program
+did not set out to change.
+
+1. *`preflight` requires a file `apply` does not create.* A freshly applied
+   workspace reports `[DEGRADED] workspace: Missing: prompt.log`, but `prompt.log`
+   is not in the created shape and was removed as a discovery marker in Unit 3.
+   Either `apply` should create it or `preflight` should stop requiring it. Found
+   by live verification.
+
+2. *`apply --runtime` writes the machine-wide runtime.* The flag sits on a
+   workspace subcommand beside `--ide`, which is per-workspace, but
+   `workspace/commands.py:239` calls `set_runtime()`, so selecting a runtime while
+   setting up one workspace repoints every workspace on the machine. Either the
+   flag should stop writing the global key, or the runtime should become
+   per-workspace.
+
+3. *The runtime cannot be set per workspace.* `bin/ai-worklog` chooses the runtime
+   before any code that understands workspaces runs, so a per-workspace runtime
+   needs the dispatcher to resolve the workspace itself. The hook exists —
+   `_read_config_runtime` already spawns Python to read the config on the common
+   path — but `runtime` would have to join the workspace-entry whitelist in both
+   runtimes, the dispatcher would have to learn `-w`, `--workspace`, and
+   `--workspace-name` to resolve the same workspace the CLI later resolves, and
+   the two layers would have to agree by construction, most simply by having the
+   helper return the resolved path and exporting it. `bin/ai-worklog.cmd` and
+   `bin/ai-worklog.ps1` do not read the config at all and hard-default to groovy,
+   so they are already off-parity on runtime selection.
+
+4. *A successful `apply` still reports `Workspace init complete`.* Stale wording
+   from the rename, in `workspace/commands.py:249` and
+   `WorkspaceCommands.groovy:228`. Identical in both runtimes, so parity holds.
+
+5. *A second `apply` under a different name duplicates the registration.* A bare
+   `apply` registers under the directory basename; a later
+   `apply <name> <same path>` adds a second entry pointing at the same directory
+   rather than renaming the first.

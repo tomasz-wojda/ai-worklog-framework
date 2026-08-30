@@ -131,24 +131,38 @@ runtime selection. The Python package installs the fallback command as
 
 ## Workspace Setup
 
+```bash
+# 1. once per machine: point the framework at your AI vault
+ai-worklog config set-ai-vault-root /path/to/ai-vault
+
+# 2. from inside the directory you want to become a workspace
+cd /path/to/workspace
+ai-worklog workspace apply
+
+# 3. confirm it came up clean
+ai-worklog workspace check
+
+# 4. see which integrations still need credentials
+ai-worklog preflight
+```
+
+Step 1 is required once per machine: without a vault root `apply` stops with
+`AI vault not found`. Pass `--ai-vault PATH` to `apply` instead to supply it per
+invocation. Step 4 lists every integration as not configured until credentials
+are placed under `integrations/<service>/`, which the framework never does for
+you.
+
 `ai-worklog workspace apply` is the single entry point. It creates the runtime
 directories, seeds configuration, creates the service directories under
 `integrations/`, materializes AI Vault skills into the detected IDE profiles, and
-registers the workspace in the global configuration. Neither `config` nor any
-other command has to be run first. It accepts either a registered workspace short
-name (`work`) or a directory path, and with no argument it targets the current
-directory exactly. It never reads credential contents and never overwrites
-existing targets.
+registers the workspace in the global configuration. It accepts either a
+registered workspace short name (`work`) or a directory path, and with no
+argument it targets the current directory exactly. It never reads credential
+contents and never overwrites existing targets.
 
 `apply` converges: running it on a fresh directory creates the workspace, running
 it on an existing one fills in whatever is missing, and running it twice in a row
 changes nothing the second time.
-
-Apply to the current directory:
-
-```bash
-ai-worklog workspace apply
-```
 
 Apply to a named or explicit target:
 
