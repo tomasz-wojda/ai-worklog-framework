@@ -151,6 +151,232 @@
           ]
         },
         {
+          "name": "jira",
+          "description": "Jira and Tempo operator",
+          "kind": "service",
+          "subcommands": [
+            {
+              "name": "ticket",
+              "description": "Show full Jira ticket details, comments, links, assignment, and worklogs",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "ticket_key",
+                  "description": "Jira ticket key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "TICKET-KEY"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "summary",
+              "description": "Summarize tickets assigned to the current user",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "rejected",
+              "description": "List assigned tickets in the configured rejected column",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "reporter",
+              "description": "List tickets reported by a display name",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "display_name",
+                  "description": "Reporter display name",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "DISPLAY-NAME"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "tempo",
+              "description": "Show Tempo worklogs for one date",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "date",
+                  "description": "Date; defaults to today",
+                  "required": false,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "verify",
+              "description": "Compare workspace worklogs with Tempo for one date",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "date",
+                  "description": "Date; defaults to today",
+                  "required": false,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "whoami",
+              "description": "Show the authenticated Jira identity",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "log-time",
+              "description": "Log Tempo time; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "ticket_key",
+                  "description": "Jira ticket key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "TICKET-KEY"
+                  }
+                },
+                {
+                  "name": "date",
+                  "description": "Worklog date",
+                  "required": true,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                },
+                {
+                  "name": "seconds",
+                  "description": "Positive duration in seconds",
+                  "required": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "SECONDS"
+                  }
+                },
+                {
+                  "name": "comment",
+                  "description": "Tempo worklog comment",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "COMMENT"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the Tempo worklog",
+                  "takes_value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
           "name": "jenkins",
           "description": "Jenkins operator",
           "kind": "service",

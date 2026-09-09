@@ -29,7 +29,8 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
             ServiceCommands.run('list', [], repository, paths, ConfigLoader.load(workspace))
         }
         assertEquals(0, captured.code)
-        assertTrue(captured.out.contains('Service operators (1):'))
+        assertTrue(captured.out.contains('Service operators (2):'))
+        assertTrue(captured.out.contains('jira: Jira and Tempo operator'))
         assertTrue(captured.out.contains('jenkins: Jenkins operator'))
         assertEquals('', captured.err)
     }
@@ -41,7 +42,7 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
         Map report = (Map) new JsonSlurper().parseText(captured.out)
         assertEquals(0, captured.code)
         assertEquals('ready', report.status)
-        assertEquals(['jenkins'], report.items*.id)
+        assertEquals(['jenkins', 'jira'], report.items*.id)
     }
 
     void testServiceHelpUsesCanonicalJenkinsPath() {

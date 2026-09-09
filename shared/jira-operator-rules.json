@@ -1,0 +1,40 @@
+{
+  "timeouts": {
+    "http_seconds": 30
+  },
+  "limits": {
+    "page_size": 50,
+    "search_default": 200,
+    "search_max": 500,
+    "worklogs_max": 1000,
+    "comments_max": 1000,
+    "comment_max_characters": 4096,
+    "error_body_max_characters": 1024
+  },
+  "api_paths": {
+    "issue": "/rest/api/2/issue",
+    "search": "/rest/api/2/search",
+    "myself": "/rest/api/2/myself",
+    "tempo_worklogs": "/rest/tempo-timesheets/3/worklogs"
+  },
+  "summary_jql": "assignee = currentUser() ORDER BY status ASC, updated DESC",
+  "summary_fields": [
+    "summary",
+    "status",
+    "issuetype",
+    "priority",
+    "project",
+    "created",
+    "updated",
+    "resolutiondate",
+    "timetracking",
+    "timespent"
+  ],
+  "rejected_fields": ["summary", "status", "project", "updated", "resolutiondate"],
+  "reporter_fields": ["summary", "status", "issuetype", "priority", "project", "created", "updated"],
+  "board": {
+    "columns": ["Do zrobienia", "Zablokowane", "W trakcie", "Testy", "Gotowe", "Odrzucone", "Inne"],
+    "rejected_column": "Odrzucone",
+    "status_ids": {}
+  }
+}

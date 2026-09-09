@@ -23,7 +23,7 @@ import ai.worklog.framework.core.StateManager
 import groovy.json.JsonOutput
 
 class Main {
-    static final String VERSION = '0.10.0'
+    static final String VERSION = '0.11.0'
 
     static void main(String[] input) {
         int code

@@ -6,7 +6,7 @@ shift || true
 
 if [ -z "${TOOL}" ]; then
     echo "Usage: run-groovy-tool.sh <tool-name> [args...]" >&2
-    echo "Tools: jira-cli, newrelic-cli, jenkins-syntax-check" >&2
+    echo "Tools: newrelic-cli, jenkins-syntax-check" >&2
     exit 1
 fi
 
@@ -19,7 +19,8 @@ fi
 
 case "${TOOL}" in
     jira-cli)
-        GROOVY_SCRIPT="${AI_WORKLOG_WORKSPACE}/jira/jira-ticket-info.groovy"
+        echo "Command moved: use 'ai-worklog service jira ...'" >&2
+        exit 1
         ;;
     newrelic-cli)
         GROOVY_SCRIPT="${AI_WORKLOG_WORKSPACE}/newrelic/newrelic-info.groovy"

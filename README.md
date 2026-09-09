@@ -322,7 +322,7 @@ ai-worklog toolchain list
 Run a workspace Groovy tool:
 
 ```bash
-./scripts/run-groovy-tool.sh jira-cli summary
+ai-worklog service jira summary
 ./scripts/run-groovy-tool.sh newrelic-cli violations
 ```
 
@@ -431,6 +431,30 @@ ai-worklog service list --json
 Service operators connect the CLI to external systems. They are separate from
 catalog systems, which describe logical applications, platforms, and delivery
 relationships.
+
+### Jira Operator
+
+```bash
+ai-worklog service jira ticket PROJ-1234
+ai-worklog service jira summary --limit 50
+ai-worklog service jira rejected
+ai-worklog service jira reporter "Display Name"
+ai-worklog service jira tempo 2026-09-09
+ai-worklog service jira verify 2026-09-09
+ai-worklog service jira whoami
+ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary"
+ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary" --apply
+```
+
+Jira and Tempo use `integrations/jira/jira.properties`. Ticket reads include
+description, people, linked issues, assignment history, and paginated comments
+and worklogs. Summary, rejected, and reporter searches are bounded and support
+JSON output. Board-specific status IDs belong in
+`integrations/jira/jira-operator.json`.
+
+Tempo logging is a dry-run unless `--apply` is supplied. Verification compares
+Tempo entries with primary files directly under `worklog/`; archived files and
+`_jira.log` or `_raw.log` companions are excluded.
 
 ### Jenkins Operator
 

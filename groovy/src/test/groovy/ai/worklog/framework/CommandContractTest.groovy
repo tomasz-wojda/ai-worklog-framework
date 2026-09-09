@@ -71,6 +71,18 @@ commands:
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
+    void testJiraRenderingListsEightActions() {
+        List<Map> actions = contract.children(['service', 'jira'])
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])
+        assertEquals(8, actions.size())
+        actions*.name.each { assertTrue(rendered.contains(it.toString())) }
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'jira', 'ticket'])
+                .contains('<ticket_key>')
+        )
+    }
+
     void testArtifactsRenderingDocumentsPositionalsAndSelectors() {
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'artifacts'])
         assertTrue(rendered.contains('<controller> <job> <build_selector>'))

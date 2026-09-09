@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Jira Operator Report",
+  "type": "object",
+  "required": ["operation", "fetched_at", "status", "items"],
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": ["ticket", "summary", "rejected", "reporter", "tempo", "verify", "whoami", "log-time"]
+    },
+    "fetched_at": {"type": "string", "format": "date-time"},
+    "status": {
+      "type": "string",
+      "enum": ["ready", "degraded", "blocked", "error", "unknown"]
+    },
+    "message": {"type": "string"},
+    "ticket_key": {"type": "string"},
+    "date": {"type": "string", "format": "date"},
+    "reporter": {"type": "string"},
+    "dry_run": {"type": "boolean"},
+    "applied": {"type": "boolean"},
+    "truncated": {"type": "boolean"},
+    "totals": {"type": "object"},
+    "items": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "additionalProperties": false
+}

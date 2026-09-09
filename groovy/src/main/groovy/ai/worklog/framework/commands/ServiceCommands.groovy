@@ -59,6 +59,10 @@ class ServiceCommands {
             String action = args ? args.remove(0) : null
             return JenkinsCommands.run(action, args, frameworkRoot, paths, config)
         }
+        if (service == 'jira') {
+            String action = args ? args.remove(0) : null
+            return JiraCommands.run(action, args, frameworkRoot, paths)
+        }
         System.err.println("Unknown service: ${service}")
         System.err.println()
         System.err.print usage.renderPath(['service'])
