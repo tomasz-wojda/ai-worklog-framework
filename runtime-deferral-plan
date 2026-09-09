@@ -1,7 +1,12 @@
 # Python Runtime Gating, Windows Unship, and 1.0.0 Supported Surface
 
-Status: approved, not yet implemented
+Status: approved, partially superseded
 Created: 2026-08-15
+
+Execution note 2026-09-09: parity-suite deferral was implemented independently
+for the contract-driven Jenkins CLI pilot. Python remains runnable. The
+original single-lever assumption coupling parity deferral to
+`disabled_runtimes` no longer applies; sections 1 through 3 remain unexecuted.
 
 ## Decisions in force
 
@@ -107,6 +112,18 @@ fail through the existing `Runtime unavailable` path in `SetupCommands.groovy`
 at line 100, with no change needed in the command file.
 
 ## 4. Parity suite skip
+
+Completed independently on 2026-09-09. `tests/parity/conftest.py` now applies a
+module-wide skip marker that preserves test collection and exits successfully
+with 183 skipped tests. `AI_WORKLOG_PARITY_TESTS=1` overrides the marker. The
+override run completed with 164 passing and 19 failing tests: the Jenkins
+failures are expected from the Groovy-only contract pilot, while the
+runtime-version and setup-state failures predate it.
+
+This implementation intentionally does not read `disabled_runtimes` and does
+not change `shared/global-config-rules.json`. Python dispatch remains enabled.
+The original subsections below are retained as historical specification but
+are superseded by this independent switch.
 
 ### 4.1 New file: `tests/parity/conftest.py`
 
@@ -330,11 +347,11 @@ IMPLEMENTATION CHECKLIST:
 7. Add `disabled_runtimes` defaulting to `['python']` to the inline fallback map in `GlobalConfig.loadRules`.
 8. Add the disabled-runtime rejection to `GlobalConfig.setRuntime`, leaving `validate` unchanged.
 9. Add the `DISABLED_RUNTIMES` check to `SetupResolver.validateRuntime`.
-10. Create `tests/parity/conftest.py` with the shared-rules-driven module-level skip helper.
-11. Add the module-level guard call to `tests/parity/test_cli_parity.py`.
-12. Add the module-level guard call to `tests/parity/test_global_config_parity.py`.
-13. Add the module-level guard call to `tests/parity/test_jenkins_parity.py`.
-14. Add the module-level guard call to `tests/parity/test_setup_parity.py`.
+10. DONE 2026-09-09 — Created `tests/parity/conftest.py` with an independent module-wide skip marker and environment override; the shared-rules coupling was superseded.
+11. DONE 2026-09-09 — Added the module-wide marker to `tests/parity/test_cli_parity.py`.
+12. DONE 2026-09-09 — Added the module-wide marker to `tests/parity/test_global_config_parity.py`.
+13. DONE 2026-09-09 — Added the module-wide marker to `tests/parity/test_jenkins_parity.py`.
+14. DONE 2026-09-09 — Added the module-wide marker to `tests/parity/test_setup_parity.py`.
 15. Add the support-notice comment block to `bin/ai-worklog.cmd`.
 16. Add the support-notice comment block to `bin/ai-worklog.ps1`.
 17. Add the support-notice comment block to `bin/ai-worklog-groovy.cmd`.

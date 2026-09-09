@@ -163,7 +163,8 @@ class JenkinsOperatorReport {
         Map redacted = (Map) redaction.redact(item)
         ['has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
          'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
-         'stuck', 'blocked', 'truncated', 'authenticated'].each { key ->
+         'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
+         'replaced'].each { key ->
             if (item.containsKey(key)) {
                 redacted[key] = item[key]
             }

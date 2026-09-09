@@ -1,6 +1,7 @@
 package ai.worklog.framework
 
 import ai.worklog.framework.adapters.JenkinsAdapter
+import ai.worklog.framework.adapters.BinaryDownloadClient
 import ai.worklog.framework.adapters.PropertiesSupport
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.adapters.ReadOnlyProcess
@@ -539,6 +540,270 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(201, report.items[0].artifact_count)
     }
 
+    void testDownloadArtifactNumericBuildWritesExpectedDestination() {
+        List<String> downloads = []
+        BinaryDownloadClient binary = binaryClient([1, 2, 3] as byte[], downloads)
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'report.bin', relativePath: 'out/report.bin']],
+            7,
+            binary
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.bin',
+            true,
+            false
+        )
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/7/out/report.bin')
+        assertEquals(Status.READY, report.status)
+        assertEquals([1, 2, 3], target.bytes.toList())
+        assertEquals('tmp/services/jenkins/primary/Demo/7/out/report.bin', report.items[0].local_path)
+        assertEquals(1, downloads.size())
+    }
+
+    void testDownloadArtifactAliasAndNestedPathsUseResolvedBuild() {
+        List<String> downloads = []
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'result.zip', relativePath: 'dist/packages/result.zip']],
+            42,
+            binaryClient([4] as byte[], downloads)
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'folder/sub/job',
+            'last-successful',
+            'dist/packages/result.zip',
+            true,
+            false
+        )
+        assertEquals(42, report.items[0].resolved_build_number)
+        assertEquals(
+            'tmp/services/jenkins/primary/folder/sub/job/42/dist/packages/result.zip',
+            report.items[0].local_path
+        )
+        assertTrue(downloads[0].contains('/job/folder/job/sub/job/job/42/artifact/dist/packages/result.zip'))
+    }
+
+    void testDownloadArtifactMatchIsExactAndCaseSensitive() {
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'Report.txt', relativePath: 'out/Report.txt']],
+            7,
+            binaryClient([1] as byte[], [])
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            false,
+            false
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertEquals('Artifact not found: out/report.txt', report.message)
+    }
+
+    void testDownloadArtifactCanSelectBeyondReportLimit() {
+        List artifacts = (1..201).collect { int index ->
+            [fileName: "file-${index}.txt", relativePath: "out/file-${index}.txt"]
+        }
+        List<String> downloads = []
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            artifacts,
+            7,
+            binaryClient([1] as byte[], downloads)
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/file-201.txt',
+            true,
+            false
+        )
+        assertEquals(Status.READY, report.status)
+        assertEquals(1, downloads.size())
+    }
+
+    void testDownloadArtifactDryRunDoesNotCreateOrFetchContent() {
+        List<String> downloads = []
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            binaryClient([1] as byte[], downloads)
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            false,
+            false
+        )
+        assertEquals(Status.READY, report.status)
+        assertTrue(report.items[0].dry_run)
+        assertFalse(report.items[0].applied)
+        assertEquals([], downloads)
+        assertFalse(new File(workspace, 'tmp').exists())
+    }
+
+    void testDownloadArtifactRefusesExistingFileWithoutContentGet() {
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/7/out/report.txt')
+        target.parentFile.mkdirs()
+        target.text = 'existing'
+        List<String> downloads = []
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            binaryClient([1] as byte[], downloads)
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            true,
+            false
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertTrue(report.message.contains('already exists'))
+        assertEquals([], downloads)
+        assertEquals('existing', target.text)
+    }
+
+    void testDownloadArtifactForceReplacesExistingFile() {
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/7/out/report.txt')
+        target.parentFile.mkdirs()
+        target.bytes = [9] as byte[]
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            binaryClient([1, 2] as byte[], [])
+        )
+        Map report = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            true,
+            true
+        )
+        assertEquals([1, 2], target.bytes.toList())
+        assertTrue(report.items[0].replaced)
+    }
+
+    void testDownloadArtifactRejectsUnsafePaths() {
+        ['/absolute', '../outside', 'out\\file', 'out//file', 'out/../file', "out/\u0000file"].each {
+            String unsafe ->
+            JenkinsAdapter adapter = adapterWithArtifactResponse(
+                [[fileName: 'file', relativePath: unsafe]],
+                7,
+                binaryClient([1] as byte[], [])
+            )
+            shouldFail(IllegalArgumentException) {
+                adapter.operatorDownloadArtifact('primary', 'Demo', '7', unsafe, false, false)
+            }
+        }
+    }
+
+    void testDownloadArtifactRejectsSymbolicLinkParent() {
+        File outside = File.createTempDir('ai-worklog-download-outside-', '-test')
+        try {
+            File services = new File(workspace, 'tmp/services')
+            services.mkdirs()
+            java.nio.file.Files.createSymbolicLink(
+                new File(services, 'jenkins').toPath(),
+                outside.toPath()
+            )
+            JenkinsAdapter adapter = adapterWithArtifactResponse(
+                [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+                7,
+                binaryClient([1] as byte[], [])
+            )
+            assertTrue(shouldFail(IllegalArgumentException) {
+                adapter.operatorDownloadArtifact(
+                    'primary',
+                    'Demo',
+                    '7',
+                    'out/report.txt',
+                    false,
+                    false
+                )
+            }.contains('symbolic link'))
+        } finally {
+            outside.deleteDir()
+        }
+    }
+
+    void testDownloadArtifactReportJsonPreservesFieldsAndBooleans() {
+        JenkinsAdapter adapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            binaryClient([1] as byte[], [])
+        )
+        Map payload = adapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            false,
+            true
+        )
+        String json = JenkinsOperatorReport.fromPayload(payload).renderJson(new Redaction(repository))
+        Map parsed = (Map) new JsonSlurper().parseText(json)
+        assertEquals('download-artifact', parsed.operation)
+        assertEquals(false, parsed.items[0].applied)
+        assertEquals(true, parsed.items[0].dry_run)
+        assertEquals(true, parsed.items[0].force)
+        assertEquals('tmp/services/jenkins/primary/Demo/7/out/report.txt', parsed.items[0].local_path)
+    }
+
+    void testDownloadArtifactMapsAuthenticationAndSizeFailures() {
+        BinaryDownloadClient blocked = new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
+            [code: 401, error: 'HTTP 401', content_length: -1]
+        })
+        JenkinsAdapter blockedAdapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            blocked
+        )
+        Map blockedReport = blockedAdapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            true,
+            false
+        )
+        assertEquals(Status.BLOCKED, blockedReport.status)
+        assertEquals(3, exitCode(blockedReport))
+
+        BinaryDownloadClient oversized = new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
+            [
+                code: 200,
+                stream: new ByteArrayInputStream([1] as byte[]),
+                content_length: 1073741825L
+            ]
+        })
+        JenkinsAdapter oversizedAdapter = adapterWithArtifactResponse(
+            [[fileName: 'report.txt', relativePath: 'out/report.txt']],
+            7,
+            oversized
+        )
+        Map oversizedReport = oversizedAdapter.operatorDownloadArtifact(
+            'primary',
+            'Demo',
+            '7',
+            'out/report.txt',
+            true,
+            false
+        )
+        assertEquals(Status.ERROR, oversizedReport.status)
+        assertEquals(2, exitCode(oversizedReport))
+        assertFalse(new File(workspace, 'tmp/services/jenkins/primary/Demo/7/out/report.txt').exists())
+    }
+
     void testOperatorViewsListAndDetail() {
         writeProperties(defaultProperties())
         JenkinsAdapter adapter = adapterWithMocks([:])
@@ -655,14 +920,51 @@ class JenkinsOperatorTest extends GroovyTestCase {
     }
 
     void testCliMissingControllerJson() {
-        int code = JenkinsCommands.run('nodes', ['--json'], repository, new FrameworkPaths(workspace), ConfigLoader.load(workspace))
-        assertEquals(1, code)
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'nodes',
+                ['--json'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace)
+            )
+        }
+        assertEquals(1, captured.code)
+        assertEquals('error', new JsonSlurper().parseText(captured.out).status)
+        assertTrue(captured.err.contains('Missing controller'))
+        assertTrue(captured.err.contains('Usage: ai-worklog jenkins nodes <controller>'))
     }
 
     void testCliArtifactsInvalidSelector() {
         writeProperties(defaultProperties())
-        int code = JenkinsCommands.run('artifacts', ['primary', 'Demo', 'bad-selector', '--json'], repository, new FrameworkPaths(workspace), ConfigLoader.load(workspace))
-        assertEquals(1, code)
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'artifacts',
+                ['primary', 'Demo', 'bad-selector', '--json'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace)
+            )
+        }
+        assertEquals(1, captured.code)
+        assertTrue(captured.err.contains('last-successful | last-completed | BUILD_NUMBER'))
+        assertTrue(captured.out.contains('"operation": "artifacts"'))
+    }
+
+    void testCliUsageErrorWritesOnlyToStandardError() {
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'artifacts',
+                [],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace)
+            )
+        }
+        assertEquals(1, captured.code)
+        assertEquals('', captured.out)
+        assertTrue(captured.err.contains('Missing controller'))
+        assertTrue(captured.err.contains('<controller> <job> <build_selector>'))
     }
 
     void testValidateBuildSelector() {
@@ -688,14 +990,52 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(1, exitCode(payload))
     }
 
-    private JenkinsAdapter adapterWithMocks(Map config) {
+    private JenkinsAdapter adapterWithArtifactResponse(
+        List artifacts,
+        int buildNumber,
+        BinaryDownloadClient binaryDownload
+    ) {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:], binaryDownload)
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [
+                code: 200,
+                body: groovy.json.JsonOutput.toJson([
+                    number: buildNumber,
+                    url: "https://jenkins.example/job/Demo/${buildNumber}/",
+                    result: 'SUCCESS',
+                    artifacts: artifacts
+                ]),
+                error: ''
+            ]
+        }
+        adapter
+    }
+
+    private static BinaryDownloadClient binaryClient(byte[] content, List<String> downloads) {
+        new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
+            downloads << url
+            [
+                code: 200,
+                stream: new ByteArrayInputStream(content),
+                content_length: content.length,
+                error: ''
+            ]
+        })
+    }
+
+    private JenkinsAdapter adapterWithMocks(
+        Map config,
+        BinaryDownloadClient binaryDownload = null
+    ) {
         new JenkinsAdapter(
             new FrameworkPaths(workspace),
             new ReadOnlyHttp(),
             [:],
             repository,
             config ?: ConfigLoader.load(workspace),
-            new ReadOnlyProcess(new Redaction(repository))
+            new ReadOnlyProcess(new Redaction(repository)),
+            binaryDownload
         )
     }
 
@@ -709,6 +1049,22 @@ class JenkinsOperatorTest extends GroovyTestCase {
 
     private int exitCode(Map payload) {
         JenkinsOperatorReport.exitCodeFor(JenkinsOperatorReport.fromPayload(payload), new ExitCodes(repository))
+    }
+
+    private static Map captureStreams(Closure<Integer> operation) {
+        PrintStream originalOut = System.out
+        PrintStream originalErr = System.err
+        ByteArrayOutputStream out = new ByteArrayOutputStream()
+        ByteArrayOutputStream err = new ByteArrayOutputStream()
+        try {
+            System.setOut(new PrintStream(out))
+            System.setErr(new PrintStream(err))
+            int code = operation.call()
+            return [code: code, out: out.toString('UTF-8'), err: err.toString('UTF-8')]
+        } finally {
+            System.setOut(originalOut)
+            System.setErr(originalErr)
+        }
     }
 
     private static class JsonOutputWrapper {

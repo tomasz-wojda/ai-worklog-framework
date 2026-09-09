@@ -15,6 +15,11 @@
     "auth"
   ],
   "seed_failure_results": ["FAILURE", "UNSTABLE", "ABORTED"],
+  "downloads": {
+    "timeout_seconds": 300,
+    "max_bytes": 1073741824,
+    "buffer_bytes": 65536
+  },
   "limits": {
     "queue_default": 50,
     "queue_max": 50,

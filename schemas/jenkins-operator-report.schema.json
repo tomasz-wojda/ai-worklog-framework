@@ -18,6 +18,7 @@
         "queue",
         "jobs",
         "artifacts",
+        "download-artifact",
         "views",
         "whoami",
         "credential-domains"

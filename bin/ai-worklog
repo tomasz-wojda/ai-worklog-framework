@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME=""
 ARGS=()
 SAW_COMMAND=0
-KNOWN_COMMANDS=" workspace config catalog ticket state preflight reconcile jenkins day delivery closeout diag toolchain "
+KNOWN_COMMANDS=" workspace config catalog ticket state preflight reconcile jenkins day delivery closeout diag toolchain help "
 
 while (($#)); do
   if [[ $SAW_COMMAND -eq 0 ]]; then

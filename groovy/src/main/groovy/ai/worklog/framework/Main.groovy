@@ -1,6 +1,8 @@
 package ai.worklog.framework
 
 import ai.worklog.framework.catalog.CatalogLoader
+import ai.worklog.framework.cli.CommandContract
+import ai.worklog.framework.cli.UsageRenderer
 import ai.worklog.framework.commands.CatalogCommands
 import ai.worklog.framework.commands.CloseoutCommands
 import ai.worklog.framework.commands.DailyCommands
@@ -18,9 +20,10 @@ import ai.worklog.framework.core.ConfigLoader
 import ai.worklog.framework.core.ExitCodes
 import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.StateManager
+import groovy.json.JsonOutput
 
 class Main {
-    static final String VERSION = '0.7.0'
+    static final String VERSION = '0.9.0'
 
     static void main(String[] input) {
         int code
@@ -43,17 +46,27 @@ class Main {
         Map options = extractGlobalOptions(args)
         File frameworkRoot = FrameworkPaths.resolveFrameworkRoot()
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
+        CommandContract contract = CommandContract.load(frameworkRoot)
+        UsageRenderer usage = new UsageRenderer(contract)
 
         if (args.remove('--version')) {
             println "ai-worklog ${VERSION} (groovy ${GroovySystem.version} / java ${System.getProperty('java.version')})"
             return exitCodes.success
         }
-        if (!args || args[0] in ['-h', '--help']) {
-            help()
-            return args ? exitCodes.success : exitCodes.userError
+        if (args.any { it in ['-h', '--help'] }) {
+            args.removeAll { it in ['-h', '--help'] }
+            renderRequestedHelp(args, usage)
+            return exitCodes.success
+        }
+        if (!args) {
+            System.err.print usage.renderRoot()
+            return exitCodes.userError
         }
 
         String command = args.remove(0)
+        if (command == 'help') {
+            return renderHelpCommand(args, usage, exitCodes)
+        }
         String action = args ? args.remove(0) : null
         if (command == 'config') {
             return GlobalConfigCommands.run(action, args, frameworkRoot)
@@ -98,7 +111,7 @@ class Main {
             case 'jenkins':
                 return JenkinsCommands.run(action, args, frameworkRoot, paths, config)
             default:
-                help()
+                System.err.print usage.renderRoot()
                 return exitCodes.userError
         }
     }
@@ -116,7 +129,7 @@ class Main {
         List<String> commands = [
             'workspace', 'config', 'catalog', 'ticket', 'state',
             'preflight', 'reconcile', 'jenkins', 'day', 'delivery',
-            'closeout', 'diag', 'toolchain'
+            'closeout', 'diag', 'toolchain', 'help'
         ]
         int index = args.findIndexOf { it in commands }
         index >= 0 ? index : args.size()
@@ -173,24 +186,64 @@ class Main {
     }
 
     static void help() {
-        println 'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]'
-        println '                  {config,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...'
-        println()
-        println 'DevOps daily workflow automation framework'
-        println()
-        println 'commands:'
-        println '  config       Machine-wide runtime and AI vault settings'
-        println '  workspace    Workspace lifecycle, IDE profiles, and registry'
-        println '  catalog      Service catalog operations'
-        println '  ticket       Ticket preparation'
-        println '  state        Structured ticket state'
-        println '  preflight    Environment preflight checks'
-        println '  reconcile    Cross-system read-only reconciliation'
-        println '  jenkins      Read-only Jenkins operator'
-        println '  day          Daily routines'
-        println '  delivery     Delivery state tracking'
-        println '  closeout     Close-out and handover'
-        println '  diag         Diagnostic packs'
-        println '  toolchain    Python/Java/Groovy detection and routing'
+        File frameworkRoot = FrameworkPaths.resolveFrameworkRoot()
+        print new UsageRenderer(CommandContract.load(frameworkRoot)).renderRoot()
+    }
+
+    private static int renderHelpCommand(
+        List<String> args,
+        UsageRenderer usage,
+        ExitCodes exitCodes
+    ) {
+        boolean json = args.remove('--json')
+        String command = args ? args.remove(0) : null
+        String action = args ? args.remove(0) : null
+        if (args) {
+            System.err.println("Unexpected argument for help: ${args[0]}")
+            return exitCodes.userError
+        }
+        if (json) {
+            Map description = usage.describe(command, action)
+            if (!description) {
+                System.err.println("Unknown help path: ${[command, action].findAll().join(' ')}")
+                return exitCodes.userError
+            }
+            println JsonOutput.prettyPrint(JsonOutput.toJson(description))
+            return exitCodes.success
+        }
+        if (action) {
+            if (!usage.describe(command, action)) {
+                System.err.println("Unknown help path: ${command} ${action}")
+                return exitCodes.userError
+            }
+            print usage.renderAction(command, action)
+            return exitCodes.success
+        }
+        if (command) {
+            if (!usage.describe(command)) {
+                System.err.println("Unknown command: ${command}")
+                return exitCodes.userError
+            }
+            print usage.renderCommand(command)
+            return exitCodes.success
+        }
+        print usage.renderRoot()
+        exitCodes.success
+    }
+
+    private static void renderRequestedHelp(List<String> args, UsageRenderer usage) {
+        boolean json = args.remove('--json')
+        String command = args ? args[0] : null
+        String action = args.size() > 1 ? args[1] : null
+        if (json) {
+            Map description = usage.describe(command, action)
+            println JsonOutput.prettyPrint(JsonOutput.toJson(description ?: usage.describe()))
+        } else if (action && usage.describe(command, action)) {
+            print usage.renderAction(command, action)
+        } else if (command && usage.describe(command)) {
+            print usage.renderCommand(command)
+        } else {
+            print usage.renderRoot()
+        }
     }
 }

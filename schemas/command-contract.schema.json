@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Worklog Command Contract",
+  "definitions": {
+    "value": {
+      "type": "object",
+      "required": ["help_values"],
+      "properties": {
+        "choices": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "pattern": {"type": "string"},
+        "integer_min": {"type": "integer"},
+        "integer_max": {"type": "integer"},
+        "help_values": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "positional": {
+      "type": "object",
+      "required": ["name", "description", "required"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"},
+        "variadic": {"type": "boolean"},
+        "value": {"$ref": "#/definitions/value"}
+      },
+      "additionalProperties": false
+    },
+    "option": {
+      "type": "object",
+      "required": ["name", "description", "takes_value"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^--[a-z0-9][a-z0-9-]*$"},
+        "short": {"type": "string", "pattern": "^-[A-Za-z0-9]$"},
+        "description": {"type": "string", "minLength": 1},
+        "takes_value": {"type": "boolean"},
+        "repeatable": {"type": "boolean"},
+        "default_from": {"type": "string", "minLength": 1},
+        "value": {"$ref": "#/definitions/value"}
+      },
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "required": ["name", "description", "positionals", "options"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "positionals": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/positional"}
+        },
+        "options": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/option"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "actions": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/action"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "contract": {
+      "type": "object",
+      "required": ["version", "program", "description", "global_options", "commands"],
+      "properties": {
+        "version": {"type": "integer", "const": 1},
+        "program": {"type": "string", "const": "ai-worklog"},
+        "description": {"type": "string", "minLength": 1},
+        "global_options": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/option"}
+        },
+        "commands": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/command"},
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "description": {
+      "type": "object",
+      "required": ["version"],
+      "properties": {
+        "version": {"type": "integer", "const": 1},
+        "command": {"$ref": "#/definitions/command"},
+        "action": {"$ref": "#/definitions/action"}
+      },
+      "oneOf": [
+        {"required": ["command"], "not": {"required": ["action"]}},
+        {"required": ["action"], "not": {"required": ["command"]}}
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/definitions/contract"},
+    {"$ref": "#/definitions/description"}
+  ]
+}

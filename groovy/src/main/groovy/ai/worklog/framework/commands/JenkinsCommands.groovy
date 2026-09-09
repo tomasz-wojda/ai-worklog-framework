@@ -3,6 +3,11 @@ package ai.worklog.framework.commands
 import ai.worklog.framework.adapters.JenkinsAdapter
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.adapters.ReadOnlyProcess
+import ai.worklog.framework.cli.ArgumentParser
+import ai.worklog.framework.cli.CommandContract
+import ai.worklog.framework.cli.ParsedArguments
+import ai.worklog.framework.cli.UsageError
+import ai.worklog.framework.cli.UsageRenderer
 import ai.worklog.framework.core.ExitCodes
 import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.Redaction
@@ -18,13 +23,18 @@ class JenkinsCommands {
         Map config
     ) {
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
+        CommandContract contract = CommandContract.load(frameworkRoot)
+        UsageRenderer usage = new UsageRenderer(contract)
         if (!action) {
-            println 'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check|nodes|queue|jobs|artifacts|views|whoami|credential-domains} ...'
+            System.err.print usage.renderCommand('jenkins')
             return exitCodes.userError
         }
-        List<String> remaining = new ArrayList<>(args)
-        boolean json = remaining.remove('--json')
-        List<String> original = new ArrayList<>(remaining)
+        Map actionDefinition = contract.action('jenkins', action)
+        if (!actionDefinition) {
+            System.err.print usage.renderCommand('jenkins')
+            return exitCodes.userError
+        }
+        List<String> original = new ArrayList<>(args)
         Redaction redaction = new Redaction(frameworkRoot)
         JenkinsAdapter adapter = new JenkinsAdapter(
             paths,
@@ -34,27 +44,44 @@ class JenkinsCommands {
             config,
             new ReadOnlyProcess(redaction)
         )
+        Map defaults = new LinkedHashMap(adapter.operatorRules)
+        Map settings = adapter.settings()
+        defaults.max_builds = settings.max_builds
+        defaults.credential_domain = settings.credential_domain
+        ParsedArguments parsed
+        boolean json = original.contains('--json')
         Map payload
         try {
-            payload = dispatch(action, remaining, adapter)
-            rejectUnknownArgs(remaining, action)
+            parsed = new ArgumentParser(contract).parse('jenkins', actionDefinition, original, defaults)
+            json = parsed.flag('--json')
+            payload = dispatch(action, parsed, adapter, settings)
+        } catch (UsageError exception) {
+            JenkinsOperatorReport report = errorReport(
+                action,
+                errorController(action, null, original),
+                exception.message
+            )
+            System.err.println(exception.message)
+            System.err.println()
+            System.err.print usage.renderAction('jenkins', action)
+            if (json) {
+                print report.renderJson(redaction)
+            }
+            return exitCodes.userError
         } catch (IllegalArgumentException exception) {
-            JenkinsOperatorReport report = JenkinsOperatorReport.fromPayload([
-                operation: action,
-                fetched_at: JenkinsAdapter.utcNow(),
-                status: Status.ERROR,
-                controller: errorController(action, original),
-                message: exception.message,
-                items: []
-            ])
+            JenkinsOperatorReport report = errorReport(
+                action,
+                errorController(action, parsed, original),
+                exception.message
+            )
             if (json) {
                 print report.renderJson(redaction)
             } else {
-                println exception.message
+                System.err.println exception.message
             }
             return exitCodes.userError
         } catch (Exception exception) {
-            println "Jenkins operation failed: ${exception.message ?: exception.class.simpleName}"
+            System.err.println "Jenkins operation failed: ${exception.message ?: exception.class.simpleName}"
             return exitCodes.systemError
         }
         JenkinsOperatorReport report = JenkinsOperatorReport.fromPayload(payload)
@@ -62,199 +89,146 @@ class JenkinsCommands {
         JenkinsOperatorReport.exitCodeFor(report, exitCodes)
     }
 
-    private static Map dispatch(String action, List<String> remaining, JenkinsAdapter adapter) {
-        Map settings = adapter.settings()
+    private static Map dispatch(
+        String action,
+        ParsedArguments parsed,
+        JenkinsAdapter adapter,
+        Map settings
+    ) {
         switch (action) {
             case 'controllers':
                 return adapter.operatorControllers()
             case 'health':
-                return adapter.operatorHealth(requireArg(remaining, 'controller', action), settings.timeout_seconds as int)
+                return adapter.operatorHealth(
+                    parsed.positional('controller'),
+                    settings.timeout_seconds as int
+                )
             case 'job':
                 return adapter.operatorJob(
-                    requireArg(remaining, 'controller', action),
-                    requireArg(remaining, 'job', action),
-                    parseBuilds(remaining, settings.max_builds as int),
-                    remaining.remove('--parameters'),
+                    parsed.positional('controller'),
+                    parsed.positional('job'),
+                    parsed.value('--builds').toString() as int,
+                    parsed.flag('--parameters'),
                     settings.timeout_seconds as int
                 )
             case 'plugins':
-                List<String> required = parseRequirePlugins(remaining)
+                List<String> required = parsed.values('--require')
                 required.addAll((List) (settings.required_plugins ?: []))
                 return adapter.operatorPlugins(
-                    requireArg(remaining, 'controller', action),
+                    parsed.positional('controller'),
                     required.unique().sort(),
                     settings.timeout_seconds as int
                 )
             case 'credentials':
-                String domain = settings.credential_domain
-                int domainIndex = remaining.indexOf('--domain')
-                if (domainIndex >= 0) {
-                    if (domainIndex + 1 >= remaining.size() || remaining[domainIndex + 1].startsWith('--')) {
-                        throw new IllegalArgumentException('Missing value for --domain')
-                    }
-                    domain = remaining[domainIndex + 1]
-                    remaining.remove(domainIndex + 1)
-                    remaining.remove(domainIndex)
-                }
                 return adapter.operatorCredentials(
-                    requireArg(remaining, 'controller', action),
-                    domain,
+                    parsed.positional('controller'),
+                    parsed.value('--domain').toString(),
                     settings.timeout_seconds as int
                 )
             case 'seed':
                 return adapter.operatorSeed(
-                    requireArg(remaining, 'controller', action),
-                    requireArg(remaining, 'job', action),
+                    parsed.positional('controller'),
+                    parsed.positional('job'),
                     settings.timeout_seconds as int,
                     settings.max_builds as int
                 )
             case 'syntax-check':
-                return adapter.operatorSyntaxCheck(parseFiles(remaining, action), settings.process_timeout_seconds as int)
+                return adapter.operatorSyntaxCheck(
+                    parsed.variadic('files'),
+                    settings.process_timeout_seconds as int
+                )
             case 'nodes':
                 return adapter.operatorNodes(
-                    requireArg(remaining, 'controller', action),
+                    parsed.positional('controller'),
                     settings.timeout_seconds as int
                 )
             case 'queue':
                 return adapter.operatorQueue(
-                    requireArg(remaining, 'controller', action),
-                    parseLimit(remaining, '--limit', adapter.operatorLimits().queue_default as int),
+                    parsed.positional('controller'),
+                    parsed.value('--limit').toString() as int,
                     settings.timeout_seconds as int
                 )
             case 'jobs':
                 return adapter.operatorJobs(
-                    requireArg(remaining, 'controller', action),
-                    parseOptionalValue(remaining, '--folder'),
-                    parseOptionalValue(remaining, '--query'),
-                    parseLimit(remaining, '--limit', adapter.operatorLimits().jobs_default as int),
+                    parsed.positional('controller'),
+                    parsed.value('--folder')?.toString(),
+                    parsed.value('--query')?.toString(),
+                    parsed.value('--limit').toString() as int,
                     settings.timeout_seconds as int
                 )
             case 'artifacts':
                 return adapter.operatorArtifacts(
-                    requireArg(remaining, 'controller', action),
-                    requireArg(remaining, 'job', action),
-                    requireArg(remaining, 'build selector', action),
+                    parsed.positional('controller'),
+                    parsed.positional('job'),
+                    parsed.positional('build_selector'),
                     settings.timeout_seconds as int
+                )
+            case 'download-artifact':
+                return adapter.operatorDownloadArtifact(
+                    parsed.positional('controller'),
+                    parsed.positional('job'),
+                    parsed.positional('build_selector'),
+                    parsed.positional('artifact'),
+                    parsed.flag('--apply'),
+                    parsed.flag('--force')
                 )
             case 'views':
                 return adapter.operatorViews(
-                    requireArg(remaining, 'controller', action),
-                    parseOptionalValue(remaining, '--view'),
+                    parsed.positional('controller'),
+                    parsed.value('--view')?.toString(),
                     settings.timeout_seconds as int
                 )
             case 'whoami':
                 return adapter.operatorWhoami(
-                    requireArg(remaining, 'controller', action),
+                    parsed.positional('controller'),
                     settings.timeout_seconds as int
                 )
             case 'credential-domains':
                 return adapter.operatorCredentialDomains(
-                    requireArg(remaining, 'controller', action),
+                    parsed.positional('controller'),
                     settings.timeout_seconds as int
                 )
             default:
-                throw new IllegalArgumentException(
-                    'Usage: ai-worklog jenkins {controllers|health|job|plugins|credentials|seed|syntax-check|nodes|queue|jobs|artifacts|views|whoami|credential-domains}'
-                )
+                throw new UsageError("Unknown action for jenkins: ${action}", 'jenkins', action)
         }
     }
 
-    private static String requireArg(List<String> args, String label, String action) {
-        String value = args.find { !it.startsWith('--') }
-        if (!value) {
-            throw new IllegalArgumentException("Missing ${label}")
-        }
-        args.remove(value)
-        value
-    }
-
-    private static String errorController(String action, List<String> args) {
+    private static String errorController(
+        String action,
+        ParsedArguments parsed,
+        List<String> args
+    ) {
         if (action in ['controllers', 'syntax-check']) {
             return null
         }
-        args.find { !it.startsWith('--') }
-    }
-
-    private static List<String> parseFiles(List<String> args, String action) {
-        List<String> files = args.findAll { !it.startsWith('--') }
-        if (!files) {
-            throw new IllegalArgumentException('Missing file')
+        if (parsed?.positional('controller')) {
+            return parsed.positional('controller')
         }
-        args.removeAll(files)
-        files
-    }
-
-    private static int parseLimit(List<String> args, String flag, int defaultValue) {
-        int index = args.indexOf(flag)
-        if (index < 0) {
-            return defaultValue
-        }
-        if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
-            throw new IllegalArgumentException("Missing value for ${flag}")
-        }
-        int value = args[index + 1] as int
-        if (value < 1) {
-            throw new IllegalArgumentException("Invalid ${flag}: ${value}")
-        }
-        args.remove(index + 1)
-        args.remove(index)
-        value
-    }
-
-    private static String parseOptionalValue(List<String> args, String flag) {
-        int index = args.indexOf(flag)
-        if (index < 0) {
-            return null
-        }
-        if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
-            throw new IllegalArgumentException("Missing value for ${flag}")
-        }
-        String value = args[index + 1]
-        args.remove(index + 1)
-        args.remove(index)
-        value
-    }
-
-    private static int parseBuilds(List<String> args, int defaultBuilds) {
-        int index = args.indexOf('--builds')
-        if (index < 0) {
-            return defaultBuilds
-        }
-        if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
-            throw new IllegalArgumentException('Missing value for --builds')
-        }
-        int value = args[index + 1] as int
-        args.remove(index + 1)
-        args.remove(index)
-        value
-    }
-
-    private static List<String> parseRequirePlugins(List<String> args) {
-        List<String> required = []
+        List<String> optionsWithValues = ['--builds', '--require', '--domain', '--limit', '--folder', '--query', '--view']
         int index = 0
         while (index < args.size()) {
-            if (args[index] == '--require') {
-                if (index + 1 >= args.size() || args[index + 1].startsWith('--')) {
-                    throw new IllegalArgumentException('Missing value for --require')
-                }
-                required << args[index + 1]
-                args.remove(index + 1)
-                args.remove(index)
+            String token = args[index]
+            if (optionsWithValues.contains(token)) {
+                index += 2
                 continue
+            }
+            if (!token.startsWith('--')) {
+                return token
             }
             index++
         }
-        required
+        null
     }
 
-    private static void rejectUnknownArgs(List<String> args, String action) {
-        List<String> unknown = args.findAll { it.startsWith('--') }
-        if (unknown) {
-            throw new IllegalArgumentException("Unknown option for jenkins ${action}: ${unknown[0]}")
-        }
-        List<String> positional = args.findAll { !it.startsWith('--') }
-        if (positional) {
-            throw new IllegalArgumentException("Unexpected argument for jenkins ${action}: ${positional[0]}")
-        }
+    private static JenkinsOperatorReport errorReport(String action, String controller, String message) {
+        JenkinsOperatorReport.fromPayload([
+            operation: action,
+            fetched_at: JenkinsAdapter.utcNow(),
+            status: Status.ERROR,
+            controller: controller,
+            message: message,
+            items: []
+        ])
     }
+
 }

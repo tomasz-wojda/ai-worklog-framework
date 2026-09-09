@@ -12,6 +12,10 @@ import platform
 
 import pytest
 
+from tests.parity.conftest import defer_parity_suite
+
+pytestmark = defer_parity_suite()
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "bin" / ("ai-worklog.cmd" if platform.system() == "Windows" else "ai-worklog")

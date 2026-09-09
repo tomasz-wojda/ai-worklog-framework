@@ -11,6 +11,10 @@ import groovy.json.JsonSlurper
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.nio.file.Files
+import java.nio.file.InvalidPathException
+import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.util.regex.Pattern
 
 class JenkinsAdapter {
@@ -23,6 +27,7 @@ class JenkinsAdapter {
     final File frameworkRoot
     final Map config
     final ReadOnlyProcess process
+    final BinaryDownloadClient binaryDownload
     final Map operatorRules
     Pattern sensitiveParameterPattern
 
@@ -32,7 +37,8 @@ class JenkinsAdapter {
         Map rules,
         File frameworkRoot = null,
         Map config = [:],
-        ReadOnlyProcess process = null
+        ReadOnlyProcess process = null,
+        BinaryDownloadClient binaryDownload = null
     ) {
         this.paths = paths
         this.http = http
@@ -40,6 +46,7 @@ class JenkinsAdapter {
         this.frameworkRoot = frameworkRoot
         this.config = config ?: [:]
         this.process = process ?: new ReadOnlyProcess()
+        this.binaryDownload = binaryDownload ?: new BinaryDownloadClient()
         this.operatorRules = frameworkRoot ? loadOperatorRules(frameworkRoot) : [:]
         this.sensitiveParameterPattern = buildSensitivePattern()
     }
@@ -53,6 +60,9 @@ class JenkinsAdapter {
             max_builds: (jenkins.max_builds ?: operatorRules.max_builds ?: 5) as int,
             required_plugins: (jenkins.required_plugins ?: operatorRules.required_plugins ?: []) as List,
             credential_domain: jenkins.credential_domain?.toString() ?: operatorRules.credential_domain?.toString() ?: '_',
+            download_timeout_seconds: (operatorRules.downloads?.timeout_seconds ?: 300) as int,
+            download_max_bytes: (operatorRules.downloads?.max_bytes ?: 1073741824L) as long,
+            download_buffer_bytes: (operatorRules.downloads?.buffer_bytes ?: 65536) as int,
             ai_vault_root: jenkins.ai_vault_root?.toString(),
             syntax_check_script: jenkins.syntax_check_script?.toString()
         ]
@@ -485,63 +495,13 @@ class JenkinsAdapter {
     }
 
     Map operatorArtifacts(String controller, String jobName, String buildSelector, int timeout) {
-        String fetchedAt = utcNow()
-        validateControllerId(controller)
-        validateJobName(jobName)
-        validateJobName(jobName)
-        List selectorParts = resolveBuildSelector(buildSelector)
-        String requestedSelector = selectorParts[0]
-        String apiSegment = selectorParts[1]
-        Map controllers = loadControllers()
-        if (!controllers[controller]) {
-            return errorReport('artifacts', controller, fetchedAt, "Controller '${controller}' not found")
+        Map lookup = fetchArtifactBuild('artifacts', controller, jobName, buildSelector, timeout)
+        if (lookup.report) {
+            return (Map) lookup.report
         }
-        Map info = (Map) controllers[controller]
-        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
-            return blockedReport('artifacts', controller, fetchedAt, 'Controller credentials unavailable')
-        }
-        String tree = operatorRules.api_trees?.artifacts?.toString() ?:
-            'number,url,result,artifacts[fileName,relativePath]'
-        List response = jenkinsGet(
-            controller,
-            "/${encodeJobPath(jobName)}/${apiSegment}/api/json?tree=${tree}",
-            timeout
-        )
-        int statusCode = response[0] as int
-        Object payload = response[1]
-        if (accessBlocked(statusCode)) {
-            return blockedReport('artifacts', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
-        }
-        if (statusCode == 404) {
-            String notFoundMessage
-            if (apiSegment in ['lastSuccessfulBuild', 'lastCompletedBuild']) {
-                String label = apiSegment == 'lastSuccessfulBuild' ? 'last successful build' : 'last completed build'
-                notFoundMessage = "${label} not found for job '${jobName}'"
-            } else {
-                notFoundMessage = "Build '${buildSelector}' not found for job '${jobName}'"
-            }
-            return errorReport('artifacts', controller, fetchedAt, notFoundMessage)
-        }
-        if (statusCode == 0 || payload == null) {
-            return errorReport('artifacts', controller, fetchedAt, 'Jenkins query failed')
-        }
-        if (!(payload instanceof Map)) {
-            return errorReport('artifacts', controller, fetchedAt, 'Malformed Jenkins response')
-        }
-        if (statusCode >= 400) {
-            return degradedReport('artifacts', controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
-        }
-        Map body = (Map) payload
+        Map body = (Map) lookup.body
         int artifactsMax = operatorLimits().artifacts_max as int
-        List<Map> rawArtifacts = []
-        ((List) (body.artifacts ?: [])).each { entry ->
-            if (entry instanceof Map) {
-                rawArtifacts << [
-                    file_name: entry.fileName,
-                    relative_path: entry.relativePath
-                ]
-            }
-        }
+        List<Map> rawArtifacts = (List<Map>) lookup.artifacts
         rawArtifacts.sort { a, b ->
             (a.relative_path ?: '').toString().toLowerCase() <=> (b.relative_path ?: '').toString().toLowerCase()
         }
@@ -558,12 +518,12 @@ class JenkinsAdapter {
             operation: 'artifacts',
             controller: controller,
             job: jobName,
-            build_selector: requestedSelector,
-            fetched_at: fetchedAt,
+            build_selector: lookup.requested_selector,
+            fetched_at: lookup.fetched_at,
             status: status,
             message: message,
             items: [[
-                build_selector: requestedSelector,
+                build_selector: lookup.requested_selector,
                 resolved_build_number: body.number,
                 url: body.url,
                 result: body.result,
@@ -571,6 +531,154 @@ class JenkinsAdapter {
                 truncated: truncated,
                 artifacts: artifacts
             ]]
+        ]
+    }
+
+    Map operatorDownloadArtifact(
+        String controller,
+        String jobName,
+        String buildSelector,
+        String artifactPath,
+        boolean apply,
+        boolean force
+    ) {
+        Map settings = settings()
+        Map lookup = fetchArtifactBuild(
+            'download-artifact',
+            controller,
+            jobName,
+            buildSelector,
+            settings.timeout_seconds as int
+        )
+        if (lookup.report) {
+            return (Map) lookup.report
+        }
+        Map artifact = ((List<Map>) lookup.artifacts).find {
+            it.relative_path?.toString() == artifactPath
+        }
+        if (!artifact) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                "Artifact not found: ${artifactPath}"
+            )
+        }
+        if (!(lookup.body.number instanceof Number) || (lookup.body.number as int) < 1) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                'Malformed Jenkins response'
+            )
+        }
+        int resolvedBuild = lookup.body.number as int
+        Map destination = resolveArtifactDestination(
+            controller,
+            jobName,
+            resolvedBuild,
+            artifactPath
+        )
+        File target = (File) destination.file
+        boolean exists = Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS)
+        if (exists && (Files.isSymbolicLink(target.toPath()) ||
+            !Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS))) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                "Invalid destination: ${destination.local_path}"
+            )
+        }
+        if (exists && !force) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                "Invalid destination: already exists: ${destination.local_path}"
+            )
+        }
+
+        Map item = [
+            artifact: artifact.file_name,
+            relative_path: artifactPath,
+            resolved_build_number: resolvedBuild,
+            local_path: destination.local_path,
+            bytes: 0L,
+            applied: false,
+            dry_run: !apply,
+            force: force,
+            replaced: false,
+            max_bytes: settings.download_max_bytes
+        ]
+        if (!apply) {
+            return [
+                operation: 'download-artifact',
+                controller: controller,
+                job: jobName,
+                build_selector: lookup.requested_selector,
+                fetched_at: lookup.fetched_at,
+                status: Status.READY,
+                message: 'Artifact download planned',
+                items: [item]
+            ]
+        }
+
+        Files.createDirectories(target.parentFile.toPath())
+        rejectSymbolicLinks((Path) destination.root, target.toPath())
+        Map info = (Map) lookup.controller
+        String url = artifactDownloadUrl(info.url.toString(), jobName, resolvedBuild, artifactPath)
+        Map headers = authHeaders(info.user.toString(), info.token.toString())
+        headers.Accept = 'application/octet-stream'
+        Map result = binaryDownload.download(
+            url,
+            headers,
+            target,
+            settings.download_timeout_seconds as int,
+            settings.download_max_bytes as long,
+            settings.download_buffer_bytes as int,
+            force
+        )
+        if ((result.code as int) in [401, 403]) {
+            return blockedReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                "Jenkins returned HTTP ${result.code}"
+            )
+        }
+        if ((result.code as int) == 404) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                "Artifact not found: ${artifactPath}"
+            )
+        }
+        if ((result.code as int) != 200 || result.error) {
+            return errorReport(
+                'download-artifact',
+                controller,
+                lookup.fetched_at.toString(),
+                result.error?.toString() ?: 'Artifact download failed'
+            )
+        }
+        item.bytes = result.bytes as long
+        if ((result.content_length as long) >= 0L) {
+            item.content_length = result.content_length as long
+        }
+        item.applied = true
+        item.dry_run = false
+        item.replaced = result.replaced as boolean
+        [
+            operation: 'download-artifact',
+            controller: controller,
+            job: jobName,
+            build_selector: lookup.requested_selector,
+            fetched_at: lookup.fetched_at,
+            status: Status.READY,
+            message: 'Artifact downloaded',
+            items: [item]
         ]
     }
 
@@ -1089,6 +1197,11 @@ class JenkinsAdapter {
             required_plugins: [],
             sensitive_parameter_patterns: ['password', 'secret', 'token', 'credential', 'key', 'auth'],
             seed_failure_results: ['FAILURE', 'failure', 'UNSTABLE', 'unstable'],
+            downloads: [
+                timeout_seconds: 300,
+                max_bytes: 1073741824L,
+                buffer_bytes: 65536
+            ],
             limits: [
                 queue_default: 50,
                 queue_max: 50,
@@ -1120,6 +1233,182 @@ class JenkinsAdapter {
     static String utcNow() {
         DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
             .format(OffsetDateTime.now(ZoneOffset.UTC))
+    }
+
+    private Map fetchArtifactBuild(
+        String operation,
+        String controller,
+        String jobName,
+        String buildSelector,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        validateJobName(jobName)
+        List selectorParts = resolveBuildSelector(buildSelector)
+        String requestedSelector = selectorParts[0]
+        String apiSegment = selectorParts[1]
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return [report: errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Controller '${controller}' not found"
+            )]
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return [report: blockedReport(
+                operation,
+                controller,
+                fetchedAt,
+                'Controller credentials unavailable'
+            )]
+        }
+        String tree = operatorRules.api_trees?.artifacts?.toString() ?:
+            'number,url,result,artifacts[fileName,relativePath]'
+        List response = jenkinsGet(
+            controller,
+            "/${encodeJobPath(jobName)}/${apiSegment}/api/json?tree=${tree}",
+            timeout
+        )
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (accessBlocked(statusCode)) {
+            return [report: blockedReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Jenkins returned HTTP ${statusCode}"
+            )]
+        }
+        if (statusCode == 404) {
+            String message
+            if (apiSegment in ['lastSuccessfulBuild', 'lastCompletedBuild']) {
+                String label = apiSegment == 'lastSuccessfulBuild' ?
+                    'last successful build' :
+                    'last completed build'
+                message = "${label} not found for job '${jobName}'"
+            } else {
+                message = "Build '${buildSelector}' not found for job '${jobName}'"
+            }
+            return [report: errorReport(operation, controller, fetchedAt, message)]
+        }
+        if (statusCode == 0 || payload == null) {
+            return [report: errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                'Jenkins query failed'
+            )]
+        }
+        if (!(payload instanceof Map)) {
+            return [report: errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                'Malformed Jenkins response'
+            )]
+        }
+        if (statusCode >= 400) {
+            return [report: degradedReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Jenkins returned HTTP ${statusCode}"
+            )]
+        }
+        List<Map> artifacts = []
+        ((List) (((Map) payload).artifacts ?: [])).each { entry ->
+            if (entry instanceof Map) {
+                artifacts << [
+                    file_name: entry.fileName,
+                    relative_path: entry.relativePath
+                ]
+            }
+        }
+        [
+            fetched_at: fetchedAt,
+            requested_selector: requestedSelector,
+            body: payload,
+            artifacts: artifacts,
+            controller: info
+        ]
+    }
+
+    private Map resolveArtifactDestination(
+        String controller,
+        String jobName,
+        int resolvedBuild,
+        String artifactPath
+    ) {
+        validateControllerId(controller)
+        validateJobName(jobName)
+        List<String> artifactParts = validateArtifactPath(artifactPath)
+        Path workspaceRoot = paths.root.toPath().toAbsolutePath().normalize()
+        Path downloadRoot = workspaceRoot.resolve('tmp/services/jenkins').normalize()
+        Path target = downloadRoot.resolve(controller)
+        jobName.split('/').each { target = target.resolve(it) }
+        target = target.resolve(resolvedBuild.toString())
+        artifactParts.each { target = target.resolve(it) }
+        target = target.toAbsolutePath().normalize()
+        if (!target.startsWith(downloadRoot) || target == downloadRoot) {
+            throw new IllegalArgumentException("Invalid artifact path: ${artifactPath}")
+        }
+        rejectSymbolicLinks(workspaceRoot, target)
+        [
+            root: workspaceRoot,
+            file: target.toFile(),
+            local_path: workspaceRoot.relativize(target).toString().replace(File.separatorChar, '/' as char)
+        ]
+    }
+
+    private static List<String> validateArtifactPath(String artifactPath) {
+        if (!artifactPath || artifactPath.startsWith('/') ||
+            artifactPath.contains('\\') || artifactPath.contains('\u0000')) {
+            throw new IllegalArgumentException("Invalid artifact path: ${artifactPath}")
+        }
+        List<String> parts = artifactPath.split('/', -1).toList()
+        if (!parts || parts.any { !it || it in ['.', '..'] }) {
+            throw new IllegalArgumentException("Invalid artifact path: ${artifactPath}")
+        }
+        try {
+            if (new File(artifactPath).isAbsolute()) {
+                throw new IllegalArgumentException("Invalid artifact path: ${artifactPath}")
+            }
+        } catch (InvalidPathException ignored) {
+            throw new IllegalArgumentException("Invalid artifact path: ${artifactPath}")
+        }
+        parts
+    }
+
+    private static void rejectSymbolicLinks(Path base, Path target) {
+        Path normalizedBase = base.toAbsolutePath().normalize()
+        Path normalizedTarget = target.toAbsolutePath().normalize()
+        if (!normalizedTarget.startsWith(normalizedBase)) {
+            throw new IllegalArgumentException("Invalid destination: ${target}")
+        }
+        Path current = normalizedBase
+        normalizedBase.relativize(normalizedTarget).each { segment ->
+            current = current.resolve(segment)
+            if (Files.isSymbolicLink(current)) {
+                throw new IllegalArgumentException("Invalid destination: symbolic link: ${current}")
+            }
+        }
+    }
+
+    private static String artifactDownloadUrl(
+        String controllerUrl,
+        String jobName,
+        int resolvedBuild,
+        String artifactPath
+    ) {
+        String baseUrl = controllerUrl.replaceAll(/\/+$/, '')
+        String encodedArtifact = artifactPath.split('/', -1).collect {
+            URLEncoder.encode(it, 'UTF-8').replace('+', '%20')
+        }.join('/')
+        "${baseUrl}/${encodeJobPath(jobName)}/${resolvedBuild}/artifact/${encodedArtifact}"
     }
 
     private Map loadControllers() {

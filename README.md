@@ -328,6 +328,28 @@ Run a workspace Groovy tool:
 
 ## Commands
 
+### CLI Help and Introspection
+
+Help is available at the root, command, and action levels:
+
+```bash
+ai-worklog --help
+ai-worklog jenkins --help
+ai-worklog jenkins artifacts --help
+ai-worklog help jenkins artifacts
+ai-worklog help jenkins artifacts --json
+```
+
+Explicit help is written to standard output and exits successfully. Invalid
+usage and error messages are written to standard error, while human and JSON
+operation reports remain on standard output.
+
+The Jenkins command uses strict positional order and rejects unknown,
+repeated, or surplus arguments. Options may appear between positionals. Use
+`--` to stop option parsing when a positional value begins with a hyphen.
+`help ... --json` emits the versioned command contract used for parsing and is
+the machine-readable surface intended for future Groovy/Python parity checks.
+
 ### Environment Preflight
 
 ```bash
@@ -405,11 +427,28 @@ ai-worklog jenkins plugins primary --require workflow-job
 ai-worklog jenkins credentials primary --domain _
 ai-worklog jenkins seed primary seed-job
 ai-worklog jenkins syntax-check Jenkinsfile
+ai-worklog jenkins artifacts primary folder/job last-successful
+ai-worklog jenkins artifacts primary folder/job last-completed
+ai-worklog jenkins artifacts primary folder/job 42
+ai-worklog jenkins download-artifact primary folder/job last-successful dist/app.jar
+ai-worklog jenkins download-artifact primary folder/job 42 dist/app.jar --apply
+ai-worklog jenkins download-artifact primary folder/job 42 dist/app.jar --apply --force
 ```
 
-Jenkins operations are read-only. Credential output is limited to identifiers
-and descriptive metadata, build parameters omit values, and syntax validation
-delegates to the configured `ai-vault` validator.
+Jenkins operations do not mutate the controller. Credential output is limited
+to identifiers and descriptive metadata, build parameters omit values, and
+syntax validation delegates to the configured `ai-vault` validator. An artifact
+build selector is `last-successful`, `last-completed`, or a positive build
+number.
+
+`artifacts` lists metadata. `download-artifact` selects one exact,
+case-sensitive artifact relative path and plans a local download. Add `--apply`
+to write it. Existing files are refused unless `--force` is also supplied.
+Nested job and artifact paths are preserved under
+`tmp/services/jenkins/<controller>/<job>/<resolved-build-number>/`. Downloads
+stream through a temporary file, default to a five-minute timeout, and are
+limited to 1 GiB. Run `ai-worklog jenkins download-artifact --help` for complete
+usage.
 
 ### Daily Routines
 
