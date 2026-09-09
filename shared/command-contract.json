@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "program": "ai-worklog",
   "description": "DevOps daily workflow automation framework",
   "global_options": [
@@ -38,39 +38,25 @@
   "commands": [
     {
       "name": "config",
-      "description": "Machine-wide runtime and AI vault settings"
+      "description": "Machine-wide runtime and AI vault settings",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "workspace",
-      "description": "Workspace lifecycle, IDE profiles, and registry"
+      "description": "Workspace lifecycle, IDE profiles, and registry",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "catalog",
-      "description": "Service catalog operations"
-    },
-    {
-      "name": "ticket",
-      "description": "Ticket preparation"
-    },
-    {
-      "name": "state",
-      "description": "Structured ticket state"
-    },
-    {
-      "name": "preflight",
-      "description": "Environment preflight checks"
-    },
-    {
-      "name": "reconcile",
-      "description": "Cross-system read-only reconciliation"
-    },
-    {
-      "name": "jenkins",
-      "description": "Read-only Jenkins operator",
-      "actions": [
+      "description": "Logical systems and delivery relationships",
+      "kind": "command",
+      "subcommands": [
         {
-          "name": "controllers",
-          "description": "List configured Jenkins controllers without exposing credentials",
+          "name": "list",
+          "description": "List catalog systems",
+          "kind": "action",
           "positionals": [],
           "options": [
             {
@@ -81,173 +67,81 @@
           ]
         },
         {
-          "name": "health",
-          "description": "Show controller health and operating mode",
+          "name": "validate",
+          "description": "Validate all catalog systems",
+          "kind": "action",
+          "positionals": [],
+          "options": []
+        },
+        {
+          "name": "show",
+          "description": "Show one catalog system",
+          "kind": "action",
           "positionals": [
             {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
+              "name": "system",
+              "description": "Catalog system identifier",
               "required": true,
               "value": {
-                "help_values": "CONTROLLER"
+                "help_values": "SYSTEM"
               }
             }
           ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
+          "options": []
         },
         {
-          "name": "job",
-          "description": "Show job status and recent builds",
+          "name": "search",
+          "description": "Search catalog systems",
+          "kind": "action",
           "positionals": [
             {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            },
-            {
-              "name": "job",
-              "description": "Job path including any folder prefix",
-              "required": true,
-              "value": {
-                "help_values": "JOB"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            },
-            {
-              "name": "--builds",
-              "description": "Number of recent builds to include",
-              "takes_value": true,
-              "default_from": "max_builds",
-              "value": {
-                "integer_min": 1,
-                "help_values": "COUNT"
-              }
-            },
-            {
-              "name": "--parameters",
-              "description": "Include job parameter names",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "plugins",
-          "description": "List plugins and verify required plugin names",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            },
-            {
-              "name": "--require",
-              "description": "Require the named plugin to be active",
-              "takes_value": true,
-              "repeatable": true,
-              "value": {
-                "help_values": "PLUGIN"
-              }
-            }
-          ]
-        },
-        {
-          "name": "credentials",
-          "description": "List credential metadata in a domain",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            },
-            {
-              "name": "--domain",
-              "description": "Credential domain name",
-              "takes_value": true,
-              "default_from": "credential_domain",
-              "value": {
-                "help_values": "DOMAIN"
-              }
-            }
-          ]
-        },
-        {
-          "name": "seed",
-          "description": "Inspect a seed job and its recent result",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            },
-            {
-              "name": "job",
-              "description": "Job path including any folder prefix",
-              "required": true,
-              "value": {
-                "help_values": "JOB"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "syntax-check",
-          "description": "Validate one or more scripted Jenkinsfiles",
-          "positionals": [
-            {
-              "name": "files",
-              "description": "Jenkinsfile path; provide one or more",
+              "name": "query",
+              "description": "Case-insensitive search text",
               "required": true,
               "variadic": true,
               "value": {
-                "help_values": "FILE"
+                "help_values": "QUERY"
               }
             }
           ],
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "ticket",
+      "description": "Ticket preparation",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
+      "name": "state",
+      "description": "Structured ticket state",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
+      "name": "preflight",
+      "description": "Environment preflight checks",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
+      "name": "reconcile",
+      "description": "Cross-system read-only reconciliation",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
+      "name": "service",
+      "description": "External service operators",
+      "kind": "command",
+      "subcommands": [
+        {
+          "name": "list",
+          "description": "List implemented service operators",
+          "kind": "action",
+          "positionals": [],
           "options": [
             {
               "name": "--json",
@@ -257,268 +151,478 @@
           ]
         },
         {
-          "name": "nodes",
-          "description": "List controller nodes and executor state",
-          "positionals": [
+          "name": "jenkins",
+          "description": "Jenkins operator",
+          "kind": "service",
+          "subcommands": [
             {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "queue",
-          "description": "List queued items",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
+              "name": "controllers",
+              "description": "List configured Jenkins controllers without exposing credentials",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             },
             {
-              "name": "--limit",
-              "description": "Maximum number of queue items",
-              "takes_value": true,
-              "default_from": "limits.queue_default",
-              "value": {
-                "integer_min": 1,
-                "help_values": "COUNT"
-              }
-            }
-          ]
-        },
-        {
-          "name": "jobs",
-          "description": "List and filter jobs",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            },
-            {
-              "name": "--folder",
-              "description": "Limit results to a folder path",
-              "takes_value": true,
-              "value": {
-                "help_values": "FOLDER"
-              }
-            },
-            {
-              "name": "--query",
-              "description": "Filter job names by a case-insensitive query",
-              "takes_value": true,
-              "value": {
-                "help_values": "TEXT"
-              }
-            },
-            {
-              "name": "--limit",
-              "description": "Maximum number of jobs",
-              "takes_value": true,
-              "default_from": "limits.jobs_default",
-              "value": {
-                "integer_min": 1,
-                "help_values": "COUNT"
-              }
-            }
-          ]
-        },
-        {
-          "name": "artifacts",
-          "description": "List artifacts from a selected build",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
+              "name": "health",
+              "description": "Show controller health and operating mode",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             },
             {
               "name": "job",
-              "description": "Job path including any folder prefix",
-              "required": true,
-              "value": {
-                "help_values": "JOB"
-              }
+              "description": "Show job status and recent builds",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "job",
+                  "description": "Job path including any folder prefix",
+                  "required": true,
+                  "value": {
+                    "help_values": "JOB"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--builds",
+                  "description": "Number of recent builds to include",
+                  "takes_value": true,
+                  "default_from": "max_builds",
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--parameters",
+                  "description": "Include job parameter names",
+                  "takes_value": false
+                }
+              ]
             },
             {
-              "name": "build_selector",
-              "description": "Build to inspect: last successful, last completed, or a positive build number",
-              "required": true,
-              "value": {
-                "choices": ["last-successful", "last-completed"],
-                "pattern": "^[1-9][0-9]*$",
-                "help_values": "last-successful | last-completed | BUILD_NUMBER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "download-artifact",
-          "description": "Download one artifact by exact relative path; dry-run unless --apply is supplied",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
+              "name": "plugins",
+              "description": "List plugins and verify required plugin names",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--require",
+                  "description": "Require the named plugin to be active",
+                  "takes_value": true,
+                  "repeatable": true,
+                  "value": {
+                    "help_values": "PLUGIN"
+                  }
+                }
+              ]
             },
             {
-              "name": "job",
-              "description": "Job path including any folder prefix",
-              "required": true,
-              "value": {
-                "help_values": "JOB"
-              }
+              "name": "credentials",
+              "description": "List credential metadata in a domain",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--domain",
+                  "description": "Credential domain name",
+                  "takes_value": true,
+                  "default_from": "credential_domain",
+                  "value": {
+                    "help_values": "DOMAIN"
+                  }
+                }
+              ]
             },
             {
-              "name": "build_selector",
-              "description": "Build to inspect: last successful, last completed, or a positive build number",
-              "required": true,
-              "value": {
-                "choices": ["last-successful", "last-completed"],
-                "pattern": "^[1-9][0-9]*$",
-                "help_values": "last-successful | last-completed | BUILD_NUMBER"
-              }
+              "name": "seed",
+              "description": "Inspect a seed job and its recent result",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "job",
+                  "description": "Job path including any folder prefix",
+                  "required": true,
+                  "value": {
+                    "help_values": "JOB"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             },
             {
-              "name": "artifact",
-              "description": "Exact, case-sensitive artifact relative path from Jenkins metadata",
-              "required": true,
-              "value": {
-                "help_values": "ARTIFACT"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
+              "name": "syntax-check",
+              "description": "Validate one or more scripted Jenkinsfiles",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "files",
+                  "description": "Jenkinsfile path; provide one or more",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             },
             {
-              "name": "--apply",
-              "description": "Write the artifact to the workspace",
-              "takes_value": false
+              "name": "nodes",
+              "description": "List controller nodes and executor state",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             },
             {
-              "name": "--force",
-              "description": "Replace an existing regular destination file",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "views",
-          "description": "List views or inspect one view",
-          "positionals": [
-            {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
+              "name": "queue",
+              "description": "List queued items",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of queue items",
+                  "takes_value": true,
+                  "default_from": "limits.queue_default",
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
             },
             {
-              "name": "--view",
-              "description": "View name to inspect",
-              "takes_value": true,
-              "value": {
-                "help_values": "VIEW"
-              }
-            }
-          ]
-        },
-        {
-          "name": "whoami",
-          "description": "Show the authenticated Jenkins identity",
-          "positionals": [
+              "name": "jobs",
+              "description": "List and filter jobs",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--folder",
+                  "description": "Limit results to a folder path",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "FOLDER"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter job names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of jobs",
+                  "takes_value": true,
+                  "default_from": "limits.jobs_default",
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
             {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
+              "name": "artifacts",
+              "description": "List artifacts from a selected build",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "job",
+                  "description": "Job path including any folder prefix",
+                  "required": true,
+                  "value": {
+                    "help_values": "JOB"
+                  }
+                },
+                {
+                  "name": "build_selector",
+                  "description": "Build to inspect: last successful, last completed, or a positive build number",
+                  "required": true,
+                  "value": {
+                    "choices": ["last-successful", "last-completed"],
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "last-successful | last-completed | BUILD_NUMBER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
             {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
-        },
-        {
-          "name": "credential-domains",
-          "description": "List Jenkins credential domains",
-          "positionals": [
+              "name": "download-artifact",
+              "description": "Download one artifact by exact relative path; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "job",
+                  "description": "Job path including any folder prefix",
+                  "required": true,
+                  "value": {
+                    "help_values": "JOB"
+                  }
+                },
+                {
+                  "name": "build_selector",
+                  "description": "Build to inspect: last successful, last completed, or a positive build number",
+                  "required": true,
+                  "value": {
+                    "choices": ["last-successful", "last-completed"],
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "last-successful | last-completed | BUILD_NUMBER"
+                  }
+                },
+                {
+                  "name": "artifact",
+                  "description": "Exact, case-sensitive artifact relative path from Jenkins metadata",
+                  "required": true,
+                  "value": {
+                    "help_values": "ARTIFACT"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Write the artifact to the workspace",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "description": "Replace an existing regular destination file",
+                  "takes_value": false
+                }
+              ]
+            },
             {
-              "name": "controller",
-              "description": "Controller id from jenkins.properties",
-              "required": true,
-              "value": {
-                "help_values": "CONTROLLER"
-              }
-            }
-          ],
-          "options": [
+              "name": "views",
+              "description": "List views or inspect one view",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--view",
+                  "description": "View name to inspect",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "VIEW"
+                  }
+                }
+              ]
+            },
             {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
+              "name": "whoami",
+              "description": "Show the authenticated Jenkins identity",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "credential-domains",
+              "description": "List Jenkins credential domains",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
             }
           ]
         }
@@ -526,27 +630,39 @@
     },
     {
       "name": "day",
-      "description": "Daily routines"
+      "description": "Daily routines",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "delivery",
-      "description": "Delivery state tracking"
+      "description": "Delivery state tracking",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "closeout",
-      "description": "Close-out and handover"
+      "description": "Close-out and handover",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "diag",
-      "description": "Diagnostic packs"
+      "description": "Diagnostic packs",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "toolchain",
-      "description": "Python/Java/Groovy detection and routing"
+      "description": "Python/Java/Groovy detection and routing",
+      "kind": "command",
+      "subcommands": []
     },
     {
       "name": "help",
-      "description": "Command usage and machine-readable descriptions"
+      "description": "Command usage and machine-readable descriptions",
+      "kind": "command",
+      "subcommands": []
     }
   ]
 }

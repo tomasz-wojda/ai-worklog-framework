@@ -29,26 +29,26 @@ class CommandContractTest extends GroovyTestCase {
     void testMainCommandsAndContractCommandsAgree() {
         Set expected = [
             'workspace', 'config', 'catalog', 'ticket', 'state', 'preflight', 'reconcile',
-            'jenkins', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'help'
+            'service', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'help'
         ] as Set
         assertEquals(expected, contract.commands()*.name as Set)
     }
 
     void testRootRenderingMatchesPreviousMainHelp() {
         String expected = '''usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]
-                  {config,workspace,catalog,ticket,state,preflight,reconcile,jenkins,day,delivery,closeout,diag,toolchain} ...
+                  {config,workspace,catalog,ticket,state,preflight,reconcile,service,day,delivery,closeout,diag,toolchain} ...
 
 DevOps daily workflow automation framework
 
 commands:
   config       Machine-wide runtime and AI vault settings
   workspace    Workspace lifecycle, IDE profiles, and registry
-  catalog      Service catalog operations
+  catalog      Logical systems and delivery relationships
   ticket       Ticket preparation
   state        Structured ticket state
   preflight    Environment preflight checks
   reconcile    Cross-system read-only reconciliation
-  jenkins      Read-only Jenkins operator
+  service      External service operators
   day          Daily routines
   delivery     Delivery state tracking
   closeout     Close-out and handover
@@ -58,26 +58,35 @@ commands:
         assertEquals(expected, new UsageRenderer(contract).renderRoot())
     }
 
-    void testCommandRenderingListsFifteenJenkinsActions() {
-        String rendered = new UsageRenderer(contract).renderCommand('jenkins')
-        assertEquals(15, contract.actions('jenkins').size())
-        contract.actions('jenkins')*.name.each { assertTrue(rendered.contains(it.toString())) }
+    void testServiceRenderingListsJenkinsOperator() {
+        String rendered = new UsageRenderer(contract).renderPath(['service'])
+        assertTrue(rendered.contains('list'))
+        assertTrue(rendered.contains('jenkins'))
+    }
+
+    void testJenkinsRenderingListsFifteenActions() {
+        List<Map> actions = contract.children(['service', 'jenkins'])
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins'])
+        assertEquals(15, actions.size())
+        actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
     void testArtifactsRenderingDocumentsPositionalsAndSelectors() {
-        String rendered = new UsageRenderer(contract).renderAction('jenkins', 'artifacts')
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'artifacts'])
         assertTrue(rendered.contains('<controller> <job> <build_selector>'))
         assertTrue(rendered.contains('last-successful | last-completed | BUILD_NUMBER'))
     }
 
     void testDownloadArtifactContractAndHelp() {
-        Map action = contract.action('jenkins', 'download-artifact')
+        Map action = jenkinsAction('download-artifact')
         assertEquals(
             ['controller', 'job', 'build_selector', 'artifact'],
             action.positionals*.name
         )
         assertEquals(['--json', '--apply', '--force'], action.options*.name)
-        String rendered = new UsageRenderer(contract).renderAction('jenkins', 'download-artifact')
+        String rendered = new UsageRenderer(contract).renderPath(
+            ['service', 'jenkins', 'download-artifact']
+        )
         assertTrue(rendered.contains('<controller> <job> <build_selector> <artifact>'))
         assertTrue(rendered.contains('dry-run unless --apply'))
         Map schema = (Map) JsonFiles.read(
@@ -87,7 +96,9 @@ commands:
         assertEquals(
             [],
             validate(
-                new UsageRenderer(contract).describe('jenkins', 'download-artifact'),
+                new UsageRenderer(contract).describePath(
+                    ['service', 'jenkins', 'download-artifact']
+                ),
                 schema,
                 schema,
                 '$'
@@ -96,7 +107,7 @@ commands:
     }
 
     void testPositionalOrderIsAuthoritative() {
-        Map action = contract.action('jenkins', 'artifacts')
+        Map action = jenkinsAction('artifacts')
         String message = shouldFail(UsageError) {
             parser().parse('jenkins', action, ['last-successful', 'job', 'primary'], rules)
         }
@@ -126,7 +137,7 @@ commands:
     void testDoubleDashTerminatesOptionParsing() {
         ParsedArguments parsed = parser().parse(
             'jenkins',
-            contract.action('jenkins', 'syntax-check'),
+            jenkinsAction('syntax-check'),
             ['--', '--named-file'],
             rules
         )
@@ -136,7 +147,7 @@ commands:
     void testVariadicPositionalConsumesRemainingTokens() {
         ParsedArguments parsed = parser().parse(
             'jenkins',
-            contract.action('jenkins', 'syntax-check'),
+            jenkinsAction('syntax-check'),
             ['one', 'two', 'three'],
             rules
         )
@@ -147,22 +158,22 @@ commands:
         Map configured = JsonFiles.deepMerge(rules, [max_builds: 8, credential_domain: 'custom'])
         assertEquals(
             '8',
-            parser().parse('jenkins', contract.action('jenkins', 'job'), ['c', 'j'], configured)
+            parser().parse('jenkins', jenkinsAction('job'), ['c', 'j'], configured)
                 .value('--builds').toString()
         )
         assertEquals(
             'custom',
-            parser().parse('jenkins', contract.action('jenkins', 'credentials'), ['c'], configured)
+            parser().parse('jenkins', jenkinsAction('credentials'), ['c'], configured)
                 .value('--domain')
         )
         assertEquals(
             rules.limits.queue_default.toString(),
-            parser().parse('jenkins', contract.action('jenkins', 'queue'), ['c'], rules)
+            parser().parse('jenkins', jenkinsAction('queue'), ['c'], rules)
                 .value('--limit').toString()
         )
         assertEquals(
             rules.limits.jobs_default.toString(),
-            parser().parse('jenkins', contract.action('jenkins', 'jobs'), ['c'], rules)
+            parser().parse('jenkins', jenkinsAction('jobs'), ['c'], rules)
                 .value('--limit').toString()
         )
     }
@@ -191,7 +202,7 @@ commands:
     }
 
     void testBuildSelectorContractAgreesWithAdapter() {
-        Map action = contract.action('jenkins', 'artifacts')
+        Map action = jenkinsAction('artifacts')
         ['last-successful', 'last-completed', '42'].each { String selector ->
             assertNotNull parser().parse('jenkins', action, ['c', 'j', selector], rules)
             assertNotNull resolveBuildSelector(selector)
@@ -209,17 +220,25 @@ commands:
     void testDescribeOutputValidatesAgainstSchema() {
         Map schema = (Map) JsonFiles.read(new File(repository, 'schemas/command-contract.schema.json'), [:])
         UsageRenderer renderer = new UsageRenderer(contract)
-        assertEquals([], validate(renderer.describe('jenkins'), schema, schema, '$'))
-        assertEquals([], validate(renderer.describe('jenkins', 'artifacts'), schema, schema, '$'))
+        assertEquals([], validate(renderer.describePath(['service']), schema, schema, '$'))
+        assertEquals([], validate(renderer.describePath(['service', 'jenkins']), schema, schema, '$'))
+        assertEquals(
+            [],
+            validate(renderer.describePath(['service', 'jenkins', 'artifacts']), schema, schema, '$')
+        )
     }
 
     private ArgumentParser parser() {
         new ArgumentParser(contract)
     }
 
+    private Map jenkinsAction(String name) {
+        contract.node(['service', 'jenkins', name])
+    }
+
     private String failure(String action, List<String> args) {
         shouldFail(UsageError) {
-            parser().parse('jenkins', contract.action('jenkins', action), args, rules)
+            parser().parse('jenkins', jenkinsAction(action), args, rules)
         }
     }
 
@@ -240,9 +259,18 @@ commands:
             }
             return outcomes.count { !it } == 1 ? [] : ["${path}: expected exactly one schema match"]
         }
+        if (schema['anyOf'] instanceof List) {
+            List<List<String>> outcomes = ((List<Map>) schema['anyOf']).collect {
+                validate(value, it, root, path)
+            }
+            return outcomes.any { !it } ? [] : ["${path}: expected at least one schema match"]
+        }
         List<String> errors = []
         if (schema['const'] != null && value != schema['const']) {
             errors << "${path}: expected ${schema['const']}"
+        }
+        if (schema['enum'] instanceof List && !((List) schema['enum']).contains(value)) {
+            errors << "${path}: unexpected value ${value}"
         }
         if (schema['type'] == 'object' || schema['required'] || schema['properties'] || schema['not']) {
             if (!(value instanceof Map)) {

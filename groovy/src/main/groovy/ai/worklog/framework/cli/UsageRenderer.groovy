@@ -10,7 +10,7 @@ class UsageRenderer {
     }
 
     String renderRoot() {
-        List<Map> commands = contract.commands().findAll { it.name != 'help' }
+        List<Map> commands = contract.visibleChildren([])
         String names = commands.collect { it.name }.join(',')
         List<String> lines = [
             'usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]',
@@ -27,37 +27,44 @@ class UsageRenderer {
     }
 
     String renderCommand(String commandName) {
-        Map command = contract.command(commandName)
-        if (!command) {
+        renderPath([commandName])
+    }
+
+    String renderAction(String commandName, String actionName) {
+        renderPath([commandName, actionName])
+    }
+
+    String renderPath(List<String> path) {
+        Map node = contract.node(path)
+        if (!node) {
             return renderRoot()
         }
-        List<Map> actions = contract.actions(commandName)
-        if (!actions) {
-            return "Usage: ai-worklog ${commandName} ..." + System.lineSeparator()
+        if (contract.isExecutable(path)) {
+            return renderLeaf(path, node)
         }
-        String names = actions.collect { it.name }.join('|')
+        List<Map> children = contract.visibleChildren(path)
+        if (!children) {
+            return "Usage: ai-worklog ${path.join(' ')} ..." + System.lineSeparator()
+        }
+        String names = children.collect { it.name }.join('|')
         List<String> lines = [
-            "Usage: ai-worklog ${commandName} {${names}} ...",
+            "Usage: ai-worklog ${path.join(' ')} {${names}} ...",
             '',
-            command.description.toString(),
+            node.description.toString(),
             '',
-            'actions:'
+            path == ['service'] ? 'services:' : 'actions:'
         ]
-        int width = actions.collect { it.name.toString().size() }.max() as int
-        actions.each { Map action ->
-            lines << "  ${action.name.toString().padRight(width)}  ${action.description}"
+        int width = children.collect { it.name.toString().size() }.max() as int
+        children.each { Map child ->
+            lines << "  ${child.name.toString().padRight(width)}  ${child.description}"
         }
         lines.join(System.lineSeparator()) + System.lineSeparator()
     }
 
-    String renderAction(String commandName, String actionName) {
-        Map action = contract.action(commandName, actionName)
-        if (!action) {
-            return renderCommand(commandName)
-        }
-        List<Map> positionals = (List<Map>) (action.positionals ?: [])
-        List<Map> options = (List<Map>) (action.options ?: [])
-        List<String> usageParts = ['Usage:', contract.data.program.toString(), commandName, actionName]
+    private String renderLeaf(List<String> path, Map node) {
+        List<Map> positionals = (List<Map>) (node.positionals ?: [])
+        List<Map> options = (List<Map>) (node.options ?: [])
+        List<String> usageParts = ['Usage:', contract.data.program.toString()] + path
         positionals.each { Map positional ->
             String name = positional.name.toString()
             String token = positional.variadic ? "${name}..." : name
@@ -67,7 +74,7 @@ class UsageRenderer {
             usageParts << '[options]'
         }
 
-        List<String> lines = [usageParts.join(' '), '', action.description.toString()]
+        List<String> lines = [usageParts.join(' '), '', node.description.toString()]
         if (positionals) {
             lines.addAll(['', 'positional arguments:'])
             int width = positionals.collect { it.name.toString().size() }.max() as int
@@ -92,15 +99,18 @@ class UsageRenderer {
     }
 
     Map describe(String commandName = null, String actionName = null) {
-        if (actionName) {
-            Map action = contract.action(commandName, actionName)
-            return action ? [version: contract.data.version, action: action] : null
+        if (!commandName) {
+            return contract.data
         }
-        if (commandName) {
-            Map command = contract.command(commandName)
-            return command ? [version: contract.data.version, command: command] : null
-        }
-        contract.data
+        List<String> path = actionName ?
+            [commandName, actionName] :
+            [commandName]
+        describePath(path)
+    }
+
+    Map describePath(List<String> path) {
+        Map node = contract.node(path)
+        node ? [version: contract.data.version, node: node] : null
     }
 
     private static String optionLabel(Map option) {

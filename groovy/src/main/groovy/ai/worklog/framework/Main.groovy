@@ -9,9 +9,9 @@ import ai.worklog.framework.commands.DailyCommands
 import ai.worklog.framework.commands.DeliveryCommands
 import ai.worklog.framework.commands.DiagnosticsCommands
 import ai.worklog.framework.commands.GlobalConfigCommands
-import ai.worklog.framework.commands.JenkinsCommands
 import ai.worklog.framework.commands.PreflightCommands
 import ai.worklog.framework.commands.ReconciliationCommands
+import ai.worklog.framework.commands.ServiceCommands
 import ai.worklog.framework.commands.StateCommands
 import ai.worklog.framework.commands.TicketCommands
 import ai.worklog.framework.commands.ToolchainCommands
@@ -23,7 +23,7 @@ import ai.worklog.framework.core.StateManager
 import groovy.json.JsonOutput
 
 class Main {
-    static final String VERSION = '0.9.0'
+    static final String VERSION = '0.10.0'
 
     static void main(String[] input) {
         int code
@@ -108,8 +108,8 @@ class Main {
                 return ReconciliationCommands.run(
                     action, args, frameworkRoot, paths, config, catalog, states
                 )
-            case 'jenkins':
-                return JenkinsCommands.run(action, args, frameworkRoot, paths, config)
+            case 'service':
+                return ServiceCommands.run(action, args, frameworkRoot, paths, config)
             default:
                 System.err.print usage.renderRoot()
                 return exitCodes.userError
@@ -128,7 +128,7 @@ class Main {
     private static int commandIndex(List<String> args) {
         List<String> commands = [
             'workspace', 'config', 'catalog', 'ticket', 'state',
-            'preflight', 'reconcile', 'jenkins', 'day', 'delivery',
+            'preflight', 'reconcile', 'service', 'day', 'delivery',
             'closeout', 'diag', 'toolchain', 'help'
         ]
         int index = args.findIndexOf { it in commands }
@@ -196,54 +196,50 @@ class Main {
         ExitCodes exitCodes
     ) {
         boolean json = args.remove('--json')
-        String command = args ? args.remove(0) : null
-        String action = args ? args.remove(0) : null
-        if (args) {
-            System.err.println("Unexpected argument for help: ${args[0]}")
-            return exitCodes.userError
-        }
+        List<String> path = new ArrayList<>(args)
         if (json) {
-            Map description = usage.describe(command, action)
+            Map description = path ? usage.describePath(path) : usage.describe()
             if (!description) {
-                System.err.println("Unknown help path: ${[command, action].findAll().join(' ')}")
+                System.err.println("Unknown help path: ${path.join(' ')}")
                 return exitCodes.userError
             }
             println JsonOutput.prettyPrint(JsonOutput.toJson(description))
             return exitCodes.success
         }
-        if (action) {
-            if (!usage.describe(command, action)) {
-                System.err.println("Unknown help path: ${command} ${action}")
+        if (path) {
+            if (!usage.describePath(path)) {
+                System.err.println("Unknown help path: ${path.join(' ')}")
                 return exitCodes.userError
             }
-            print usage.renderAction(command, action)
-            return exitCodes.success
+            print usage.renderPath(path)
+        } else {
+            print usage.renderRoot()
         }
-        if (command) {
-            if (!usage.describe(command)) {
-                System.err.println("Unknown command: ${command}")
-                return exitCodes.userError
-            }
-            print usage.renderCommand(command)
-            return exitCodes.success
-        }
-        print usage.renderRoot()
         exitCodes.success
     }
 
     private static void renderRequestedHelp(List<String> args, UsageRenderer usage) {
         boolean json = args.remove('--json')
-        String command = args ? args[0] : null
-        String action = args.size() > 1 ? args[1] : null
+        List<String> path = deepestHelpPath(args, usage)
         if (json) {
-            Map description = usage.describe(command, action)
+            Map description = path ? usage.describePath(path) : usage.describe()
             println JsonOutput.prettyPrint(JsonOutput.toJson(description ?: usage.describe()))
-        } else if (action && usage.describe(command, action)) {
-            print usage.renderAction(command, action)
-        } else if (command && usage.describe(command)) {
-            print usage.renderCommand(command)
+        } else if (path) {
+            print usage.renderPath(path)
         } else {
             print usage.renderRoot()
         }
+    }
+
+    private static List<String> deepestHelpPath(List<String> args, UsageRenderer usage) {
+        List<String> path = []
+        for (String token : args) {
+            List<String> candidate = path + token
+            if (!usage.describePath(candidate)) {
+                break
+            }
+            path = candidate
+        }
+        path
     }
 }

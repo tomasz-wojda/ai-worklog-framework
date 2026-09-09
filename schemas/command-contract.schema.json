@@ -45,12 +45,20 @@
       },
       "additionalProperties": false
     },
-    "action": {
+    "node": {
       "type": "object",
-      "required": ["name", "description", "positionals", "options"],
+      "required": ["name", "description", "kind"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
+        "kind": {
+          "type": "string",
+          "enum": ["command", "service", "action"]
+        },
+        "subcommands": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/node"}
+        },
         "positionals": {
           "type": "array",
           "items": {"$ref": "#/definitions/positional"}
@@ -60,26 +68,28 @@
           "items": {"$ref": "#/definitions/option"}
         }
       },
-      "additionalProperties": false
-    },
-    "command": {
-      "type": "object",
-      "required": ["name", "description"],
-      "properties": {
-        "name": {"type": "string", "minLength": 1},
-        "description": {"type": "string", "minLength": 1},
-        "actions": {
-          "type": "array",
-          "items": {"$ref": "#/definitions/action"}
+      "oneOf": [
+        {
+          "required": ["subcommands"],
+          "not": {
+            "anyOf": [
+              {"required": ["positionals"]},
+              {"required": ["options"]}
+            ]
+          }
+        },
+        {
+          "required": ["positionals", "options"],
+          "not": {"required": ["subcommands"]}
         }
-      },
+      ],
       "additionalProperties": false
     },
     "contract": {
       "type": "object",
       "required": ["version", "program", "description", "global_options", "commands"],
       "properties": {
-        "version": {"type": "integer", "const": 1},
+        "version": {"type": "integer", "const": 2},
         "program": {"type": "string", "const": "ai-worklog"},
         "description": {"type": "string", "minLength": 1},
         "global_options": {
@@ -88,7 +98,7 @@
         },
         "commands": {
           "type": "array",
-          "items": {"$ref": "#/definitions/command"},
+          "items": {"$ref": "#/definitions/node"},
           "minItems": 1
         }
       },
@@ -96,16 +106,11 @@
     },
     "description": {
       "type": "object",
-      "required": ["version"],
       "properties": {
-        "version": {"type": "integer", "const": 1},
-        "command": {"$ref": "#/definitions/command"},
-        "action": {"$ref": "#/definitions/action"}
+        "version": {"type": "integer", "const": 2},
+        "node": {"$ref": "#/definitions/node"}
       },
-      "oneOf": [
-        {"required": ["command"], "not": {"required": ["action"]}},
-        {"required": ["action"], "not": {"required": ["command"]}}
-      ],
+      "required": ["version", "node"],
       "additionalProperties": false
     }
   },

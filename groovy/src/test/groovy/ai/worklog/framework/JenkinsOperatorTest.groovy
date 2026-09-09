@@ -932,7 +932,7 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(1, captured.code)
         assertEquals('error', new JsonSlurper().parseText(captured.out).status)
         assertTrue(captured.err.contains('Missing controller'))
-        assertTrue(captured.err.contains('Usage: ai-worklog jenkins nodes <controller>'))
+        assertTrue(captured.err.contains('Usage: ai-worklog service jenkins nodes <controller>'))
     }
 
     void testCliArtifactsInvalidSelector() {

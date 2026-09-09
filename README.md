@@ -259,14 +259,14 @@ ai-worklog workspace apply personal /Users/example/personal
 Commands run outside a workspace use the saved default:
 
 ```bash
-ai-worklog jenkins controllers
+ai-worklog service jenkins controllers
 ai-worklog preflight
 ```
 
 Select a registered workspace for one command:
 
 ```bash
-ai-worklog -w test jenkins controllers
+ai-worklog -w test service jenkins controllers
 ai-worklog --workspace-name personal preflight
 ```
 
@@ -334,10 +334,11 @@ Help is available at the root, command, and action levels:
 
 ```bash
 ai-worklog --help
-ai-worklog jenkins --help
-ai-worklog jenkins artifacts --help
-ai-worklog help jenkins artifacts
-ai-worklog help jenkins artifacts --json
+ai-worklog service --help
+ai-worklog service jenkins --help
+ai-worklog service jenkins artifacts --help
+ai-worklog help service jenkins artifacts
+ai-worklog help service jenkins artifacts --json
 ```
 
 Explicit help is written to standard output and exits successfully. Invalid
@@ -363,15 +364,18 @@ presence, Git identity, AWS identity, Kubernetes context, ServiceNow cookie age,
 and toolchain compatibility. It does not refresh credentials or modify
 configuration.
 
-### Service Catalog
+### Catalog
 
 ```bash
+ai-worklog catalog list
+ai-worklog catalog list --json
 ai-worklog catalog validate
 ai-worklog catalog show example-eks-platform
 ai-worklog catalog search example
 ```
 
-Catalog entries can model repositories, owners, Jenkins jobs, Argo CD
+The catalog contains logical systems and their delivery relationships. Catalog
+entries can model repositories, owners, Jenkins jobs, Argo CD
 applications, environments, build artifacts, secret references, monitoring
 entities, and delivery paths.
 
@@ -417,22 +421,33 @@ ai-worklog reconcile status PROJ-1234 --system jenkins --json
 Reconciliation compares structured ticket state with Jira, Git, GitHub,
 Jenkins, Argo CD, and Tempo without modifying local or external state.
 
+### Service Operators
+
+```bash
+ai-worklog service list
+ai-worklog service list --json
+```
+
+Service operators connect the CLI to external systems. They are separate from
+catalog systems, which describe logical applications, platforms, and delivery
+relationships.
+
 ### Jenkins Operator
 
 ```bash
-ai-worklog jenkins controllers
-ai-worklog jenkins health primary
-ai-worklog jenkins job primary folder/job --builds 5 --parameters
-ai-worklog jenkins plugins primary --require workflow-job
-ai-worklog jenkins credentials primary --domain _
-ai-worklog jenkins seed primary seed-job
-ai-worklog jenkins syntax-check Jenkinsfile
-ai-worklog jenkins artifacts primary folder/job last-successful
-ai-worklog jenkins artifacts primary folder/job last-completed
-ai-worklog jenkins artifacts primary folder/job 42
-ai-worklog jenkins download-artifact primary folder/job last-successful dist/app.jar
-ai-worklog jenkins download-artifact primary folder/job 42 dist/app.jar --apply
-ai-worklog jenkins download-artifact primary folder/job 42 dist/app.jar --apply --force
+ai-worklog service jenkins controllers
+ai-worklog service jenkins health primary
+ai-worklog service jenkins job primary folder/job --builds 5 --parameters
+ai-worklog service jenkins plugins primary --require workflow-job
+ai-worklog service jenkins credentials primary --domain _
+ai-worklog service jenkins seed primary seed-job
+ai-worklog service jenkins syntax-check Jenkinsfile
+ai-worklog service jenkins artifacts primary folder/job last-successful
+ai-worklog service jenkins artifacts primary folder/job last-completed
+ai-worklog service jenkins artifacts primary folder/job 42
+ai-worklog service jenkins download-artifact primary folder/job last-successful dist/app.jar
+ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply
+ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply --force
 ```
 
 Jenkins operations do not mutate the controller. Credential output is limited
@@ -447,8 +462,11 @@ to write it. Existing files are refused unless `--force` is also supplied.
 Nested job and artifact paths are preserved under
 `tmp/services/jenkins/<controller>/<job>/<resolved-build-number>/`. Downloads
 stream through a temporary file, default to a five-minute timeout, and are
-limited to 1 GiB. Run `ai-worklog jenkins download-artifact --help` for complete
+limited to 1 GiB. Run `ai-worklog service jenkins download-artifact --help` for complete
 usage.
+
+The former `ai-worklog jenkins ...` path was removed in version 0.10.0.
+Existing scripts must use `ai-worklog service jenkins ...`.
 
 ### Daily Routines
 

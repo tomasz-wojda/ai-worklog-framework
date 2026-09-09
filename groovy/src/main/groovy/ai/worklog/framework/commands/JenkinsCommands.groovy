@@ -26,12 +26,12 @@ class JenkinsCommands {
         CommandContract contract = CommandContract.load(frameworkRoot)
         UsageRenderer usage = new UsageRenderer(contract)
         if (!action) {
-            System.err.print usage.renderCommand('jenkins')
+            System.err.print usage.renderPath(['service', 'jenkins'])
             return exitCodes.userError
         }
-        Map actionDefinition = contract.action('jenkins', action)
+        Map actionDefinition = contract.node(['service', 'jenkins', action])
         if (!actionDefinition) {
-            System.err.print usage.renderCommand('jenkins')
+            System.err.print usage.renderPath(['service', 'jenkins'])
             return exitCodes.userError
         }
         List<String> original = new ArrayList<>(args)
@@ -52,7 +52,12 @@ class JenkinsCommands {
         boolean json = original.contains('--json')
         Map payload
         try {
-            parsed = new ArgumentParser(contract).parse('jenkins', actionDefinition, original, defaults)
+            parsed = new ArgumentParser(contract).parse(
+                'service jenkins',
+                actionDefinition,
+                original,
+                defaults
+            )
             json = parsed.flag('--json')
             payload = dispatch(action, parsed, adapter, settings)
         } catch (UsageError exception) {
@@ -63,7 +68,7 @@ class JenkinsCommands {
             )
             System.err.println(exception.message)
             System.err.println()
-            System.err.print usage.renderAction('jenkins', action)
+            System.err.print usage.renderPath(['service', 'jenkins', action])
             if (json) {
                 print report.renderJson(redaction)
             }
@@ -189,7 +194,11 @@ class JenkinsCommands {
                     settings.timeout_seconds as int
                 )
             default:
-                throw new UsageError("Unknown action for jenkins: ${action}", 'jenkins', action)
+                throw new UsageError(
+                    "Unknown action for service jenkins: ${action}",
+                    'service jenkins',
+                    action
+                )
         }
     }
 

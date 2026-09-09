@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME=""
 ARGS=()
 SAW_COMMAND=0
-KNOWN_COMMANDS=" workspace config catalog ticket state preflight reconcile jenkins day delivery closeout diag toolchain help "
+KNOWN_COMMANDS=" workspace config catalog ticket state preflight reconcile service day delivery closeout diag toolchain help "
 
 while (($#)); do
   if [[ $SAW_COMMAND -eq 0 ]]; then
@@ -32,6 +32,26 @@ while (($#)); do
   ARGS+=("$1")
   shift
 done
+
+COMMAND=""
+for ((index = 0; index < ${#ARGS[@]}; index++)); do
+  case "${ARGS[index]}" in
+    --workspace|--workspace-name|-w)
+      ((index += 1))
+      ;;
+    --workspace=*|--workspace-name=*|--help|-h|--json|--version)
+      ;;
+    *)
+      COMMAND="${ARGS[index]}"
+      break
+      ;;
+  esac
+done
+
+if [[ "$COMMAND" == "jenkins" ]]; then
+  echo "Command moved: use 'ai-worklog service jenkins ...'" >&2
+  exit 1
+fi
 
 if [[ -z "$RUNTIME" && -n "${AI_WORKLOG_RUNTIME:-}" ]]; then
   RUNTIME="$AI_WORKLOG_RUNTIME"
