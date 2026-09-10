@@ -113,7 +113,7 @@ class AutomoxOperatorReport {
             output.append("  Profile: ${profile}").append(System.lineSeparator())
         }
         if (org) {
-            output.append("  Org: ${org}").append(System.lineSeparator())
+            output.append("  Active org: ${org}").append(System.lineSeparator())
         }
         if (query) {
             output.append("  Query: ${query}").append(System.lineSeparator())
@@ -211,13 +211,13 @@ class AutomoxOperatorReport {
         Map redacted = (Map) redaction.redact(item)
         ['has_api_token', 'has_enrollment_key', 'connected', 'compliant', 'needs_reboot',
          'applied', 'dry_run', 'installed', 'pending', 'truncated', 'id', 'server_group_id',
-         'policy_id', 'device_id', 'success', 'failed'].each { key ->
+         'policy_id', 'device_id', 'success', 'failed', 'active'].each { key ->
             if (item.containsKey(key)) {
                 redacted[key] = item[key]
             }
         }
         if (item.source instanceof Map) {
-            List<String> allowedSources = ['env', 'properties', 'legacy', 'default']
+            List<String> allowedSources = ['argument', 'env', 'properties', 'legacy', 'default']
             redacted.source = ((Map) item.source).collectEntries { key, value ->
                 [(key): allowedSources.contains(value?.toString()) ? value.toString() : 'default']
             }

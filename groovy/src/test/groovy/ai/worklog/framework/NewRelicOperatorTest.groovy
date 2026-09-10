@@ -475,14 +475,60 @@ newrelic.url=https://api.eu.newrelic.com/v2
     }
 
     void testCliJsonReportsMissingCredentialsAsBlocked() {
+        writeProperties('cue.account_id=2370607\n')
         Map captured = captureStreams {
-            NewRelicCommands.run('auth-test', ['--json'], repository, paths, ConfigLoader.load(workspace))
+            NewRelicCommands.run(
+                'auth-test',
+                ['--profile', 'cue', '--json'],
+                repository,
+                paths,
+                ConfigLoader.load(workspace)
+            )
         }
         Map report = (Map) new JsonSlurper().parseText(captured.out)
         assertEquals(new ExitCodes(repository).blocked, captured.code)
         assertEquals('blocked', report.status)
+        assertEquals('cue', report.profile)
+        assertEquals('2370607', report.account_id)
         assertEquals('New Relic API key unavailable', report.message)
         assertEquals('', captured.err)
+    }
+
+    void testCliHumanReportsCredentialContextAsBlocked() {
+        writeProperties('cue.account_id=2370607\n')
+        Map missingKey = captureStreams {
+            NewRelicCommands.run(
+                'whoami',
+                ['--profile', 'cue'],
+                repository,
+                paths,
+                ConfigLoader.load(workspace)
+            )
+        }
+        assertEquals(new ExitCodes(repository).blocked, missingKey.code)
+        assertEquals('', missingKey.out)
+        assertTrue(missingKey.err.contains('New Relic whoami'))
+        assertTrue(missingKey.err.contains('Profile: cue'))
+        assertTrue(missingKey.err.contains('Account: 2370607'))
+        assertTrue(missingKey.err.contains('Status: blocked'))
+        assertTrue(missingKey.err.contains('Message: New Relic API key unavailable'))
+
+        String apiKey = syntheticNrakKey('MISSINGACCOUNT')
+        writeProperties("cue.api_key=${apiKey}\n")
+        Map missingAccount = captureStreams {
+            NewRelicCommands.run(
+                'whoami',
+                ['--profile', 'cue'],
+                repository,
+                paths,
+                ConfigLoader.load(workspace)
+            )
+        }
+        assertEquals(new ExitCodes(repository).blocked, missingAccount.code)
+        assertEquals('', missingAccount.out)
+        assertTrue(missingAccount.err.contains('Profile: cue'))
+        assertTrue(missingAccount.err.contains('Message: New Relic account id unavailable'))
+        assertFalse(missingAccount.err.contains(apiKey))
     }
 
     void testGraphqlMutationAllowlistRejectsUnknownMutation() {

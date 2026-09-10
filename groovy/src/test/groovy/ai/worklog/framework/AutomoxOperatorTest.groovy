@@ -6,6 +6,9 @@ import ai.worklog.framework.adapters.JsonWriteHttp
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.automox.AutomoxCsvRenderer
 import ai.worklog.framework.automox.AutomoxOperatorReport
+import ai.worklog.framework.cli.ArgumentParser
+import ai.worklog.framework.cli.CommandContract
+import ai.worklog.framework.cli.ParsedArguments
 import ai.worklog.framework.commands.AutomoxCommands
 import ai.worklog.framework.core.ConfigLoader
 import ai.worklog.framework.core.ExitCodes
@@ -64,6 +67,100 @@ class AutomoxOperatorTest extends GroovyTestCase {
         assertFalse(json.contains('secret-api-token-value'))
         assertFalse(json.contains('enrollment-secret-key'))
         assertEquals([], validateReport(report))
+    }
+
+    void testOrganizationOverridePrecedenceAndSource() {
+        writeProperties(defaultProperties())
+        AutomoxCredentials.Resolved resolved = AutomoxCredentials.resolve(
+            paths,
+            [:],
+            rules,
+            'default',
+            '114895'
+        )
+        assertEquals('114895', resolved.org)
+        assertEquals('argument', resolved.sources.org)
+    }
+
+    void testOrgsMarksActiveOrganizationAndAllowsTokenOnlyDiscovery() {
+        Closure handler = { method, url, headers, timeout, max ->
+            response([
+                [id: 114895, name: 'Organization A', device_count: 10],
+                [id: 121224, name: 'Organization B', device_count: 20]
+            ])
+        }
+        writeProperties(defaultProperties())
+        Map configured = automoxAdapter([:], handler).operatorOrgs('default', 5)
+        assertEquals(Status.READY, configured.status)
+        assertEquals([false, true], configured.items*.active)
+        AutomoxOperatorReport rendered = AutomoxOperatorReport.fromPayload(configured)
+        assertTrue(rendered.renderHuman(new Redaction(repository)).contains('Active org: 121224'))
+
+        writeProperties('default.api_token=secret-api-token-value\n')
+        Map discovery = automoxAdapter([:], handler).operatorOrgs('default', 5)
+        assertEquals(Status.READY, discovery.status)
+        assertFalse(discovery.items.any { it.active })
+        assertEquals('No active Automox organization configured', discovery.message)
+    }
+
+    void testOrganizationOverrideIsValidatedAndUsedByScopedReads() {
+        writeProperties(defaultProperties())
+        List<String> urls = []
+        Closure handler = { method, url, headers, timeout, max ->
+            urls << url
+            if (url.contains('/orgs')) {
+                return response([
+                    [id: 114895, name: 'Organization A'],
+                    [id: 121224, name: 'Organization B']
+                ])
+            }
+            if (url.contains('/policies')) {
+                return response([])
+            }
+            response([])
+        }
+        AutomoxAdapter adapter = automoxAdapter([:], handler).selectOrg('114895')
+        adapter.validateOrgOverride('default', 5)
+        Map report = adapter.operatorPolicies('default', null, 'all', 50, 5)
+        assertEquals('114895', report.org)
+        assertTrue(urls.any { it.contains('/orgs') })
+        assertTrue(urls.any { it.contains('/policies') && it.contains('o=114895') })
+    }
+
+    void testInaccessibleOrganizationStopsBeforeMutation() {
+        writeProperties(defaultProperties())
+        int writes = 0
+        AutomoxAdapter adapter = automoxAdapter(
+            [:],
+            { method, url, headers, timeout, max ->
+                response([[id: 121224, name: 'Organization B']])
+            },
+            { method, url, headers, payload, timeout, max ->
+                writes++
+                [code: 204, body: '', error: '']
+            },
+            true
+        ).selectOrg('114895')
+        String message = shouldFail(IllegalArgumentException) {
+            adapter.validateOrgOverride('default', 5)
+        }
+        assertTrue(message.contains('114895'))
+        assertEquals(0, writes)
+    }
+
+    void testAutomoxActionsDeclareValidatedOrganizationOption() {
+        CommandContract contract = CommandContract.load(repository)
+        List<Map> actions = contract.children(['service', 'automox'])
+        actions.findAll { it.name != 'profiles' }.each { Map action ->
+            assertTrue("${action.name} missing --org", action.options.any { it.name == '--org' })
+            ParsedArguments parsed = new ArgumentParser(contract).parse(
+                'service automox',
+                action,
+                requiredArguments(action) + ['--org', '114895'],
+                rules
+            )
+            assertEquals('114895', parsed.value('--org'))
+        }
     }
 
     void testLegacyTokenAndSetkeyParsedWithoutExecution() {
@@ -893,6 +990,12 @@ default.enrollment_key=enrollment-secret-key
 
     private static Map response(Object payload) {
         [code: 200, body: JsonOutput.toJson(payload), error: '']
+    }
+
+    private static List<String> requiredArguments(Map action) {
+        ((List<Map>) (action.positionals ?: [])).findAll { it.required }.collect { Map positional ->
+            positional.value?.pattern ? '1' : 'value'
+        }
     }
 
     private int exitCode(Map payload) {

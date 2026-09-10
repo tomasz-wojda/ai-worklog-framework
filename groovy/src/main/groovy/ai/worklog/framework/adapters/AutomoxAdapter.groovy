@@ -31,6 +31,7 @@ class AutomoxAdapter {
     final boolean apply
     final Map operatorRules
     final JsonSlurper slurper = new JsonSlurper()
+    String orgOverride
 
     AutomoxAdapter(
         FrameworkPaths paths,
@@ -49,6 +50,11 @@ class AutomoxAdapter {
         this.config = config ?: [:]
         this.apply = apply
         this.operatorRules = frameworkRoot ? loadOperatorRules(frameworkRoot) : overrides ?: [:]
+    }
+
+    AutomoxAdapter selectOrg(String org) {
+        orgOverride = org?.trim()
+        this
     }
 
     Map settings() {
@@ -95,7 +101,7 @@ class AutomoxAdapter {
 
     Map operatorAuthTest(String profile, int timeout) {
         String fetchedAt = utcNow()
-        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        AutomoxCredentials.Resolved credentials = requireApiToken(profile)
         Map response = automoxGet('orgs', credentials, timeout, [:])
         if (response.code == 401 || response.code == 403) {
             return report('auth-test', Status.BLOCKED, [], [
@@ -117,18 +123,35 @@ class AutomoxAdapter {
 
     Map operatorOrgs(String profile, int timeout) {
         String fetchedAt = utcNow()
-        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        AutomoxCredentials.Resolved credentials = requireApiToken(profile)
         List orgs = fetchArray('orgs', credentials, timeout, [:], [:])
         List<Map> items = orgs.collect { Map org ->
             [
                 id: org.id,
                 name: org.name,
-                device_count: org.device_count ?: org.devices ?: 0
+                device_count: org.device_count ?: org.devices ?: 0,
+                active: credentials.org && org.id?.toString() == credentials.org
             ]
         }.sort { a, b -> (a.name ?: '').toString().toLowerCase() <=> (b.name ?: '').toString().toLowerCase() }
-        report('orgs', Status.READY, items, [
-            fetched_at: fetchedAt, profile: credentials.id, org: credentials.org
-        ])
+        boolean activeOrgAccessible = !credentials.org || items.any { it.active }
+        Map extras = [fetched_at: fetchedAt, profile: credentials.id, org: credentials.org]
+        if (!credentials.org) {
+            extras.message = 'No active Automox organization configured'
+        } else if (!activeOrgAccessible) {
+            extras.message = "Active Automox organization is not accessible: ${credentials.org}"
+        }
+        report('orgs', activeOrgAccessible ? Status.READY : Status.DEGRADED, items, extras)
+    }
+
+    void validateOrgOverride(String profile, int timeout) {
+        if (!orgOverride) {
+            return
+        }
+        AutomoxCredentials.Resolved credentials = requireApiToken(profile)
+        List orgs = fetchArray('orgs', credentials, timeout, [:], [:])
+        if (!orgs.any { it.id?.toString() == credentials.org }) {
+            throw new IllegalArgumentException("Automox organization is not accessible: ${credentials.org}")
+        }
     }
 
     Map operatorGroups(String profile, String query, int limit, int timeout) {
@@ -889,11 +912,22 @@ class AutomoxAdapter {
             .format(OffsetDateTime.now(ZoneOffset.UTC))
     }
 
-    private AutomoxCredentials.Resolved requireCredentials(String profile) {
-        AutomoxCredentials.Resolved resolved = AutomoxCredentials.resolve(paths, config, operatorRules, profile)
+    private AutomoxCredentials.Resolved requireApiToken(String profile) {
+        AutomoxCredentials.Resolved resolved = AutomoxCredentials.resolve(
+            paths,
+            config,
+            operatorRules,
+            profile,
+            orgOverride
+        )
         if (!resolved.apiToken) {
             throw new IllegalStateException('Automox API token unavailable')
         }
+        resolved
+    }
+
+    private AutomoxCredentials.Resolved requireCredentials(String profile) {
+        AutomoxCredentials.Resolved resolved = requireApiToken(profile)
         if (!resolved.org) {
             throw new IllegalStateException('Automox organization unavailable')
         }

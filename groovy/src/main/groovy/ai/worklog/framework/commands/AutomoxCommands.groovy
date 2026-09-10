@@ -130,6 +130,10 @@ class AutomoxCommands {
         Map settings = adapter.settings()
         int timeout = settings.timeout_seconds as int
         String profile = parsed.value('--profile')?.toString()
+        adapter.selectOrg(parsed.value('--org')?.toString())
+        if (action != 'orgs') {
+            adapter.validateOrgOverride(profile, timeout)
+        }
         switch (action) {
             case 'profiles':
                 return adapter.operatorProfiles()

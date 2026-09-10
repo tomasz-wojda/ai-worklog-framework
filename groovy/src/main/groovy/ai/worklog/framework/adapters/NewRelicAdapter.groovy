@@ -1047,10 +1047,18 @@ class NewRelicAdapter {
     private NewRelicCredentials.Resolved requireCredentials(String profile) {
         NewRelicCredentials.Resolved resolved = NewRelicCredentials.resolve(paths, config, operatorRules, profile)
         if (!resolved.apiKey) {
-            throw new IllegalStateException('New Relic API key unavailable')
+            throw new NewRelicCredentialException(
+                'New Relic API key unavailable',
+                resolved.id,
+                resolved.accountId
+            )
         }
         if (!resolved.accountId) {
-            throw new IllegalStateException('New Relic account id unavailable')
+            throw new NewRelicCredentialException(
+                'New Relic account id unavailable',
+                resolved.id,
+                resolved.accountId
+            )
         }
         resolved
     }

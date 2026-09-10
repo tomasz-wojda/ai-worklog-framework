@@ -2,6 +2,7 @@ package ai.worklog.framework.commands
 
 import ai.worklog.framework.adapters.JsonWriteHttp
 import ai.worklog.framework.adapters.NewRelicAdapter
+import ai.worklog.framework.adapters.NewRelicCredentialException
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.cli.ArgumentParser
 import ai.worklog.framework.cli.CommandContract
@@ -93,6 +94,19 @@ class NewRelicCommands {
                 System.err.println redaction.redact(exception.message)
             }
             return exitCodes.userError
+        } catch (NewRelicCredentialException exception) {
+            Map payload = errorPayload(action, exception.message, [
+                status: Status.BLOCKED,
+                profile: exception.profile,
+                account_id: exception.accountId
+            ])
+            NewRelicOperatorReport report = NewRelicOperatorReport.fromPayload(payload)
+            if (json) {
+                print report.renderJson(redaction)
+            } else {
+                System.err.print report.renderHuman(redaction)
+            }
+            return exitCodes.blocked
         } catch (IllegalStateException exception) {
             boolean blocked = exception.message?.toLowerCase()?.contains('unavailable')
             Map payload = errorPayload(action, exception.message)
@@ -392,13 +406,13 @@ class NewRelicCommands {
         ]
     }
 
-    private static Map errorPayload(String action, String message) {
+    private static Map errorPayload(String action, String message, Map extras = [:]) {
         [
             operation: action,
             fetched_at: NewRelicAdapter.utcNow(),
             status: Status.ERROR,
             message: message,
             items: []
-        ]
+        ] + extras.findAll { key, value -> value != null && value.toString() }
     }
 }

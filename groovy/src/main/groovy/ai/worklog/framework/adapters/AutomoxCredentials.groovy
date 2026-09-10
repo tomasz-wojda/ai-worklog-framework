@@ -4,7 +4,13 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.JsonFiles
 
 class AutomoxCredentials {
-    static Resolved resolve(FrameworkPaths paths, Map config, Map rules, String requestedProfile) {
+    static Resolved resolve(
+        FrameworkPaths paths,
+        Map config,
+        Map rules,
+        String requestedProfile,
+        String requestedOrg = null
+    ) {
         Map adapters = config.adapters instanceof Map ? (Map) config.adapters : [:]
         Map automoxConfig = adapters.automox instanceof Map ? (Map) adapters.automox : [:]
         String profileId = requestedProfile ?:
@@ -19,6 +25,7 @@ class AutomoxCredentials {
         String tokenFromEnv = System.getenv('AUTOMOX_API_TOKEN')
         String enrollmentFromEnv = System.getenv('AUTOMOX_ENROLLMENT_KEY')
         String orgFromEnv = System.getenv('AUTOMOX_ORG')
+        String orgFromArgument = requestedOrg?.trim()
         String baseFromEnv = System.getenv('AUTOMOX_API_BASE_URL')
         String legacyToken = parseLegacyToken(serviceDir)
         String legacySetkey = parseLegacySetkey(serviceDir)
@@ -27,7 +34,11 @@ class AutomoxCredentials {
             profileProps.enrollment_key?.toString() ?:
             legacySetkey ?:
             ''
-        String org = orgFromEnv ?: profileProps.org?.toString() ?: automoxConfig.org?.toString() ?: ''
+        String org = orgFromArgument ?:
+            orgFromEnv ?:
+            profileProps.org?.toString() ?:
+            automoxConfig.org?.toString() ?:
+            ''
         String apiBaseUrl = baseFromEnv ?:
             profileProps.api_base_url?.toString() ?:
             automoxConfig.api_base_url?.toString() ?:
@@ -40,7 +51,10 @@ class AutomoxCredentials {
             enrollment_key: enrollmentFromEnv ? 'env' :
                 profileProps.enrollment_key ? 'properties' :
                 legacySetkey ? 'legacy' : 'default',
-            org: orgFromEnv ? 'env' : profileProps.org ? 'properties' : automoxConfig.org ? 'default' : 'default',
+            org: orgFromArgument ? 'argument' :
+                orgFromEnv ? 'env' :
+                profileProps.org ? 'properties' :
+                automoxConfig.org ? 'default' : 'default',
             api_base_url: baseFromEnv ? 'env' :
                 profileProps.api_base_url ? 'properties' :
                 automoxConfig.api_base_url ? 'default' :
