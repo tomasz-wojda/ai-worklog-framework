@@ -78,6 +78,12 @@ class WorkspaceCommands {
                         frameworkRoot
                     )
                     break
+                case 'unregister':
+                    String name = requireArg(remaining, action)
+                    rejectExtraArgs(remaining, action)
+                    payload = GlobalConfig.removeWorkspace(name)
+                    payload.operation = 'unregister'
+                    break
                 default:
                     usage()
                     return exitCodes.userError
@@ -154,6 +160,7 @@ class WorkspaceCommands {
             if (!workspace.isDirectory()) {
                 throw new IllegalArgumentException("Workspace not found: ${path}")
             }
+            GlobalConfig.ensureWorkspacePathAvailable(name, workspace.path)
 
             List vaultResolution = resolveVaultOrError(workspace, aiVault)
             File vaultRoot = vaultResolution[0] as File
@@ -312,6 +319,16 @@ class WorkspaceCommands {
             String name = context[1] as String
             if (!context[2]) {
                 throw unregisteredError(context[0] as File, context[4] as String)
+            }
+            List<String> aliases = GlobalConfig.workspaceNamesForPath(
+                GlobalConfig.load(),
+                workspace.path
+            ).findAll { it != name }
+            if (aliases) {
+                throw new IllegalArgumentException(
+                    "Workspace path is also registered as ${aliases.join(', ')}; " +
+                    "unregister duplicate names before reverting ${name}"
+                )
             }
 
             List vaultResolution = SetupResolver.resolveAiVaultRoot(workspace)
@@ -543,6 +560,7 @@ class WorkspaceCommands {
                 }
                 break
             case 'remove':
+            case 'unregister':
                 println "Removed workspace registration: ${payload.name}"
                 break
         }
@@ -608,6 +626,6 @@ class WorkspaceCommands {
     }
 
     private static void usage() {
-        println 'Usage: ai-worklog workspace {apply|check|show|revert|ides|list|default|current} ...'
+        println 'Usage: ai-worklog workspace {apply|check|show|revert|unregister|ides|list|default|current} ...'
     }
 }

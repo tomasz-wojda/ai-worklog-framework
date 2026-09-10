@@ -250,6 +250,24 @@ class GlobalConfig {
         ]
     }
 
+    static List<String> workspaceNamesForPath(Map config, String path) {
+        String canonical = canonicalWorkspacePath(path).path
+        ((Map) (config.workspaces ?: [:])).findAll { name, entry ->
+            ((Map) entry).path?.toString() == canonical
+        }.keySet().collect { it.toString() }.sort()
+    }
+
+    static void ensureWorkspacePathAvailable(String name, String path) {
+        validateWorkspaceName(name)
+        String canonical = canonicalWorkspacePath(path).path
+        List<String> owners = workspaceNamesForPath(load(), canonical).findAll { it != name }
+        if (owners) {
+            throw new IllegalArgumentException(
+                "Workspace path is already registered as ${owners.join(', ')}: ${canonical}"
+            )
+        }
+    }
+
     static Map addWorkspace(String name, String path, boolean makeDefault) {
         validateWorkspaceName(name)
         File resolved = canonicalWorkspacePath(path)
@@ -264,6 +282,12 @@ class GlobalConfig {
             String existingPath = existing?.path?.toString()
             List existingIdes = existing ? ((List) existing.ides)*.toString() : []
             boolean unchanged = existingPath == canonical
+            List<String> owners = workspaceNamesForPath(config, canonical).findAll { it != name }
+            if (owners) {
+                throw new IllegalArgumentException(
+                    "Workspace path is already registered as ${owners.join(', ')}: ${canonical}"
+                )
+            }
             if (existingPath && existingPath != canonical) {
                 throw new IllegalArgumentException(
                     "Workspace ${name} is already registered with a different path: ${existingPath}"

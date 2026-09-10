@@ -233,6 +233,20 @@ class TestGlobalConfigMutations:
         payload = gc.add_workspace("work", str(work_workspace))
         assert payload.get("unchanged") is True
 
+    def test_add_rejects_duplicate_canonical_path(self, home, work_workspace):
+        gc.add_workspace("work", str(work_workspace))
+        with pytest.raises(ValueError, match="already registered as work"):
+            gc.add_workspace("alias", str(work_workspace))
+
+    def test_add_rejects_symlink_equivalent_path(
+        self, home, work_workspace, tmp_path
+    ):
+        gc.add_workspace("work", str(work_workspace))
+        alias = tmp_path / "work-alias"
+        alias.symlink_to(work_workspace, target_is_directory=True)
+        with pytest.raises(ValueError, match="already registered as work"):
+            gc.add_workspace("alias", str(alias))
+
     def test_add_preserves_ides(self, home, work_workspace):
         gc.add_workspace("work", str(work_workspace))
         gc.set_workspace_ides("work", ["cursor", "claude"])
@@ -268,6 +282,36 @@ class TestGlobalConfigMutations:
     def test_remove_unknown(self, home):
         with pytest.raises(ValueError, match="Workspace not registered"):
             gc.remove_workspace("work")
+
+    def test_unregister_command_removes_only_legacy_alias(
+        self, home, work_workspace, capsys
+    ):
+        marker = work_workspace / "marker.txt"
+        marker.write_text("keep", encoding="utf-8")
+        _write_raw(
+            home,
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": "work",
+                "workspaces": {
+                    "work": {"path": str(work_workspace), "ides": ["cursor"]},
+                    "alias": {"path": str(work_workspace), "ides": ["claude"]},
+                },
+            },
+        )
+        args = SimpleNamespace(
+            workspace_action="unregister",
+            name="alias",
+            json=False,
+        )
+        assert workspace_commands.run(args) == 0
+        config = gc.load_global_config()
+        assert list(config["workspaces"]) == ["work"]
+        assert config["default_workspace"] == "work"
+        assert marker.read_text(encoding="utf-8") == "keep"
+        assert "Removed workspace registration: alias" in capsys.readouterr().out
 
     def test_set_default(self, home, work_workspace, test_workspace):
         gc.add_workspace("work", str(work_workspace))

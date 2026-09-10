@@ -8,6 +8,7 @@ import ai.worklog.framework.core.ConfigLoader
 import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
+import ai.worklog.framework.setup.SetupChecks
 import ai.worklog.framework.setup.SetupManifest
 import ai.worklog.framework.setup.SetupMaterialize
 import ai.worklog.framework.setup.SetupPlanner
@@ -395,6 +396,74 @@ class SetupTest extends GroovyTestCase {
         assertEquals(['claude', 'cursor'], GlobalConfig.load().workspaces.work.ides)
     }
 
+    void testApplyRejectsPathOwnedByAnotherWorkspaceBeforeMaterialization() {
+        File vault = makeVault(tempRoot)
+        File workspace = makeWorkspace()
+        GlobalConfig.addWorkspace('primary', workspace.path, true)
+        String output = captureOutput {
+            assertEquals(1, Main.execute([
+                'workspace', 'apply', 'alias', workspace.path,
+                '--ide', 'cursor',
+                '--ai-vault', vault.path,
+                '--dry-run'
+            ]))
+        }
+        assertTrue(output.contains('already registered as primary'))
+        assertNull(SetupManifest.loadManifest(workspace))
+    }
+
+    void testUnregisterRemovesOnlyLegacyAlias() {
+        File vault = makeVault(tempRoot)
+        File workspace = makeWorkspace()
+        File marker = new File(workspace, 'marker.txt')
+        marker.setText('keep', 'UTF-8')
+        SetupManifest.saveManifest(
+            workspace,
+            SetupManifest.composeManifest('primary', vault, [], [])
+        )
+        String manifestBefore = SetupManifest.manifestPath(workspace).getText('UTF-8')
+        saveDuplicateConfig(workspace)
+
+        String output = captureOutput {
+            assertEquals(0, WorkspaceCommands.run(
+                'unregister',
+                ['alias', '--json'],
+                repository,
+                [:]
+            ))
+        }
+
+        assertTrue(output.contains('"operation": "unregister"'))
+        assertEquals(['primary'], GlobalConfig.load().workspaces.keySet().toList())
+        assertEquals('keep', marker.getText('UTF-8'))
+        assertEquals(manifestBefore, SetupManifest.manifestPath(workspace).getText('UTF-8'))
+    }
+
+    void testRevertBlocksLegacyDuplicateBeforePlanningTeardown() {
+        File workspace = makeWorkspace()
+        saveDuplicateConfig(workspace)
+        String output = captureOutput {
+            assertEquals(1, WorkspaceCommands.run(
+                'revert',
+                ['alias', '--dry-run'],
+                repository,
+                [:]
+            ))
+        }
+        assertTrue(output.contains('also registered as primary'))
+        assertTrue(output.contains('unregister duplicate names'))
+    }
+
+    void testDuplicatePathLookupIsExplicitlyAmbiguous() {
+        File workspace = makeWorkspace()
+        saveDuplicateConfig(workspace)
+        String message = shouldFail(IllegalArgumentException) {
+            SetupChecks.findWorkspaceRegistration(workspace)
+        }
+        assertTrue(message.contains('multiple registrations'))
+        assertTrue(message.contains('alias, primary'))
+    }
+
     void testRevertRemovesCursorOnly() {
         File vault = makeVault(tempRoot)
         File workspace = makeWorkspace()
@@ -465,6 +534,19 @@ class SetupTest extends GroovyTestCase {
         def method = JenkinsAdapter.class.getDeclaredMethod('resolveSyntaxCheckScript')
         method.accessible = true
         method.invoke(adapter) as File
+    }
+
+    private void saveDuplicateConfig(File workspace) {
+        GlobalConfig.save([
+            version: 2,
+            runtime: 'groovy',
+            ai_vault_root: null,
+            default_workspace: 'primary',
+            workspaces: [
+                primary: [path: workspace.path, ides: ['claude', 'cursor']],
+                alias: [path: workspace.path, ides: ['claude']]
+            ]
+        ])
     }
 
     private File makeVault(File root) {

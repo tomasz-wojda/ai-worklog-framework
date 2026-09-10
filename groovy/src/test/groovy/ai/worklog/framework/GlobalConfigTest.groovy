@@ -97,6 +97,10 @@ class GlobalConfigTest extends GroovyTestCase {
         GlobalConfig.addWorkspace('work', work.path, true)
         Map unchanged = GlobalConfig.addWorkspace('work', work.path, false)
         assertTrue(unchanged.unchanged)
+        String duplicatePath = shouldFail(IllegalArgumentException) {
+            GlobalConfig.addWorkspace('alias', work.path, false)
+        }
+        assertTrue(duplicatePath.contains('already registered as work'))
 
         File other = File.createTempDir('ai-worklog-other-', '-test')
         try {
@@ -106,6 +110,37 @@ class GlobalConfigTest extends GroovyTestCase {
         } finally {
             other.deleteDir()
         }
+    }
+
+    void testSymlinkEquivalentWorkspacePathIsRejected() {
+        GlobalConfig.addWorkspace('work', work.path, true)
+        File alias = new File(home, 'work-alias')
+        Files.createSymbolicLink(alias.toPath(), work.toPath())
+        String message = shouldFail(IllegalArgumentException) {
+            GlobalConfig.addWorkspace('alias', alias.path, false)
+        }
+        assertTrue(message.contains('already registered as work'))
+    }
+
+    void testLegacyDuplicateRegistrationCanBeRemovedWithoutTouchingWorkspace() {
+        File marker = new File(work, 'marker.txt')
+        marker.setText('keep', 'UTF-8')
+        GlobalConfig.save([
+            version: 2,
+            runtime: 'groovy',
+            ai_vault_root: null,
+            default_workspace: 'work',
+            workspaces: [
+                work: [path: work.path, ides: ['cursor']],
+                alias: [path: work.path, ides: ['claude']]
+            ]
+        ])
+        assertEquals(['alias', 'work'], GlobalConfig.workspaceNamesForPath(GlobalConfig.load(), work.path))
+        GlobalConfig.removeWorkspace('alias')
+        Map config = GlobalConfig.load()
+        assertEquals(['work'], config.workspaces.keySet().toList())
+        assertEquals('work', config.default_workspace)
+        assertEquals('keep', marker.getText('UTF-8'))
     }
 
     void testInvalidWorkspaceNameAndMissingPathAreRejected() {

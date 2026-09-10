@@ -285,6 +285,43 @@ def test_workspace_list_json(
     _assert_parity_json(python, groovy)
 
 
+def test_workspace_unregister_json(
+    env_home: dict[str, str],
+    work_workspace: Path,
+    test_workspace: Path,
+) -> None:
+    python, groovy = _run_parity(
+        env_home,
+        "workspace",
+        "unregister",
+        "test",
+        "--json",
+        reset=(work_workspace, test_workspace),
+    )
+    _assert_parity_json(python, groovy)
+    assert json.loads(python.stdout)["operation"] == "unregister"
+
+
+def test_workspace_apply_duplicate_path_rejected_before_setup(
+    env_home: dict[str, str],
+    work_workspace: Path,
+    test_workspace: Path,
+) -> None:
+    python, groovy = _run_parity(
+        env_home,
+        "workspace",
+        "apply",
+        "alias",
+        str(work_workspace),
+        "--dry-run",
+        "--json",
+        reset=(work_workspace, test_workspace),
+    )
+    _assert_parity_json(python, groovy)
+    assert python.returncode == 1
+    assert "already registered as work" in python.stdout
+
+
 def test_workspace_show_human(
     env_home: dict[str, str],
     seeded_registry: None,

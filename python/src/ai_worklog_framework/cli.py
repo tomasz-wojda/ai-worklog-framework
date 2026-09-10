@@ -141,6 +141,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     workspace_revert.add_argument("--json", action="store_true")
     workspace_revert.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show planned changes without making them")
+    workspace_unregister = workspace_sub.add_parser(
+        "unregister", help="Remove only a workspace registration"
+    )
+    workspace_unregister.add_argument("name", help="Workspace registration name")
+    workspace_unregister.add_argument("--json", action="store_true")
     workspace_ides = workspace_sub.add_parser(
         "ides", help="Show or set registered IDE profiles", parents=[parent_parser],
     )
@@ -390,7 +395,7 @@ def dispatch(args: argparse.Namespace) -> int:
         if not args.workspace_action:
             print(
                 "Usage: ai-worklog workspace "
-                "{apply|check|show|revert|ides|list|default|current} ..."
+                "{apply|check|show|revert|unregister|ides|list|default|current} ..."
             )
             return EXIT_USER_ERROR
         from ai_worklog_framework.workspace import commands as workspace_cmds

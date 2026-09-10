@@ -12,6 +12,7 @@ from ai_worklog_framework.global_config import (
     add_workspace,
     canonical_workspace_path,
     current_workspace,
+    ensure_workspace_path_available,
     list_workspaces,
     load_global_config,
     print_json,
@@ -23,6 +24,7 @@ from ai_worklog_framework.global_config import (
     set_workspace_ides,
     show_default_workspace,
     validate_workspace_name,
+    workspace_names_for_path,
 )
 from ai_worklog_framework.setup.checks import find_workspace_registration
 from ai_worklog_framework.setup.planner import (
@@ -175,6 +177,7 @@ def run_apply(args) -> int:
         workspace = canonical_workspace_path(target_path)
         if not workspace.is_dir():
             raise ValueError(f"Workspace not found: {target_path}")
+        ensure_workspace_path_available(target_name, str(workspace))
 
         vault_root, vault_source, vault_manifest = _resolve_vault_or_error(
             workspace,
@@ -323,6 +326,16 @@ def run_revert(args) -> int:
         )
         if not registered or not name:
             raise _unregistered_error(workspace, source)
+        aliases = [
+            alias
+            for alias in workspace_names_for_path(load_global_config(), str(workspace))
+            if alias != name
+        ]
+        if aliases:
+            raise ValueError(
+                f"Workspace path is also registered as {', '.join(aliases)}; "
+                f"unregister duplicate names before reverting {name}"
+            )
 
         filter_ides = parse_ide_args(getattr(args, "ide", None))
         if filter_ides and "auto" in filter_ides:
@@ -465,7 +478,7 @@ def _render_human(payload: dict) -> None:
         print(f"Source: {payload['source']}")
         if payload.get("name"):
             print(f"Name: {payload['name']}")
-    elif operation == "remove":
+    elif operation in ("remove", "unregister"):
         print(f"Removed workspace registration: {payload['name']}")
 
 
@@ -525,10 +538,13 @@ def run(args) -> int:
         elif action == "current":
             explicit_path, explicit_name = _selectors(args)
             payload = current_workspace(explicit_path, explicit_name)
+        elif action == "unregister":
+            payload = remove_workspace(args.name)
+            payload["operation"] = "unregister"
         else:
             print(
                 "Usage: ai-worklog workspace "
-                "{apply|check|show|revert|ides|list|default|current} ..."
+                "{apply|check|show|revert|unregister|ides|list|default|current} ..."
             )
             return EXIT_USER_ERROR
         return _render(payload, json)

@@ -173,7 +173,14 @@ def aggregate_check_status(checks: List[Dict[str, Any]]) -> Status:
 def find_workspace_registration(workspace: Path) -> Optional[str]:
     config = load_global_config()
     target = str(workspace.resolve())
-    for name, entry in config.get("workspaces", {}).items():
-        if entry.get("path") == target:
-            return str(name)
-    return None
+    matches = sorted(
+        str(name)
+        for name, entry in config.get("workspaces", {}).items()
+        if entry.get("path") == target
+    )
+    if len(matches) > 1:
+        raise ValueError(
+            f"Workspace path has multiple registrations: {target} "
+            f"({', '.join(matches)})"
+        )
+    return matches[0] if matches else None

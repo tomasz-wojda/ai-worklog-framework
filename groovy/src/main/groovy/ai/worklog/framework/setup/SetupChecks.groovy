@@ -182,9 +182,15 @@ class SetupChecks {
     static String findWorkspaceRegistration(File workspace) {
         Map config = GlobalConfig.load()
         String target = workspace.canonicalFile.path
-        config.workspaces.find { name, entryValue ->
+        List<String> matches = config.workspaces.findAll { name, entryValue ->
             ((Map) entryValue).path?.toString() == target
-        }?.key?.toString()
+        }.keySet().collect { it.toString() }.sort()
+        if (matches.size() > 1) {
+            throw new IllegalArgumentException(
+                "Workspace path has multiple registrations: ${target} (${matches.join(', ')})"
+            )
+        }
+        matches ? matches[0] : null
     }
 
     private static List<String> staleEntries(

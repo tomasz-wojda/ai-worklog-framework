@@ -289,6 +289,29 @@ def workspace_entry(name: str, entry: dict[str, Any], config: dict[str, Any]) ->
     }
 
 
+def workspace_names_for_path(config: dict[str, Any], path: str) -> list[str]:
+    canonical = str(canonical_workspace_path(path))
+    return sorted(
+        str(name)
+        for name, entry in (config.get("workspaces") or {}).items()
+        if entry.get("path") == canonical
+    )
+
+
+def ensure_workspace_path_available(name: str, path: str) -> None:
+    validate_workspace_name(name)
+    canonical = str(canonical_workspace_path(path))
+    owners = [
+        owner
+        for owner in workspace_names_for_path(load_global_config(), canonical)
+        if owner != name
+    ]
+    if owners:
+        raise ValueError(
+            f"Workspace path is already registered as {', '.join(owners)}: {canonical}"
+        )
+
+
 def add_workspace(name: str, path: str, make_default: bool = False) -> dict[str, Any]:
     validate_workspace_name(name)
     resolved = canonical_workspace_path(path)
@@ -302,6 +325,15 @@ def add_workspace(name: str, path: str, make_default: bool = False) -> dict[str,
         existing_path = existing["path"] if existing else None
         existing_ides = list(existing["ides"]) if existing else []
         unchanged = existing_path == canonical
+        owners = [
+            owner
+            for owner in workspace_names_for_path(config, canonical)
+            if owner != name
+        ]
+        if owners:
+            raise ValueError(
+                f"Workspace path is already registered as {', '.join(owners)}: {canonical}"
+            )
         if existing_path is not None and existing_path != canonical:
             raise ValueError(
                 f"Workspace {name} is already registered with a different path: {existing_path}"

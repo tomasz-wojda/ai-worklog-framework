@@ -11,6 +11,7 @@ from ai_worklog_framework import global_config as gc
 from ai_worklog_framework.adapters import jenkins
 from ai_worklog_framework.paths import WorkspacePaths
 from ai_worklog_framework.workspace import commands as workspace_commands
+from ai_worklog_framework.setup.checks import find_workspace_registration
 from ai_worklog_framework.setup.manifest import load_manifest, manifest_path, save_manifest, tree_checksum
 from ai_worklog_framework.setup.materialize import inspect_destination, plan_skill_materialization
 from ai_worklog_framework.setup.planner import apply_init_or_repair_plan, plan_setup_init, plan_setup_revert
@@ -241,6 +242,24 @@ class TestPlanner:
 
 
 class TestSetupCommands:
+    @staticmethod
+    def _save_duplicate_config(workspace: Path) -> None:
+        gc.save_global_config(
+            {
+                "version": 2,
+                "runtime": "groovy",
+                "ai_vault_root": None,
+                "default_workspace": "primary",
+                "workspaces": {
+                    "primary": {
+                        "path": str(workspace),
+                        "ides": ["claude", "cursor"],
+                    },
+                    "alias": {"path": str(workspace), "ides": ["claude"]},
+                },
+            }
+        )
+
     def test_init_dry_run_then_apply(self, home, tmp_path, monkeypatch, capsys):
         vault = _make_vault(tmp_path)
         ws = _make_workspace(tmp_path)
@@ -287,6 +306,59 @@ class TestSetupCommands:
         )
         workspace_commands.run_apply(args)
         assert gc.load_global_config()["workspaces"]["work"]["ides"] == ["claude", "cursor"]
+
+    def test_apply_rejects_path_owned_by_another_workspace(
+        self, home, tmp_path, monkeypatch, capsys
+    ):
+        vault = _make_vault(tmp_path)
+        ws = _make_workspace(tmp_path)
+        gc.add_workspace("primary", str(ws), make_default=True)
+        monkeypatch.setattr(
+            "shutil.which",
+            lambda name: "/usr/bin/groovy" if name == "groovy" else None,
+        )
+        args = SimpleNamespace(
+            workspace_action="apply",
+            name="alias",
+            path=str(ws),
+            ide=["cursor"],
+            runtime=None,
+            ai_vault=str(vault),
+            default=False,
+            adopt=False,
+            json=False,
+            dry_run=True,
+        )
+        assert workspace_commands.run_apply(args) == 1
+        assert "already registered as primary" in capsys.readouterr().out
+        assert load_manifest(ws) is None
+
+    def test_revert_blocks_legacy_duplicate_before_teardown(
+        self, home, tmp_path, capsys
+    ):
+        ws = _make_workspace(tmp_path)
+        self._save_duplicate_config(ws)
+        args = SimpleNamespace(
+            workspace_action="revert",
+            workspace=None,
+            workspace_name=None,
+            path="alias",
+            ide=None,
+            json=False,
+            dry_run=True,
+        )
+        assert workspace_commands.run_revert(args) == 1
+        output = capsys.readouterr().out
+        assert "also registered as primary" in output
+        assert "unregister duplicate names" in output
+
+    def test_duplicate_path_lookup_is_explicitly_ambiguous(
+        self, home, tmp_path
+    ):
+        ws = _make_workspace(tmp_path)
+        self._save_duplicate_config(ws)
+        with pytest.raises(ValueError, match="multiple registrations"):
+            find_workspace_registration(ws)
 
     def test_revert_removes_cursor_only(self, home, tmp_path, monkeypatch):
         vault = _make_vault(tmp_path)
