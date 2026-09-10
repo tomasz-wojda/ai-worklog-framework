@@ -151,6 +151,862 @@
           ]
         },
         {
+          "name": "automox",
+          "description": "Automox operator",
+          "kind": "service",
+          "subcommands": [
+            {
+              "name": "profiles",
+              "description": "List configured Automox profiles without exposing credentials",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "auth-test",
+              "description": "Validate API token against the Automox API",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "orgs",
+              "description": "List accessible Automox organizations",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "groups",
+              "description": "List server groups with optional name filter",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter group names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of groups",
+                  "takes_value": true,
+                  "default_from": "limits.groups_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "group",
+              "description": "Show one server group and its member devices",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "group_id",
+                  "description": "Server group id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "devices",
+              "description": "List devices with optional group, name, and connection filters",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--group",
+                  "description": "Limit results to a server group id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter device names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--state",
+                  "description": "Filter devices by connection state",
+                  "takes_value": true,
+                  "value": {
+                    "choices": ["all", "connected", "disconnected"],
+                    "help_values": "all | connected | disconnected"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of devices",
+                  "takes_value": true,
+                  "default_from": "limits.devices_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "device",
+              "description": "Show one device by id or hostname",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "device",
+                  "description": "Device id or hostname",
+                  "required": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "device-packages",
+              "description": "List packages for one device with optional state and name filters",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "device",
+                  "description": "Device id or hostname",
+                  "required": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--state",
+                  "description": "Filter packages by installation state",
+                  "takes_value": true,
+                  "value": {
+                    "choices": ["all", "pending", "installed"],
+                    "help_values": "all | pending | installed"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter package names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of packages",
+                  "takes_value": true,
+                  "default_from": "limits.packages_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--csv",
+                  "description": "Emit RFC 4180 CSV to stdout",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "activity",
+              "description": "List Automox events within a date range",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include events on or after this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include events on or before this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--event",
+                  "description": "Filter by event type",
+                  "takes_value": true,
+                  "repeatable": true,
+                  "value": {
+                    "help_values": "TYPE"
+                  }
+                },
+                {
+                  "name": "--device",
+                  "description": "Filter by device id or hostname",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Filter by policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of events",
+                  "takes_value": true,
+                  "default_from": "limits.activity_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "patch-summary",
+              "description": "Summarize patch activity within a date range",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include events on or after this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include events on or before this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--device",
+                  "description": "Filter by device id or hostname",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Filter by policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of events to analyze",
+                  "takes_value": true,
+                  "default_from": "limits.patch_summary_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--csv",
+                  "description": "Emit RFC 4180 CSV to stdout",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "policies",
+              "description": "List policies with optional name and type filters",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter policy names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--type",
+                  "description": "Filter policies by type",
+                  "takes_value": true,
+                  "value": {
+                    "choices": ["all", "patch", "custom"],
+                    "help_values": "all | patch | custom"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of policies",
+                  "takes_value": true,
+                  "default_from": "limits.policies_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "policy",
+              "description": "Show one policy including schedule details",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "policy-stats",
+              "description": "Show policy execution statistics",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Limit results to one policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "device-queue",
+              "description": "Inspect command queue for one device with optional polling",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "device",
+                  "description": "Device id or hostname",
+                  "required": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Filter by policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--status",
+                  "description": "Filter by queue command status",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "STATUS"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of queue entries",
+                  "takes_value": true,
+                  "default_from": "limits.queue_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 200,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--wait",
+                  "description": "Poll until a terminal status or timeout",
+                  "takes_value": true,
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 900,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "policy-run",
+              "description": "Run a policy on one device or all devices; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--device",
+                  "description": "Run the policy on one device id or hostname",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                },
+                {
+                  "name": "--all",
+                  "description": "Run the policy on all devices in scope",
+                  "takes_value": false
+                },
+                {
+                  "name": "--confirm-all",
+                  "description": "Confirm policy-wide execution with the exact policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Execute the policy run",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "worklet-create",
+              "description": "Create a Worklet custom policy from evaluation and remediation scripts; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "name",
+                  "description": "Worklet policy name",
+                  "required": true,
+                  "value": {
+                    "help_values": "NAME"
+                  }
+                },
+                {
+                  "name": "evaluation_file",
+                  "description": "Path to the evaluation script",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                },
+                {
+                  "name": "remediation_file",
+                  "description": "Path to the remediation script",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--notes",
+                  "description": "Optional policy notes",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the Worklet policy",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "policy-delete",
+              "description": "Delete a policy; dry-run unless --apply is supplied and --confirm-name matches",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-name",
+                  "description": "Confirm deletion with the exact policy name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "NAME"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Delete the policy",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "device-move",
+              "description": "Move a device to another server group; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "device",
+                  "description": "Device id or hostname",
+                  "required": true,
+                  "value": {
+                    "help_values": "ID-OR-HOSTNAME"
+                  }
+                },
+                {
+                  "name": "group_id",
+                  "description": "Target server group id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Move the device",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "policy-add-group",
+              "description": "Add a server group to a policy; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "group_id",
+                  "description": "Server group id to add",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Automox profile id from automox.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Add the server group to the policy",
+                  "takes_value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
           "name": "jira",
           "description": "Jira and Tempo operator",
           "kind": "service",

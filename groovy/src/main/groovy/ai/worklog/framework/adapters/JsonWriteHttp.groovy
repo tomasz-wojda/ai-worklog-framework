@@ -15,7 +15,40 @@ class JsonWriteHttp {
         int timeoutSeconds,
         int errorBodyMaxCharacters
     ) {
+        return send('POST', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
+    }
+
+    Map put(
+        String url,
+        Map headers,
+        Map payload,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters
+    ) {
+        return send('PUT', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
+    }
+
+    Map delete(
+        String url,
+        Map headers,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters
+    ) {
+        send('DELETE', url, headers, null, timeoutSeconds, errorBodyMaxCharacters)
+    }
+
+    Map send(
+        String method,
+        String url,
+        Map headers,
+        Object payload,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters
+    ) {
         if (requestHandler) {
+            if (requestHandler.maximumNumberOfParameters >= 6) {
+                return requestHandler(method, url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
+            }
             return requestHandler(url, headers, payload, timeoutSeconds)
         }
         URI uri
@@ -33,17 +66,19 @@ class JsonWriteHttp {
             if (connection instanceof HttpsURLConnection) {
                 InternalSslSupport.applyHttpsConnection((HttpsURLConnection) connection, uri)
             }
-            connection.requestMethod = 'POST'
-            connection.doOutput = true
+            connection.requestMethod = method
+            connection.doOutput = payload != null
             connection.connectTimeout = timeoutSeconds * 1000
             connection.readTimeout = timeoutSeconds * 1000
             headers.each { key, value ->
                 connection.setRequestProperty(key.toString(), value.toString())
             }
-            connection.setRequestProperty('Content-Type', 'application/json; charset=UTF-8')
-            byte[] body = JsonOutput.toJson(payload).getBytes(StandardCharsets.UTF_8)
-            connection.setFixedLengthStreamingMode(body.length)
-            connection.outputStream.withCloseable { it.write(body) }
+            if (payload != null) {
+                connection.setRequestProperty('Content-Type', 'application/json; charset=UTF-8')
+                byte[] body = JsonOutput.toJson(payload).getBytes(StandardCharsets.UTF_8)
+                connection.setFixedLengthStreamingMode(body.length)
+                connection.outputStream.withCloseable { it.write(body) }
+            }
             int code = connection.responseCode
             InputStream stream = code >= 400 ? connection.errorStream : connection.inputStream
             String responseBody = stream ?

@@ -37,6 +37,9 @@ class PreflightCommands {
         if (selected(scope, 'jenkins')) {
             checkServiceFile(results, paths, 'jenkins', 'jenkins.properties')
         }
+        if (selected(scope, 'automox')) {
+            checkServiceFile(results, paths, 'automox', 'automox.properties')
+        }
         if (selected(scope, 'argocd')) checkBinary(results, 'argocd')
         if (selected(scope, 'newrelic')) checkServiceDirectory(results, paths, 'newrelic')
         if (selected(scope, 'datadog')) checkServiceDirectory(results, paths, 'datadog')

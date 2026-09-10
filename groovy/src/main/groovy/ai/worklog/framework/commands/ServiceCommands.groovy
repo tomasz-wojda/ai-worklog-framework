@@ -55,6 +55,10 @@ class ServiceCommands {
                 return exitCodes.userError
             }
         }
+        if (service == 'automox') {
+            String action = args ? args.remove(0) : null
+            return AutomoxCommands.run(action, args, frameworkRoot, paths, config)
+        }
         if (service == 'jenkins') {
             String action = args ? args.remove(0) : null
             return JenkinsCommands.run(action, args, frameworkRoot, paths, config)

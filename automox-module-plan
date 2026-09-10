@@ -1,17 +1,41 @@
 # Automox Operator Module Plan
 
-Status: approved, not yet implemented
+Status: implemented and verified
 Created: 2026-08-15
+Implemented: 2026-09-10
 
 ## Scope
 
-Read-only Automox API surface plus two API write operations behind a
-dry-run/`--apply` gate. Credentials keyed by profile. Groovy runtime only,
-consistent with the Groovy-only route recorded in `runtime-deferral-plan`.
-No Python implementation and no parity tests, per the frozen-Python decision.
+Automox API surface with 14 read actions and five write actions behind a
+dry-run/`--apply` gate. Credentials are keyed by profile. The operator is
+implemented in the Groovy runtime only; Python implementation and parity
+coverage remain deferred.
 
 Out of scope for this pass: Automox SSH agent operations, batch enrollment,
 and the `setup-agents.sh` wrappers.
+
+## Implementation Outcome
+
+The refined implementation supersedes the original 12-action command surface
+below. The canonical namespace now provides 19 actions:
+
+- Read actions: `profiles`, `auth-test`, `orgs`, `groups`, `group`, `devices`,
+  `device`, `device-packages`, `activity`, `patch-summary`, `policies`,
+  `policy`, `policy-stats`, and `device-queue`.
+- Gated write actions: `policy-run`, `worklet-create`, `policy-delete`,
+  `device-move`, and `policy-add-group`.
+
+The implementation also adds bounded generic JSON POST, PUT, and DELETE
+transport while preserving the Jira POST interface, bounded GET responses,
+full package pagination, event pagination and deduplication, evidence-only
+patch outcomes, queue polling, CSV output, policy-wide confirmation, exact-name
+deletion confirmation, Worklet file containment and digest reporting, service
+discovery, preflight integration, shared contracts, schemas, and injected
+transport tests.
+
+Verification completed with 240 Groovy tests passing, all changed JSON parsing,
+no IDE linter findings, and live GET-only smoke tests across the implemented
+read surface. No live write request was executed during verification.
 
 ## 1. Shared contracts
 
@@ -391,3 +415,7 @@ IMPLEMENTATION CHECKLIST:
 24. Update `README.md` with the tree entry and the Automox Operator section per section 8.1.
 25. Update `upgrade-plan` with the Implemented Capabilities subsection and the Known Limitations entries per section 8.2, including any Windows launcher divergence found in step 19.
 26. Append this planning session to `prompt.log` with a timestamp.
+
+Implementation status: checklist complete on 2026-09-10, with the refined
+19-action scope and verification requirements recorded in Implementation
+Outcome taking precedence over the original numbered descriptions.

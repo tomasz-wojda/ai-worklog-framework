@@ -83,6 +83,23 @@ commands:
         )
     }
 
+    void testAutomoxRenderingListsNineteenActions() {
+        List<Map> actions = contract.children(['service', 'automox'])
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'automox'])
+        assertEquals(19, actions.size())
+        actions*.name.each { assertTrue(rendered.contains(it.toString())) }
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'automox', 'policy-run'])
+                .contains('<policy_id>')
+        )
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'automox', 'device-packages'])
+                .contains('<device>')
+        )
+    }
+
     void testArtifactsRenderingDocumentsPositionalsAndSelectors() {
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'artifacts'])
         assertTrue(rendered.contains('<controller> <job> <build_selector>'))

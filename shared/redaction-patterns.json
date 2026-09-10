@@ -1,12 +1,13 @@
 {
   "redacted": "***REDACTED***",
-  "sensitive_key_pattern": "(^|[._-])(token|password|passwd|secret|cookie|api_key|apikey|auth|authorization|bearer|aws_secret_access_key|aws_session_token|session_id|jsessionid|private_key|client_secret)([._-]|$)",
+  "sensitive_key_pattern": "(^|[._-])(token|password|passwd|secret|cookie|api_key|apikey|auth|authorization|bearer|aws_secret_access_key|aws_session_token|session_id|jsessionid|private_key|client_secret|enrollment_key|setkey|accesskey|access_key)([._-]|$)",
   "sensitive_value_patterns": [
     "(?i)(Bearer\\s+)\\S+",
     "AKIA[A-Z0-9]{16}",
     "ghp_[A-Za-z0-9]{36,}",
     "glpat-[A-Za-z0-9\\-_]{20,}",
     "xox[bps]-[A-Za-z0-9\\-]+",
-    "(?i)(token|api_key|apikey|password|secret)=[^&\\s]+"
+    "(?i)(token|api_key|apikey|password|secret)=[^&\\s]+",
+    "(?i)accesskey=[^&\\s]+"
   ]
 }

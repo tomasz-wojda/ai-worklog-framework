@@ -6,8 +6,17 @@ import java.nio.charset.StandardCharsets
 class ReadOnlyHttp {
     Closure<Map> requestHandler
 
-    Map request(String method, String url, Map headers = [:], int timeoutSeconds = 10) {
+    Map request(
+        String method,
+        String url,
+        Map headers = [:],
+        int timeoutSeconds = 10,
+        int responseBodyMaxCharacters = 0
+    ) {
         if (requestHandler) {
+            if (requestHandler.maximumNumberOfParameters >= 5) {
+                return requestHandler(method, url, headers, timeoutSeconds, responseBodyMaxCharacters)
+            }
             return requestHandler(method, url, headers, timeoutSeconds)
         }
         URI uri
@@ -33,7 +42,16 @@ class ReadOnlyHttp {
             }
             int code = connection.responseCode
             InputStream stream = code >= 400 ? connection.errorStream : connection.inputStream
-            String body = stream ? new String(stream.bytes, StandardCharsets.UTF_8) : ''
+            String body
+            if (stream) {
+                if (responseBodyMaxCharacters > 0) {
+                    body = new String(stream.readNBytes(responseBodyMaxCharacters), StandardCharsets.UTF_8)
+                } else {
+                    body = new String(stream.bytes, StandardCharsets.UTF_8)
+                }
+            } else {
+                body = ''
+            }
             [code: code, body: body, error: code >= 400 ? body : '']
         } catch (Exception exception) {
             [code: 0, body: '', error: exception.message ?: exception.class.simpleName]
@@ -42,7 +60,7 @@ class ReadOnlyHttp {
         }
     }
 
-    Map get(String url, Map headers = [:], int timeoutSeconds = 10) {
-        request('GET', url, headers, timeoutSeconds)
+    Map get(String url, Map headers = [:], int timeoutSeconds = 10, int responseBodyMaxCharacters = 0) {
+        request('GET', url, headers, timeoutSeconds, responseBodyMaxCharacters)
     }
 }

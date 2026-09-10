@@ -29,7 +29,8 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
             ServiceCommands.run('list', [], repository, paths, ConfigLoader.load(workspace))
         }
         assertEquals(0, captured.code)
-        assertTrue(captured.out.contains('Service operators (2):'))
+        assertTrue(captured.out.contains('Service operators (3):'))
+        assertTrue(captured.out.contains('automox: Automox operator'))
         assertTrue(captured.out.contains('jira: Jira and Tempo operator'))
         assertTrue(captured.out.contains('jenkins: Jenkins operator'))
         assertEquals('', captured.err)
@@ -42,7 +43,7 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
         Map report = (Map) new JsonSlurper().parseText(captured.out)
         assertEquals(0, captured.code)
         assertEquals('ready', report.status)
-        assertEquals(['jenkins', 'jira'], report.items*.id)
+        assertEquals(['automox', 'jenkins', 'jira'], report.items*.id)
     }
 
     void testServiceHelpUsesCanonicalJenkinsPath() {
@@ -52,6 +53,17 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
         assertEquals(0, captured.code)
         assertTrue(captured.out.contains(
             'Usage: ai-worklog service jenkins artifacts <controller> <job> <build_selector>'
+        ))
+        assertEquals('', captured.err)
+    }
+
+    void testServiceHelpUsesCanonicalAutomoxPath() {
+        Map captured = captureStreams {
+            Main.execute(['service', 'automox', 'device-packages', '--help'])
+        }
+        assertEquals(0, captured.code)
+        assertTrue(captured.out.contains(
+            'Usage: ai-worklog service automox device-packages <device>'
         ))
         assertEquals('', captured.err)
     }

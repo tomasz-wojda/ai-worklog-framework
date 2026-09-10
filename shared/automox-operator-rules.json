@@ -1,0 +1,151 @@
+{
+  "api_base_url": "https://console.automox.com/api",
+  "default_profile": "default",
+  "timeouts": {
+    "http_seconds": 10,
+    "process_seconds": 15,
+    "mutation_seconds": 30
+  },
+  "limits": {
+    "response_body_max_characters": 1048576,
+    "error_body_max_characters": 4096,
+    "devices_default": 500,
+    "devices_max": 500,
+    "groups_default": 500,
+    "groups_max": 500,
+    "policies_default": 500,
+    "policies_max": 500,
+    "packages_default": 500,
+    "packages_max": 500,
+    "packages_preview": 30,
+    "activity_default": 500,
+    "activity_max": 500,
+    "patch_summary_default": 500,
+    "patch_summary_max": 500,
+    "queue_default": 50,
+    "queue_max": 200,
+    "inventory_max": 500,
+    "history_max": 50000
+  },
+  "pagination": {
+    "page_size": 500,
+    "max_pages": 100
+  },
+  "polling": {
+    "default_interval_seconds": 5,
+    "max_wait_seconds": 900
+  },
+  "api_paths": {
+    "orgs": "/orgs",
+    "servers": "/servers",
+    "server": "/servers/{id}",
+    "server_packages": "/servers/{id}/packages",
+    "groups": "/servergroups",
+    "group": "/servergroups/{id}",
+    "policies": "/policies",
+    "policy": "/policies/{id}",
+    "policy_stats": "/policystats",
+    "events": "/events",
+    "server_queues": "/servers/{id}/queues",
+    "policy_actions": "/policies/{id}/action"
+  },
+  "success_codes": {
+    "read": [200],
+    "mutation": [200, 201, 204],
+    "device_move": [200, 204],
+    "policy_update": [200, 204],
+    "policy_delete": [200, 204],
+    "policy_action": [200, 204]
+  },
+  "queue_terminal_statuses": [
+    "completed",
+    "failed",
+    "cancelled",
+    "error",
+    "timed_out"
+  ],
+  "schedule": {
+    "day_bits": {
+      "1": "Sun",
+      "2": "Mon",
+      "4": "Tue",
+      "8": "Wed",
+      "16": "Thu",
+      "32": "Fri",
+      "64": "Sat"
+    },
+    "week_bits": {
+      "1": 1,
+      "2": 2,
+      "4": 3,
+      "8": 4,
+      "16": 5
+    },
+    "all_months_value": 8190
+  },
+  "policy_update": {
+    "required_fields": [
+      "name",
+      "organization_id",
+      "policy_type_name",
+      "configuration",
+      "schedule_days",
+      "schedule_weeks_of_month",
+      "schedule_months",
+      "schedule_time",
+      "notes",
+      "server_groups"
+    ],
+    "rename_suffix": "-TMP",
+    "success_codes": [200, 204]
+  },
+  "device_move": {
+    "success_codes": [200, 204]
+  },
+  "worklet": {
+    "max_file_bytes": 65536,
+    "policy_type_name": "custom",
+    "os_family": "Linux",
+    "unscheduled_schedule_days": 0,
+    "unscheduled_schedule_weeks_of_month": 0,
+    "unscheduled_schedule_months": 0
+  },
+  "unreliable_fields": [
+    "next_remediation"
+  ],
+  "event_types": {
+    "patch_applied": "system.patch.applied",
+    "patch_failed": "system.patch.failed",
+    "policy_action": "system.policy.action"
+  },
+  "csv_columns": {
+    "device_packages": [
+      "hostname",
+      "host_short_name",
+      "package_name",
+      "package_display_name",
+      "package_version",
+      "installed",
+      "pending",
+      "severity",
+      "cve_score",
+      "cves",
+      "repo",
+      "requires_reboot"
+    ],
+    "patch_summary": [
+      "hostname",
+      "host_short_name",
+      "update_date",
+      "update_time_utc",
+      "host_ip",
+      "os_name",
+      "package_name",
+      "package_display_name",
+      "package_version",
+      "requires_reboot",
+      "repo",
+      "outcome"
+    ]
+  }
+}

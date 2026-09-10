@@ -13,6 +13,16 @@
       "max_builds": 5,
       "required_plugins": [],
       "credential_domain": "_"
+    },
+    "automox": {
+      "timeout_seconds": 10,
+      "api_base_url": "https://console.automox.com/api",
+      "org": "000000",
+      "domain": "example.internal",
+      "default_profile": "default",
+      "devices_limit": 500,
+      "groups_limit": 500,
+      "policies_limit": 500
     }
   },
   "toolchain": {
