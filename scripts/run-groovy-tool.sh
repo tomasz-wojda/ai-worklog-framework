@@ -23,7 +23,8 @@ case "${TOOL}" in
         exit 1
         ;;
     newrelic-cli)
-        GROOVY_SCRIPT="${AI_WORKLOG_WORKSPACE}/newrelic/newrelic-info.groovy"
+        echo "Command moved: use 'ai-worklog service newrelic ...'" >&2
+        exit 1
         ;;
     jenkins-syntax-check)
         AI_VAULT_ROOT="${AI_VAULT_ROOT:-${AI_WORKLOG_WORKSPACE}/repos/ai-vault}"

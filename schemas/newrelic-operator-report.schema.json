@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "New Relic Operator Report",
+  "type": "object",
+  "required": ["operation", "fetched_at", "status", "items"],
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": [
+        "profiles",
+        "auth-test",
+        "whoami",
+        "applications",
+        "application",
+        "hosts",
+        "deployments",
+        "violations",
+        "issues",
+        "incidents",
+        "errors",
+        "nrql",
+        "entities",
+        "dashboards",
+        "dashboard",
+        "dashboard-export",
+        "alert-policies",
+        "alert-policy",
+        "alert-conditions",
+        "alert-condition",
+        "alert-condition-create",
+        "alert-condition-update",
+        "dashboard-create",
+        "dashboard-page-create",
+        "dashboard-page-update",
+        "dashboard-widget-create",
+        "dashboard-widget-update"
+      ]
+    },
+    "fetched_at": {"type": "string", "format": "date-time"},
+    "status": {
+      "type": "string",
+      "enum": ["ready", "degraded", "blocked", "error", "unknown"]
+    },
+    "profile": {"type": "string"},
+    "account_id": {"type": "string"},
+    "message": {"type": "string"},
+    "application": {"type": "string"},
+    "dashboard": {"type": "string"},
+    "policy": {"type": "string"},
+    "condition": {"type": "string"},
+    "page": {"type": "string"},
+    "widget": {"type": "string"},
+    "query": {"type": "string"},
+    "dry_run": {"type": "boolean"},
+    "applied": {"type": "boolean"},
+    "truncated": {"type": "boolean"},
+    "filters": {"type": "object"},
+    "totals": {"type": "object"},
+    "change": {
+      "type": "object",
+      "properties": {
+        "applied": {"type": "boolean"},
+        "dry_run": {"type": "boolean"},
+        "target": {"type": "object"},
+        "steps": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "format": {"type": "string"},
+        "path": {"type": "string"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string"},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {"type": "string"},
+              "size_bytes": {"type": "integer", "minimum": 0},
+              "sha256": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "definition": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "items": {"type": "object"}
+    }
+  },
+  "additionalProperties": false
+}

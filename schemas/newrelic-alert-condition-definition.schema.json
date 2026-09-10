@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "New Relic Static NRQL Alert Condition Definition",
+  "type": "object",
+  "required": ["name", "enabled", "nrql", "signal", "terms", "violationTimeLimitSeconds"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "enabled": {"type": "boolean"},
+    "nrql": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "query": {"type": "string", "minLength": 1},
+        "dataAccountId": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "signal": {
+      "type": "object",
+      "required": ["aggregationWindow"],
+      "properties": {
+        "aggregationWindow": {"type": "integer", "minimum": 1},
+        "aggregationMethod": {"type": "string"},
+        "aggregationDelay": {"type": "integer", "minimum": 0},
+        "fillOption": {"type": "string"},
+        "fillValue": {"type": "number"},
+        "evaluationDelay": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "terms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["priority", "operator", "threshold", "thresholdDuration", "thresholdOccurrences"],
+        "properties": {
+          "priority": {"type": "string", "enum": ["CRITICAL", "WARNING"]},
+          "operator": {"type": "string", "enum": ["ABOVE", "BELOW", "EQUAL", "NOT_EQUAL"]},
+          "threshold": {"type": "number"},
+          "thresholdDuration": {"type": "integer", "minimum": 1},
+          "thresholdOccurrences": {"type": "string", "enum": ["ALL", "AT_LEAST_ONCE"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "valueFunction": {"type": "string", "enum": ["SINGLE_VALUE", "SUM"]},
+    "violationTimeLimitSeconds": {"type": "integer", "minimum": 300, "maximum": 2592000}
+  },
+  "additionalProperties": false
+}

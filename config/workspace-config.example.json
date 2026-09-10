@@ -23,6 +23,28 @@
       "devices_limit": 500,
       "groups_limit": 500,
       "policies_limit": 500
+    },
+    "newrelic": {
+      "read_timeout_seconds": 15,
+      "mutation_timeout_seconds": 30,
+      "rest_base_url": "https://api.eu.newrelic.com/v2",
+      "graphql_url": "https://api.eu.newrelic.com/graphql",
+      "account_id": "0000000",
+      "default_profile": "default",
+      "applications_limit": 500,
+      "hosts_limit": 500,
+      "deployments_limit": 500,
+      "violations_limit": 500,
+      "issues_limit": 200,
+      "incidents_limit": 200,
+      "errors_hours": 1,
+      "errors_limit": 50,
+      "nrql_rows_limit": 500,
+      "entities_limit": 500,
+      "dashboards_limit": 500,
+      "alert_policies_limit": 500,
+      "alert_conditions_limit": 500,
+      "definition_file_max_bytes": 1048576
     }
   },
   "toolchain": {

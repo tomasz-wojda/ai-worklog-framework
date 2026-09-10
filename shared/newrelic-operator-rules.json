@@ -1,0 +1,113 @@
+{
+  "rest_base_url": "https://api.eu.newrelic.com/v2",
+  "graphql_url": "https://api.eu.newrelic.com/graphql",
+  "default_profile": "default",
+  "timeouts": {
+    "read_seconds": 15,
+    "mutation_seconds": 30
+  },
+  "limits": {
+    "response_body_max_characters": 4194304,
+    "error_body_max_characters": 8192,
+    "definition_file_max_bytes": 1048576,
+    "applications_default": 500,
+    "applications_max": 500,
+    "hosts_default": 500,
+    "hosts_max": 500,
+    "deployments_default": 500,
+    "deployments_max": 500,
+    "violations_default": 500,
+    "violations_max": 500,
+    "issues_default": 200,
+    "issues_max": 500,
+    "incidents_default": 200,
+    "incidents_max": 500,
+    "errors_hours_default": 1,
+    "errors_hours_max": 168,
+    "errors_limit_default": 50,
+    "errors_limit_max": 500,
+    "nrql_rows_default": 500,
+    "nrql_rows_max": 5000,
+    "entities_default": 500,
+    "entities_max": 500,
+    "dashboards_default": 500,
+    "dashboards_max": 500,
+    "alert_policies_default": 500,
+    "alert_policies_max": 500,
+    "alert_conditions_default": 500,
+    "alert_conditions_max": 500
+  },
+  "pagination": {
+    "rest_max_pages": 100,
+    "entity_cursor_max_pages": 100
+  },
+  "api_paths": {
+    "applications": "/applications.json",
+    "application": "/applications/{id}.json",
+    "application_hosts": "/applications/{id}/hosts.json",
+    "application_deployments": "/applications/{id}/deployments.json",
+    "violations": "/alerts_violations.json",
+    "alert_policies": "/alerts_policies.json",
+    "alert_policy": "/alerts_policies/{id}.json",
+    "alert_conditions": "/alerts_conditions.json",
+    "alert_nrql_conditions": "/alerts_nrql_conditions.json",
+    "alert_external_service_conditions": "/alerts_external_service_conditions.json",
+    "alert_synthetics_conditions": "/alerts_synthetics_conditions.json",
+    "alert_condition": "/alerts_nrql_conditions/{id}.json",
+    "alert_apm_condition": "/alerts_conditions/{id}.json",
+    "alert_external_condition": "/alerts_external_service_conditions/{id}.json",
+    "alert_synthetics_condition": "/alerts_synthetics_conditions/{id}.json"
+  },
+  "graphql_operations": {
+    "user": {
+      "kind": "query",
+      "root": "actor.user"
+    },
+    "entity_search": {
+      "kind": "query",
+      "root": "actor.entitySearch"
+    },
+    "entity_detail": {
+      "kind": "query",
+      "root": "actor.entity"
+    },
+    "ai_issues": {
+      "kind": "query",
+      "root": "actor.account.aiIssues"
+    },
+    "ai_incidents": {
+      "kind": "query",
+      "root": "actor.account.aiIssues.nrAiIncidents"
+    },
+    "nrql": {
+      "kind": "query",
+      "root": "actor.account.nrql"
+    }
+  },
+  "graphql_mutations": [
+    "alertsNrqlConditionStaticCreate",
+    "alertsNrqlConditionStaticUpdate",
+    "dashboardCreate",
+    "dashboardCreatePage",
+    "dashboardUpdatePage",
+    "dashboardCreateWidget",
+    "dashboardUpdateWidget"
+  ],
+  "success_codes": {
+    "read": [200],
+    "mutation": [200]
+  },
+  "condition_types": {
+    "apm": "conditions",
+    "nrql": "nrql_conditions",
+    "external": "external_service_conditions",
+    "synthetics": "synthetics_conditions"
+  },
+  "errors_facets": {
+    "summary_limit": 1,
+    "class_limit": 25,
+    "message_limit": 50,
+    "transaction_limit": 25,
+    "host_limit": 25
+  }
+}

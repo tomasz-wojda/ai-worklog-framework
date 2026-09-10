@@ -100,6 +100,45 @@ commands:
         )
     }
 
+    void testNewRelicRenderingListsTwentySevenActions() {
+        List<Map> actions = contract.children(['service', 'newrelic'])
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'newrelic'])
+        assertEquals(27, actions.size())
+        actions*.name.each { assertTrue(rendered.contains(it.toString())) }
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'newrelic', 'alert-condition-create'])
+                .contains('<policy_id> <definition_file>')
+        )
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'newrelic', 'dashboard-export'])
+                .contains('dry-run unless --apply')
+        )
+    }
+
+    void testNewRelicDefaultsResolveFromOperatorRules() {
+        Map newrelicRules = (Map) JsonFiles.read(
+            new File(repository, 'shared/newrelic-operator-rules.json'),
+            [:]
+        )
+        assertEquals(
+            newrelicRules.limits.applications_default.toString(),
+            parser().parse('newrelic', newRelicAction('applications'), [], newrelicRules)
+                .value('--limit').toString()
+        )
+        assertEquals(
+            newrelicRules.limits.errors_hours_default.toString(),
+            parser().parse('newrelic', newRelicAction('errors'), ['12345'], newrelicRules)
+                .value('--hours').toString()
+        )
+        assertEquals(
+            newrelicRules.limits.nrql_rows_default.toString(),
+            parser().parse('newrelic', newRelicAction('nrql'), ['SELECT 1'], newrelicRules)
+                .value('--limit').toString()
+        )
+    }
+
     void testArtifactsRenderingDocumentsPositionalsAndSelectors() {
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'artifacts'])
         assertTrue(rendered.contains('<controller> <job> <build_selector>'))
@@ -263,6 +302,10 @@ commands:
 
     private Map jenkinsAction(String name) {
         contract.node(['service', 'jenkins', name])
+    }
+
+    private Map newRelicAction(String name) {
+        contract.node(['service', 'newrelic', name])
     }
 
     private String failure(String action, List<String> args) {

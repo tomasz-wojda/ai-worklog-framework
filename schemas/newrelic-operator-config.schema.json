@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "New Relic Operator Config",
+  "type": "object",
+  "properties": {
+    "read_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+    "mutation_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300},
+    "rest_base_url": {"type": "string", "format": "uri"},
+    "graphql_url": {"type": "string", "format": "uri"},
+    "account_id": {"type": "string", "pattern": "^[0-9]+$"},
+    "default_profile": {"type": "string"},
+    "applications_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "hosts_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "deployments_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "violations_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "issues_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "incidents_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "errors_hours": {"type": "integer", "minimum": 1, "maximum": 168},
+    "errors_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "nrql_rows_limit": {"type": "integer", "minimum": 1, "maximum": 5000},
+    "entities_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "dashboards_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "alert_policies_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "alert_conditions_limit": {"type": "integer", "minimum": 1, "maximum": 500},
+    "definition_file_max_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576}
+  },
+  "additionalProperties": false
+}

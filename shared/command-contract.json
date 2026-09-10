@@ -8,7 +8,10 @@
       "description": "Select the command runtime",
       "takes_value": true,
       "value": {
-        "choices": ["groovy", "python"],
+        "choices": [
+          "groovy",
+          "python"
+        ],
         "help_values": "groovy | python"
       }
     },
@@ -137,19 +140,6 @@
       "description": "External service operators",
       "kind": "command",
       "subcommands": [
-        {
-          "name": "list",
-          "description": "List implemented service operators",
-          "kind": "action",
-          "positionals": [],
-          "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
-          ]
-        },
         {
           "name": "automox",
           "description": "Automox operator",
@@ -322,7 +312,11 @@
                   "description": "Filter devices by connection state",
                   "takes_value": true,
                   "value": {
-                    "choices": ["all", "connected", "disconnected"],
+                    "choices": [
+                      "all",
+                      "connected",
+                      "disconnected"
+                    ],
                     "help_values": "all | connected | disconnected"
                   }
                 },
@@ -402,7 +396,11 @@
                   "description": "Filter packages by installation state",
                   "takes_value": true,
                   "value": {
-                    "choices": ["all", "pending", "installed"],
+                    "choices": [
+                      "all",
+                      "pending",
+                      "installed"
+                    ],
                     "help_values": "all | pending | installed"
                   }
                 },
@@ -608,7 +606,11 @@
                   "description": "Filter policies by type",
                   "takes_value": true,
                   "value": {
-                    "choices": ["all", "patch", "custom"],
+                    "choices": [
+                      "all",
+                      "patch",
+                      "custom"
+                    ],
                     "help_values": "all | patch | custom"
                   }
                 },
@@ -1007,232 +1009,6 @@
           ]
         },
         {
-          "name": "jira",
-          "description": "Jira and Tempo operator",
-          "kind": "service",
-          "subcommands": [
-            {
-              "name": "ticket",
-              "description": "Show full Jira ticket details, comments, links, assignment, and worklogs",
-              "kind": "action",
-              "positionals": [
-                {
-                  "name": "ticket_key",
-                  "description": "Jira ticket key",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
-                    "help_values": "TICKET-KEY"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
-              ]
-            },
-            {
-              "name": "summary",
-              "description": "Summarize tickets assigned to the current user",
-              "kind": "action",
-              "positionals": [],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
-              ]
-            },
-            {
-              "name": "rejected",
-              "description": "List assigned tickets in the configured rejected column",
-              "kind": "action",
-              "positionals": [],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
-              ]
-            },
-            {
-              "name": "reporter",
-              "description": "List tickets reported by a display name",
-              "kind": "action",
-              "positionals": [
-                {
-                  "name": "display_name",
-                  "description": "Reporter display name",
-                  "required": true,
-                  "variadic": true,
-                  "value": {
-                    "help_values": "DISPLAY-NAME"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
-              ]
-            },
-            {
-              "name": "tempo",
-              "description": "Show Tempo worklogs for one date",
-              "kind": "action",
-              "positionals": [
-                {
-                  "name": "date",
-                  "description": "Date; defaults to today",
-                  "required": false,
-                  "value": {
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                    "help_values": "YYYY-MM-DD"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
-              ]
-            },
-            {
-              "name": "verify",
-              "description": "Compare workspace worklogs with Tempo for one date",
-              "kind": "action",
-              "positionals": [
-                {
-                  "name": "date",
-                  "description": "Date; defaults to today",
-                  "required": false,
-                  "value": {
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                    "help_values": "YYYY-MM-DD"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
-              ]
-            },
-            {
-              "name": "whoami",
-              "description": "Show the authenticated Jira identity",
-              "kind": "action",
-              "positionals": [],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
-              ]
-            },
-            {
-              "name": "log-time",
-              "description": "Log Tempo time; dry-run unless --apply is supplied",
-              "kind": "action",
-              "positionals": [
-                {
-                  "name": "ticket_key",
-                  "description": "Jira ticket key",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
-                    "help_values": "TICKET-KEY"
-                  }
-                },
-                {
-                  "name": "date",
-                  "description": "Worklog date",
-                  "required": true,
-                  "value": {
-                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                    "help_values": "YYYY-MM-DD"
-                  }
-                },
-                {
-                  "name": "seconds",
-                  "description": "Positive duration in seconds",
-                  "required": true,
-                  "value": {
-                    "integer_min": 1,
-                    "help_values": "SECONDS"
-                  }
-                },
-                {
-                  "name": "comment",
-                  "description": "Tempo worklog comment",
-                  "required": true,
-                  "variadic": true,
-                  "value": {
-                    "help_values": "COMMENT"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--apply",
-                  "description": "Create the Tempo worklog",
-                  "takes_value": false
-                }
-              ]
-            }
-          ]
-        },
-        {
           "name": "jenkins",
           "description": "Jenkins operator",
           "kind": "service",
@@ -1560,7 +1336,10 @@
                   "description": "Build to inspect: last successful, last completed, or a positive build number",
                   "required": true,
                   "value": {
-                    "choices": ["last-successful", "last-completed"],
+                    "choices": [
+                      "last-successful",
+                      "last-completed"
+                    ],
                     "pattern": "^[1-9][0-9]*$",
                     "help_values": "last-successful | last-completed | BUILD_NUMBER"
                   }
@@ -1600,7 +1379,10 @@
                   "description": "Build to inspect: last successful, last completed, or a positive build number",
                   "required": true,
                   "value": {
-                    "choices": ["last-successful", "last-completed"],
+                    "choices": [
+                      "last-successful",
+                      "last-completed"
+                    ],
                     "pattern": "^[1-9][0-9]*$",
                     "help_values": "last-successful | last-completed | BUILD_NUMBER"
                   }
@@ -1702,6 +1484,1527 @@
                 {
                   "name": "--json",
                   "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "jira",
+          "description": "Jira and Tempo operator",
+          "kind": "service",
+          "subcommands": [
+            {
+              "name": "ticket",
+              "description": "Show full Jira ticket details, comments, links, assignment, and worklogs",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "ticket_key",
+                  "description": "Jira ticket key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "TICKET-KEY"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "summary",
+              "description": "Summarize tickets assigned to the current user",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "rejected",
+              "description": "List assigned tickets in the configured rejected column",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "reporter",
+              "description": "List tickets reported by a display name",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "display_name",
+                  "description": "Reporter display name",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "DISPLAY-NAME"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum tickets to include",
+                  "takes_value": true,
+                  "default_from": "limits.search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "tempo",
+              "description": "Show Tempo worklogs for one date",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "date",
+                  "description": "Date; defaults to today",
+                  "required": false,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "verify",
+              "description": "Compare workspace worklogs with Tempo for one date",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "date",
+                  "description": "Date; defaults to today",
+                  "required": false,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "whoami",
+              "description": "Show the authenticated Jira identity",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "log-time",
+              "description": "Log Tempo time; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "ticket_key",
+                  "description": "Jira ticket key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "TICKET-KEY"
+                  }
+                },
+                {
+                  "name": "date",
+                  "description": "Worklog date",
+                  "required": true,
+                  "value": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "help_values": "YYYY-MM-DD"
+                  }
+                },
+                {
+                  "name": "seconds",
+                  "description": "Positive duration in seconds",
+                  "required": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "SECONDS"
+                  }
+                },
+                {
+                  "name": "comment",
+                  "description": "Tempo worklog comment",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "COMMENT"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the Tempo worklog",
+                  "takes_value": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "list",
+          "description": "List implemented service operators",
+          "kind": "action",
+          "positionals": [],
+          "options": [
+            {
+              "name": "--json",
+              "description": "Emit the machine-readable report",
+              "takes_value": false
+            }
+          ]
+        },
+        {
+          "name": "newrelic",
+          "description": "New Relic operator",
+          "kind": "service",
+          "subcommands": [
+            {
+              "name": "profiles",
+              "description": "List configured New Relic profiles without exposing credentials",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "auth-test",
+              "description": "Validate the API key and account through NerdGraph",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "whoami",
+              "description": "Show the authenticated NerdGraph user",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "applications",
+              "description": "List APM applications with optional name filter",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter application names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of applications",
+                  "takes_value": true,
+                  "default_from": "limits.applications_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "application",
+              "description": "Show one REST v2 application",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "app_id",
+                  "description": "Application id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "APP_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "hosts",
+              "description": "List application hosts with optional name filter",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "app_id",
+                  "description": "Application id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "APP_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter host names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of hosts",
+                  "takes_value": true,
+                  "default_from": "limits.hosts_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "deployments",
+              "description": "List application deployments within an optional date range",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "app_id",
+                  "description": "Application id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "APP_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include deployments on or after this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include deployments on or before this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of deployments",
+                  "takes_value": true,
+                  "default_from": "limits.deployments_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "violations",
+              "description": "List legacy open alert violations",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Filter by alert policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--entity",
+                  "description": "Filter by entity name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--priority",
+                  "description": "Filter by violation priority",
+                  "takes_value": true,
+                  "value": {
+                    "choices": [
+                      "critical",
+                      "warning",
+                      "all"
+                    ],
+                    "help_values": "critical | warning | all"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of violations",
+                  "takes_value": true,
+                  "default_from": "limits.violations_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "issues",
+              "description": "List NerdGraph AI issues",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--state",
+                  "description": "Filter by issue state",
+                  "takes_value": true,
+                  "value": {
+                    "choices": [
+                      "activated",
+                      "closed",
+                      "all"
+                    ],
+                    "help_values": "activated | closed | all"
+                  }
+                },
+                {
+                  "name": "--priority",
+                  "description": "Filter by issue priority",
+                  "takes_value": true,
+                  "value": {
+                    "choices": [
+                      "critical",
+                      "warning",
+                      "all"
+                    ],
+                    "help_values": "critical | warning | all"
+                  }
+                },
+                {
+                  "name": "--entity",
+                  "description": "Filter by entity name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include issues on or after this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include issues on or before this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of issues",
+                  "takes_value": true,
+                  "default_from": "limits.issues_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "incidents",
+              "description": "List NrAiIncident investigation rows",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--issue",
+                  "description": "Filter by AI issue id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--condition",
+                  "description": "Filter by alert condition id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--entity",
+                  "description": "Filter by entity name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include incidents on or after this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include incidents on or before this date",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "YYYY-MM-DD | ISO 8601"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of incidents",
+                  "takes_value": true,
+                  "default_from": "limits.incidents_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "errors",
+              "description": "Summarize TransactionError facets and timeline for one application",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "app_id",
+                  "description": "Application id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "APP_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--hours",
+                  "description": "Lookback window in hours",
+                  "takes_value": true,
+                  "default_from": "limits.errors_hours_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 168,
+                    "help_values": "HOURS"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum facet rows per dimension",
+                  "takes_value": true,
+                  "default_from": "limits.errors_limit_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "nrql",
+              "description": "Run arbitrary NRQL through NerdGraph using exactly one inline query or file source",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "query",
+                  "description": "Inline NRQL query",
+                  "required": false,
+                  "value": {
+                    "help_values": "QUERY"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--file",
+                  "description": "Path to a UTF-8 NRQL file",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of NRQL rows",
+                  "takes_value": true,
+                  "default_from": "limits.nrql_rows_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 5000,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "entities",
+              "description": "Search entities with cursor pagination",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Entity search query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--domain",
+                  "description": "Filter by entity domain",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "DOMAIN"
+                  }
+                },
+                {
+                  "name": "--type",
+                  "description": "Filter by entity type",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TYPE"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of entities",
+                  "takes_value": true,
+                  "default_from": "limits.entities_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "dashboards",
+              "description": "List dashboards with optional filters",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter dashboard names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--owner",
+                  "description": "Filter by owner email",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "EMAIL"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of dashboards",
+                  "takes_value": true,
+                  "default_from": "limits.dashboards_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "dashboard",
+              "description": "Show dashboard metadata, pages, widgets, and configuration",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "dashboard_guid",
+                  "description": "Dashboard entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "dashboard-export",
+              "description": "Export one dashboard as JSON or Terraform; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "dashboard_guid",
+                  "description": "Dashboard entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--format",
+                  "description": "Export format",
+                  "takes_value": true,
+                  "value": {
+                    "choices": [
+                      "json",
+                      "terraform"
+                    ],
+                    "help_values": "json | terraform"
+                  }
+                },
+                {
+                  "name": "--output",
+                  "description": "Workspace-local output directory or file path",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Write export files to the workspace",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "description": "Replace existing regular destination files",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "alert-policies",
+              "description": "List alert policies with optional name filter",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter policy names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of alert policies",
+                  "takes_value": true,
+                  "default_from": "limits.alert_policies_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "alert-policy",
+              "description": "Show one alert policy and linked conditions",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Alert policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "POLICY_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "alert-conditions",
+              "description": "List alert conditions across REST and NerdGraph sources",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Filter by alert policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--entity",
+                  "description": "Filter by entity guid",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "GUID"
+                  }
+                },
+                {
+                  "name": "--type",
+                  "description": "Filter by condition type",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TYPE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter condition names by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of alert conditions",
+                  "takes_value": true,
+                  "default_from": "limits.alert_conditions_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "alert-condition",
+              "description": "Show one alert condition with signal, terms, and metadata",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "condition_id",
+                  "description": "Alert condition id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "CONDITION_ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "alert-condition-create",
+              "description": "Create a static NRQL alert condition; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "policy_id",
+                  "description": "Alert policy id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "POLICY_ID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a static NRQL condition definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-policy",
+                  "description": "Confirm creation with the exact policy id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "POLICY_ID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the alert condition",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "alert-condition-update",
+              "description": "Update a static NRQL alert condition; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "condition_id",
+                  "description": "Alert condition id",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "CONDITION_ID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a static NRQL condition definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-name",
+                  "description": "Confirm update with the exact current condition name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "NAME"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Update the alert condition",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "dashboard-create",
+              "description": "Create a dashboard; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "definition_file",
+                  "description": "Path to a dashboard definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-account",
+                  "description": "Confirm creation with the exact account id",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ACCOUNT_ID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the dashboard",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "dashboard-page-create",
+              "description": "Create a dashboard page; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "dashboard_guid",
+                  "description": "Dashboard entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a dashboard page definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-dashboard",
+                  "description": "Confirm creation with the exact dashboard guid",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the dashboard page",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "dashboard-page-update",
+              "description": "Update a dashboard page; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "page_guid",
+                  "description": "Dashboard page entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "PAGE-GUID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a dashboard page definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-name",
+                  "description": "Confirm update with the exact current page name",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "NAME"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Update the dashboard page",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "dashboard-widget-create",
+              "description": "Create a dashboard widget; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "dashboard_guid",
+                  "description": "Dashboard entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                },
+                {
+                  "name": "page_guid",
+                  "description": "Dashboard page entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "PAGE-GUID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a dashboard widget definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-dashboard",
+                  "description": "Confirm creation with the exact dashboard guid",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "DASHBOARD-GUID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the dashboard widget",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "dashboard-widget-update",
+              "description": "Update a dashboard widget; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "widget_guid",
+                  "description": "Dashboard widget entity guid",
+                  "required": true,
+                  "value": {
+                    "help_values": "WIDGET-GUID"
+                  }
+                },
+                {
+                  "name": "definition_file",
+                  "description": "Path to a dashboard widget definition file",
+                  "required": true,
+                  "value": {
+                    "help_values": "FILE"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "New Relic profile id from newrelic.properties",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--confirm-name",
+                  "description": "Confirm update with the exact current widget title",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TITLE"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Update the dashboard widget",
                   "takes_value": false
                 }
               ]

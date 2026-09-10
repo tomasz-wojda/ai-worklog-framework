@@ -59,12 +59,30 @@ class PreflightStatesTest extends GroovyTestCase {
 
     void testNotConfiguredDoesNotBlockOverall() {
         service('datadog')
-        service('newrelic', true)
+        File newrelicDir = service('newrelic')
+        new File(newrelicDir, 'newrelic.properties').setText('primary.api_key=x', 'UTF-8')
         ResultSet results = new ResultSet()
         PreflightCommands.checkServiceDirectory(results, paths, 'datadog')
-        PreflightCommands.checkServiceDirectory(results, paths, 'newrelic')
+        PreflightCommands.checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
         assertEquals(Status.READY, results.overallStatus())
         assertEquals([], results.actionable())
+    }
+
+    void testNewRelicMissingPropertiesFileIsDegradedWhenDirectoryPopulated() {
+        service('newrelic', true)
+        ResultSet results = new ResultSet()
+        PreflightCommands.checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
+        CheckResult result = only(results)
+        assertEquals(Status.DEGRADED, result.status)
+        assertEquals('newrelic.properties missing', result.message)
+    }
+
+    void testNewRelicPropertiesPresentIsReady() {
+        File directory = service('newrelic')
+        new File(directory, 'newrelic.properties').setText('primary.api_key=x', 'UTF-8')
+        ResultSet results = new ResultSet()
+        PreflightCommands.checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
+        assertEquals(Status.READY, only(results).status)
     }
 
     void testAllNotConfiguredIsStillReady() {

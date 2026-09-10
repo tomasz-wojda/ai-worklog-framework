@@ -41,7 +41,9 @@ class PreflightCommands {
             checkServiceFile(results, paths, 'automox', 'automox.properties')
         }
         if (selected(scope, 'argocd')) checkBinary(results, 'argocd')
-        if (selected(scope, 'newrelic')) checkServiceDirectory(results, paths, 'newrelic')
+        if (selected(scope, 'newrelic')) {
+            checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
+        }
         if (selected(scope, 'datadog')) checkServiceDirectory(results, paths, 'datadog')
         if (selected(scope, 'repositories')) checkRepositories(results, paths, scope)
         if (selected(scope, 'catalog_binaries')) {

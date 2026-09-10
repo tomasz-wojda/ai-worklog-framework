@@ -29,10 +29,11 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
             ServiceCommands.run('list', [], repository, paths, ConfigLoader.load(workspace))
         }
         assertEquals(0, captured.code)
-        assertTrue(captured.out.contains('Service operators (3):'))
-        assertTrue(captured.out.contains('automox: Automox operator'))
-        assertTrue(captured.out.contains('jira: Jira and Tempo operator'))
-        assertTrue(captured.out.contains('jenkins: Jenkins operator'))
+        assertTrue(captured.out.contains('Service operators (4):'))
+        assertTrue(captured.out.contains('  automox : Automox operator'))
+        assertTrue(captured.out.contains('  jenkins : Jenkins operator'))
+        assertTrue(captured.out.contains('  jira    : Jira and Tempo operator'))
+        assertTrue(captured.out.contains('  newrelic: New Relic operator'))
         assertEquals('', captured.err)
     }
 
@@ -43,7 +44,7 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
         Map report = (Map) new JsonSlurper().parseText(captured.out)
         assertEquals(0, captured.code)
         assertEquals('ready', report.status)
-        assertEquals(['automox', 'jenkins', 'jira'], report.items*.id)
+        assertEquals(['automox', 'jenkins', 'jira', 'newrelic'], report.items*.id)
     }
 
     void testServiceHelpUsesCanonicalJenkinsPath() {
@@ -66,6 +67,30 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
             'Usage: ai-worklog service automox device-packages <device>'
         ))
         assertEquals('', captured.err)
+    }
+
+    void testServiceHelpUsesCanonicalNewRelicPath() {
+        Map captured = captureStreams {
+            Main.execute(['service', 'newrelic', 'nrql', '--help'])
+        }
+        assertEquals(0, captured.code)
+        assertTrue(captured.out.contains(
+            'Usage: ai-worklog service newrelic nrql [query]'
+        ))
+        assertEquals('', captured.err)
+    }
+
+    void testRemovedNewRelicCliFailsWithMigrationGuidance() {
+        Process process = new ProcessBuilder(
+            [new File(repository, 'scripts/run-groovy-tool.sh').absolutePath, 'newrelic-cli', 'violations']
+        ).directory(repository).start()
+        int code = process.waitFor()
+        assertEquals(1, code)
+        assertEquals('', process.inputStream.getText('UTF-8'))
+        assertEquals(
+            "Command moved: use 'ai-worklog service newrelic ...'\n",
+            process.errorStream.getText('UTF-8')
+        )
     }
 
     void testRemovedJenkinsPathFailsWithMigrationGuidance() {

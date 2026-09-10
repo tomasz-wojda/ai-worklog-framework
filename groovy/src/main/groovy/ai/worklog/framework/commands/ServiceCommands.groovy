@@ -45,7 +45,8 @@ class ServiceCommands {
                     ]))
                 } else {
                     println "Service operators (${items.size()}):"
-                    items.each { println "  ${it.id}: ${it.description}" }
+                    int width = items.collect { it.id.toString().size() }.max() as int
+                    items.each { println "  ${it.id.toString().padRight(width)}: ${it.description}" }
                 }
                 return exitCodes.success
             } catch (UsageError exception) {
@@ -66,6 +67,10 @@ class ServiceCommands {
         if (service == 'jira') {
             String action = args ? args.remove(0) : null
             return JiraCommands.run(action, args, frameworkRoot, paths)
+        }
+        if (service == 'newrelic') {
+            String action = args ? args.remove(0) : null
+            return NewRelicCommands.run(action, args, frameworkRoot, paths, config)
         }
         System.err.println("Unknown service: ${service}")
         System.err.println()

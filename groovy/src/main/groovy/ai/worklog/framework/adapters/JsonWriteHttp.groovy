@@ -18,6 +18,17 @@ class JsonWriteHttp {
         return send('POST', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
     }
 
+    Map post(
+        String url,
+        Map headers,
+        Map payload,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters,
+        int responseBodyMaxCharacters
+    ) {
+        return send('POST', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters, responseBodyMaxCharacters)
+    }
+
     Map put(
         String url,
         Map headers,
@@ -45,7 +56,23 @@ class JsonWriteHttp {
         int timeoutSeconds,
         int errorBodyMaxCharacters
     ) {
+        send(method, url, headers, payload, timeoutSeconds, errorBodyMaxCharacters, 0)
+    }
+
+    Map send(
+        String method,
+        String url,
+        Map headers,
+        Object payload,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters,
+        int responseBodyMaxCharacters
+    ) {
         if (requestHandler) {
+            if (requestHandler.maximumNumberOfParameters >= 7) {
+                return requestHandler(method, url, headers, payload, timeoutSeconds,
+                    errorBodyMaxCharacters, responseBodyMaxCharacters)
+            }
             if (requestHandler.maximumNumberOfParameters >= 6) {
                 return requestHandler(method, url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
             }
@@ -81,8 +108,11 @@ class JsonWriteHttp {
             }
             int code = connection.responseCode
             InputStream stream = code >= 400 ? connection.errorStream : connection.inputStream
+            int bodyLimit = code >= 400 ?
+                errorBodyMaxCharacters :
+                (responseBodyMaxCharacters > 0 ? responseBodyMaxCharacters : errorBodyMaxCharacters)
             String responseBody = stream ?
-                new String(stream.readNBytes(errorBodyMaxCharacters), StandardCharsets.UTF_8) :
+                new String(stream.readNBytes(bodyLimit), StandardCharsets.UTF_8) :
                 ''
             stream?.close()
             [
