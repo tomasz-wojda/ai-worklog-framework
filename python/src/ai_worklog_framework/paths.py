@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from ai_worklog_framework.global_config import resolve_workspace_selection
+from ai_worklog_framework.journal_validation import journal_db_path
 from ai_worklog_framework.shared import load_shared
 
 SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -56,6 +57,7 @@ class WorkspacePaths:
         self.integrations_dir = root / _INTEGRATIONS_PATH
         self.interface_dir = self.integrations_dir
         self.prompt_log = root / "prompt.log"
+        self.journal_db = journal_db_path(root)
 
     def service_dir(self, service: str) -> Path:
         service = _validate_component(service, "service")

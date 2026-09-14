@@ -4,6 +4,7 @@ import ai.worklog.framework.adapters.PreflightScope
 import ai.worklog.framework.core.CheckResult
 import ai.worklog.framework.core.ExitCodes
 import ai.worklog.framework.core.FrameworkPaths
+import ai.worklog.framework.core.JournalValidation
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.ResultSet
 import ai.worklog.framework.core.Status
@@ -22,7 +23,7 @@ class PreflightCommands {
             frameworkRoot, paths, ticket, services
         )
         ResultSet results = new ResultSet()
-        if (selected(scope, 'workspace')) checkWorkspace(results, paths)
+        if (selected(scope, 'workspace')) checkWorkspace(results, paths, frameworkRoot)
         if (scope.checks == null) checkBinaries(results, config)
         if (selected(scope, 'jira')) checkJira(results, paths)
         if (selected(scope, 'git')) {
@@ -65,14 +66,29 @@ class PreflightCommands {
         scope.checks == null || scope.checks.contains(check)
     }
 
-    static void checkWorkspace(ResultSet results, FrameworkPaths paths) {
+    static void checkWorkspace(ResultSet results, FrameworkPaths paths, File frameworkRoot) {
         List<String> missing = []
         if (!paths.worklog.isDirectory()) missing << 'worklog/'
-        if (!paths.promptLog.exists()) missing << 'prompt.log'
+        List<Boolean> auditState = JournalValidation.workspaceAuditState(paths.root, frameworkRoot)
+        boolean hasPromptLog = auditState[0]
+        boolean hasJournal = auditState[1]
+        if (!hasPromptLog && !hasJournal) {
+            missing << 'prompt.log or repos/ai-memory-ingester/data/journal.db'
+        }
+        String message
+        if (missing) {
+            message = "Missing: ${missing.join(', ')}"
+        } else if (hasJournal && !hasPromptLog) {
+            message = 'Structure valid (journal.db)'
+        } else if (hasPromptLog && !hasJournal) {
+            message = 'Structure valid (legacy prompt.log)'
+        } else {
+            message = 'Structure valid'
+        }
         results.add(new CheckResult(
             status: missing ? Status.DEGRADED : Status.READY,
             source: 'workspace',
-            message: missing ? "Missing: ${missing.join(', ')}" : 'Structure valid'
+            message: message
         ))
     }
 

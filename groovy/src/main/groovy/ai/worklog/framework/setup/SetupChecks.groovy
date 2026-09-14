@@ -222,7 +222,7 @@ class SetupChecks {
         PreflightScope scope = PreflightScope.resolve(frameworkRoot, paths, null, [])
         ResultSet results = new ResultSet()
         if (PreflightCommands.selected(scope, 'workspace')) {
-            PreflightCommands.checkWorkspace(results, paths)
+            PreflightCommands.checkWorkspace(results, paths, frameworkRoot)
         }
         if (scope.checks == null) {
             PreflightCommands.checkBinaries(results, config)

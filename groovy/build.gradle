@@ -14,6 +14,7 @@ if (!groovyLib.isDirectory()) {
 
 dependencies {
     implementation fileTree(dir: groovyLib, include: ['groovy-*.jar'])
+    implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
     testImplementation fileTree(dir: groovyLib, include: ['groovy-*.jar', 'junit-4*.jar'])
 }
 

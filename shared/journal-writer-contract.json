@@ -1,0 +1,40 @@
+{
+  "contract_version": 1,
+  "schema_version": 1,
+  "transport": "json_stdin",
+  "command": "record-event",
+  "ingester_subpath": "repos/ai-memory-ingester",
+  "required_fields": [
+    "schema_version",
+    "source_ide",
+    "source_kind",
+    "source_identity",
+    "user_text",
+    "assistant_text"
+  ],
+  "optional_fields": [
+    "session_id",
+    "prompt_id",
+    "outcome_summary",
+    "mode",
+    "tickets",
+    "impact",
+    "event_time",
+    "event_time_confidence",
+    "raw_payload",
+    "source_fidelity"
+  ],
+  "source_ide_values": ["cursor", "claude", "antigravity"],
+  "source_kind_rule_write": "rule_write",
+  "source_fidelity_rule_write": "rule_write",
+  "impact_values": ["high", "low", "none"],
+  "event_time_confidence_values": ["exact", "local", "lost"],
+  "forbidden_transport": ["shell_interpolated_args", "command_line_payload"],
+  "shadow_period": {
+    "primary": "journal.db",
+    "secondary": "prompt.log",
+    "order": ["journal.db", "prompt.log"],
+    "prompt_log_on_journal_failure": false,
+    "rollback_accepts_either": true
+  }
+}

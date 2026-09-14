@@ -1,0 +1,173 @@
+# New Relic Operator Specification
+
+Status: implemented and verified on 2026-09-10. The Groovy suite passes 276 tests, including 30 injected-transport New Relic tests. Read-only live checks passed for profile discovery, authentication, and bounded application inventory. No production mutation was executed.
+
+## Execution boundary
+- Create and maintain `newrelic-operator-implementation` as the durable copy of this approved specification and checklist.
+- Implement the operator only in the Groovy runtime. Python, Windows-specific behavior, and parity coverage remain deferred and must be recorded in `upgrade-plan`.
+- Do not delete or rewrite the reference material under `/Users/twojda/workspace/scripts/newrelic` or `/Users/twojda/workspace/integrations/newrelic`. Use the current integration properties as input compatibility evidence.
+- Do not copy, print, test, or commit credential values. The hardcoded-key cleanup in `scripts/newrelic/sasha-tf/export-dashboard.py` remains separate security work.
+- Do not execute New Relic SaaS mutations against production. Mutation behavior is verified with injected transports only; live smoke tests are read-only.
+- Do not add delete actions or host-side `newrelic-infra`/nri-flex/license/restart actions.
+
+## Canonical command surface
+Add `newrelic` under the existing `service` namespace in `shared/command-contract.json`. Every action supports `--json`; every remote action except `profiles` supports `--profile PROFILE`.
+
+Read actions:
+- `profiles`: list configured profiles with account/endpoint metadata and `has_api_key`; never expose key values.
+- `auth-test`: validate the selected API key and account through NerdGraph.
+- `whoami`: return the authenticated NerdGraph user.
+- `applications [--query TEXT] [--limit COUNT]`: paginated REST v2 APM application inventory.
+- `application APP_ID`: one REST v2 application.
+- `hosts APP_ID [--query TEXT] [--limit COUNT]`: paginated application hosts.
+- `deployments APP_ID [--since DATE] [--until DATE] [--limit COUNT]`: paginated application deployments.
+- `violations [--policy ID] [--entity TEXT] [--priority critical|warning|all] [--limit COUNT]`: legacy open-violation view retained for current workflows.
+- `issues [--state activated|closed|all] [--priority critical|warning|all] [--entity TEXT] [--since DATE] [--until DATE] [--limit COUNT]`: NerdGraph AI issues.
+- `incidents [--issue ID] [--condition ID] [--entity TEXT] [--since DATE] [--until DATE] [--limit COUNT]`: `NrAiIncident` investigation rows.
+- `errors APP_ID [--hours HOURS] [--limit COUNT]`: existing `TransactionError` summary/facets/timeline behavior; default one hour.
+- `nrql [QUERY] [--file PATH]`: arbitrary NRQL; require exactly one source. Use a GraphQL variable rather than interpolating NRQL into GraphQL text.
+- `entities [--query TEXT] [--domain DOMAIN] [--type TYPE] [--limit COUNT]`: cursor-paginated entity search.
+- `dashboards [--query TEXT] [--owner EMAIL] [--limit COUNT]`: dashboard inventory.
+- `dashboard DASHBOARD_GUID`: dashboard metadata, pages, widgets, visualization, layout, linked entities, and raw configuration.
+- `dashboard-export DASHBOARD_GUID [--format json|terraform] [--output PATH] [--apply] [--force]`: default JSON to stdout; Terraform generates `dashboard.tf`, `provider.tf`, `variables.tf`, and placeholder-only `terraform.tfvars.example`. Supplying `--output` plans a workspace-local write; `--apply` performs atomic writes; `--force` is required for replacement.
+- `alert-policies [--query TEXT] [--limit COUNT]`: alert policy inventory.
+- `alert-policy POLICY_ID`: policy metadata and linked conditions.
+- `alert-conditions [--policy ID] [--entity GUID] [--type TYPE] [--query TEXT] [--limit COUNT]`: REST/NerdGraph condition inventory, including NRQL, APM, external-service, and synthetics condition types.
+- `alert-condition CONDITION_ID`: one condition with signal, terms, NRQL, policy, entity, enabled state, and timestamps.
+
+Apply-gated NerdGraph actions:
+- `alert-condition-create POLICY_ID DEFINITION_FILE --confirm-policy POLICY_ID [--apply]`: static NRQL conditions only.
+- `alert-condition-update CONDITION_ID DEFINITION_FILE --confirm-name CURRENT_NAME [--apply]`: static NRQL conditions only; re-read and verify after apply.
+- `dashboard-create DEFINITION_FILE --confirm-account ACCOUNT_ID [--apply]`.
+- `dashboard-page-create DASHBOARD_GUID DEFINITION_FILE --confirm-dashboard DASHBOARD_GUID [--apply]`.
+- `dashboard-page-update PAGE_GUID DEFINITION_FILE --confirm-name CURRENT_NAME [--apply]`.
+- `dashboard-widget-create DASHBOARD_GUID PAGE_GUID DEFINITION_FILE --confirm-dashboard DASHBOARD_GUID [--apply]`.
+- `dashboard-widget-update WIDGET_GUID DEFINITION_FILE --confirm-name CURRENT_TITLE [--apply]`.
+
+All mutation actions return a redacted planned change when `--apply` is absent and make zero mutation calls. Applied actions require the matching confirmation, accept only configured success/GraphQL result shapes, and re-read the created or updated resource before reporting success. No delete operation is present.
+
+## Credentials and profile compatibility
+Create `NewRelicCredentials.groovy` using `PropertiesSupport` without changing Jenkins behavior.
+
+Profile selection precedence:
+1. `--profile`.
+2. `NEW_RELIC_PROFILE`, then `NEWRELIC_PROFILE`.
+3. `config.adapters.newrelic.default_profile`.
+4. shared rule `default_profile`.
+
+Per-field precedence:
+1. `NEW_RELIC_API_KEY`/`NEWRELIC_API_KEY`, `NEW_RELIC_ACCOUNT_ID`/`NEWRELIC_ACCOUNT_ID`, `NEW_RELIC_REST_URL`, and `NEW_RELIC_GRAPHQL_URL`.
+2. Canonical Jenkins-style profile keys: `PROFILE.api_key`, `PROFILE.account_id`, `PROFILE.rest_url`, `PROFILE.graphql_url`.
+3. Current compatibility keys: `PROFILE.newrelic.api_key`, `PROFILE.newrelic.account_id`, plus global `newrelic.url`.
+4. Legacy unprefixed `newrelic.api_key` and `newrelic.account_id` for the default profile.
+5. Non-secret workspace/shared defaults.
+
+The existing `cue.newrelic.*` and `konto.newrelic.*` keys therefore work unchanged. Public profile output contains profile id, account id, endpoints, source labels, and booleans only. License keys are not part of this operator.
+
+## Shared rules and schemas
+Create `shared/newrelic-operator-rules.json` with:
+- EU REST v2 and NerdGraph defaults.
+- REST path templates for applications, hosts, deployments, violations, policies, and conditions.
+- NerdGraph operation names used by audited sessions: user, entity search, entity/dashboard detail, AI issues, NRQL, `alertsNrqlConditionStaticCreate`, `alertsNrqlConditionStaticUpdate`, `dashboardCreate`, `dashboardCreatePage`, `dashboardUpdatePage`, `dashboardCreateWidget`, and `dashboardUpdateWidget`.
+- Timeouts: read 15 seconds, mutation 30 seconds.
+- Response bounds: 4 MiB success, 8 KiB error.
+- REST pagination: maximum 100 pages; entity cursor maximum 100 pages.
+- Default/max limits for applications, hosts, deployments, violations, issues, incidents, NRQL rows, entities, dashboards, policies, and conditions.
+- Definition-file maximum 1 MiB.
+- Allowed GraphQL mutation names and accepted HTTP codes.
+
+Create:
+- `schemas/newrelic-operator-config.schema.json` for non-secret defaults and limits.
+- `schemas/newrelic-operator-report.schema.json` covering all 27 operations.
+- `schemas/newrelic-alert-condition-definition.schema.json` for static NRQL condition name, enabled state, NRQL query, signal settings, and terms.
+- `schemas/newrelic-dashboard-definition.schema.json` with reusable dashboard/page/widget definitions matching observed NerdGraph input shapes.
+
+Definition and NRQL files must be canonical workspace-contained regular files, not symlinks, valid UTF-8, NUL-free, and within the configured size bound. Reports include path, size, and SHA-256 only, not complete definition contents.
+
+## Transport and adapter
+Create `NewRelicGraphqlClient.groovy`:
+- `query` permits semantically read-only GraphQL POST operations.
+- `mutate` rejects calls unless `apply=true` and rejects mutation names not allowlisted by rules.
+- Both methods use bounded `JsonWriteHttp`, validate HTTP and GraphQL error shapes, and never include headers or API keys in exceptions.
+
+Create `NewRelicAdapter.groovy`:
+- Use `ReadOnlyHttp` for REST GET and `NewRelicGraphqlClient` for NerdGraph.
+- Implement all 20 read actions and seven mutation actions.
+- Paginate REST pages and NerdGraph cursors with deterministic de-duplication and truncation reporting.
+- Parse date-only values as full UTC days and ISO 8601 values as exact instants; report effective dates rather than null defaults.
+- Escape all REST query values and all constructed NRQL string literals.
+- Preserve arbitrary NRQL exactly as UTF-8 input and pass it as a GraphQL variable.
+- Normalize legacy REST, AI issue, incident, NRQL, entity, dashboard, alert policy, and condition responses into deterministic maps.
+- Keep GraphQL query POSTs distinct from mutations so dry-run gating never blocks reads and no coding path can bypass mutation gating.
+- Compare post-apply resources with the planned normalized target before setting `applied=true`.
+
+## Reports and Terraform rendering
+Create:
+- `newrelic/NewRelicOperatorReport.groovy` with operation, fetched time, status, profile, account id, target identifiers, effective filters, totals, dry-run/applied/truncated flags, change summary, output summary, and items.
+- `newrelic/NewRelicTerraformRenderer.groovy` for deterministic Terraform generation from normalized dashboard data.
+
+Human and JSON output must redact before rendering. Terraform output must be deterministic, contain no API key or live `terraform.tfvars`, preserve page/widget order, escape NRQL safely, use sensitive variables, and write atomically inside the workspace. Generated provider configuration references variables only.
+
+Extend `shared/redaction-patterns.json` for `newrelic_api_key`, `license_key`, and `NRAK-` value patterns while preserving current patterns.
+
+## Commands and framework wiring
+Create `NewRelicCommands.groovy`:
+- Resolve every action exclusively from the shared command contract.
+- Render progressive service/action help and action-specific usage errors.
+- Reject unknown/repeated options and conflicting query sources.
+- Keep stdout for reports/exports and stderr for usage/errors.
+- Emit structured JSON errors when `--json` is requested.
+- Enforce all semantic confirmations before adapter dispatch.
+
+Modify:
+- `ServiceCommands.groovy` to dispatch `newrelic` and expose it in sorted service discovery.
+- `PreflightCommands.groovy` to require `integrations/newrelic/newrelic.properties` without reading contents; connectivity remains `auth-test`.
+- `config/workspace-config.example.json` with non-secret New Relic defaults and limits.
+- `Main.groovy` from 0.12.0 to 0.13.0.
+- `scripts/run-groovy-tool.sh` so `newrelic-cli` fails with migration guidance to `ai-worklog service newrelic`; do not retain a silent compatibility path.
+
+## Existing workflow migration
+Update existing references, without creating separate documentation:
+- `README.md` with the canonical command surface, credentials, dry-run/apply behavior, Terraform export, and exclusions.
+- `upgrade-plan` with implemented/deferred New Relic status, Groovy-only parity debt, excluded host/delete operations, and the separate hardcoded-secret cleanup item.
+- `devops-daily-protocol/SKILL.md`, `jira-worklog-processor/SKILL.md`, `CROSS_SKILL_INTEGRATION.md`, `ONBOARDING.md`, and `CONTRIBUTING.md` to replace stale wrapper/credentials references with canonical service actions.
+- Preserve large NRQL output guidance using `_raw.log` companion files.
+- Do not modify or delete `scripts/newrelic` reference tools in this operator change.
+
+## Tests and verification
+Create `NewRelicOperatorTest.groovy` using injected HTTP handlers only. Cover:
+- Current CUE/Konto keys, canonical profile keys, generic legacy keys, environment precedence, profile selection, and secret-safe public output.
+- REST pagination, NerdGraph cursor pagination, de-duplication, limits, effective UTC dates, URL/NRQL escaping, and bounded/error responses.
+- All read operations and every report schema enum.
+- Arbitrary inline/file NRQL, exact-one-source validation, GraphQL-variable transport, file containment/symlink/UTF-8/NUL/size checks, and no query mutation.
+- Legacy violations, AI issues/incidents, TransactionError facets, applications/hosts/deployments, entities, dashboards, policies, and condition normalization.
+- Definition schema rejection before transport calls.
+- Zero mutation calls for every dry run.
+- Allowlisted mutation names, confirmation failures, applied request shapes, GraphQL errors, and post-apply verification for all seven writes.
+- Terraform output determinism, ordering, escaping, path containment, dry-run/apply/force behavior, atomic writes, and absence of credentials.
+- Redaction in human, JSON, error, change, and Terraform output.
+
+Update command-contract and service-catalog tests for New Relic discovery, 27 actions, progressive help, default resolution, and legacy launcher migration guidance. Run all Groovy tests, changed JSON/schema validation, lints, `git diff --check`, and public-content checks. Perform optional live smoke tests only for `profiles`, `auth-test`, `whoami`, and selected read actions; do not invoke any mutation with `--apply` and do not test against production writes.
+
+## Implementation checklist
+IMPLEMENTATION CHECKLIST:
+1. Create `newrelic-operator-implementation` with this approved specification and checklist.
+2. Add the 27-action New Relic service contract and all positionals/options/defaults.
+3. Add shared New Relic rules with endpoints, API paths, NerdGraph operations, limits, mutation allowlist, and response bounds.
+4. Add operator config, report, alert-condition definition, and dashboard definition schemas.
+5. Implement backward-compatible, profile-based credential resolution and public redacted profiles.
+6. Implement the gated NerdGraph query/mutation client using bounded shared transport.
+7. Implement REST pagination, NerdGraph cursor pagination, UTC bounds, normalization, and all 20 read actions.
+8. Implement arbitrary inline/file NRQL with GraphQL variables and workspace file safety.
+9. Implement all seven dry-run/apply-gated create/update actions with confirmations and post-apply verification.
+10. Implement the structured report renderer and deterministic secret-free Terraform renderer.
+11. Implement contract-driven New Relic command dispatch, semantic validation, progressive help, and structured errors.
+12. Wire service discovery, preflight, non-secret workspace configuration, redaction, and version 0.13.0.
+13. Replace the legacy framework launcher with hard migration guidance; retain workspace scripts as reference material.
+14. Add comprehensive injected-transport Groovy tests and update command/service tests.
+15. Migrate existing README and ai-vault workflow references to canonical commands.
+16. Update `upgrade-plan` with implementation status and all deferred/security boundaries.
+17. Run full Groovy, schema, lint, diff, and public-content verification.
+18. Run only approved read-only live smoke tests; execute no production mutation.
+19. Append the completed interaction and verification results to `prompt.log`.
+20. Provide a semantic commit title and description without committing or pushing.

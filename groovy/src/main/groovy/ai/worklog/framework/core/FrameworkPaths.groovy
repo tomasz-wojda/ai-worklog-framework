@@ -12,6 +12,7 @@ class FrameworkPaths {
     final File integrationsDir
     final File interfaceDir
     final File promptLog
+    final File journalDb
 
     private static final Map WORKSPACE_LAYOUT = (Map) JsonFiles.read(
         new File(resolveFrameworkRoot(), 'shared/workspace-init.json'),
@@ -30,6 +31,7 @@ class FrameworkPaths {
         this.integrationsDir = new File(this.root, INTEGRATIONS_PATH)
         this.interfaceDir = integrationsDir
         this.promptLog = new File(this.root, 'prompt.log')
+        this.journalDb = JournalValidation.journalDbPath(this.root, resolveFrameworkRoot())
     }
 
     File serviceDir(String service) {

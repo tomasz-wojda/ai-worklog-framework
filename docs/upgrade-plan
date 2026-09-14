@@ -1,0 +1,480 @@
+# AI Worklog Upgrade Plan
+
+Last audited: 2026-09-10
+
+## Purpose
+
+This local document records implemented capabilities, remaining roadmap work,
+known limitations, and the relationship between `ai-worklog-framework` and
+`ai-vault`. Reassess every status against the current repositories before
+starting a future implementation phase.
+
+## Repository Responsibilities
+
+- `ai-worklog-framework` owns executable CLI behavior, shared contracts,
+  adapters, structured state, reconciliation, diagnostics, delivery reporting,
+  workspace management, and runtime parity.
+- `ai-vault` owns governance modes, operational skills, worklog content rules,
+  lifecycle handoffs, and the canonical Jenkins scripted-pipeline validator.
+- The runtime workspace owns credentials, worklogs, generated ticket state,
+  evidence, cloned repositories, local service configuration, and prompt logs.
+- Secrets and organization-specific operational data must remain outside both
+  public repositories.
+
+## Implemented Capabilities
+
+### Framework Foundation
+
+- Groovy-default CLI with a Python fallback runtime.
+- Stable shared exit codes, result statuses, redaction rules, path validation,
+  layered configuration, and safe process execution.
+- Cross-runtime command and output parity coverage.
+- Recursive versioned command contract with machine-readable help introspection.
+- External operators grouped under the canonical `service` namespace with
+  contract-driven operator discovery.
+- Contract-driven Jenkins argument parsing, validation, and usage rendering.
+- Workspace initialization and reversion with dry-run behavior, seeded local
+  configuration, and managed service-interface links.
+- Apache License 2.0 metadata and sanitized public examples.
+- Python project configuration contained under `python/`.
+
+### Windows Support
+
+- Windows CMD and PowerShell CLI entrypoints (`ai-worklog.cmd`,
+  `ai-worklog.ps1`, `ai-worklog-groovy.cmd`, `ai-worklog-groovy.ps1`).
+- Exit code propagation via `call` and jump labels in batch dispatchers.
+- Junction fallbacks when symlinks are unavailable on Windows.
+- ANSI color detection and UTF-8 console output formatting for Windows CMD.
+- Cross-platform CLI detection using `where.exe` on Windows and `which` on
+  POSIX in Groovy adapters and diagnostic executors.
+- Python detection fallback chain: `python3`, `python`, `py -3`.
+- Workspace layout migration from `worklog/interface` to `integrations/`.
+
+### IDE Setup
+
+- `setup init` and `setup revert` subsystem for per-IDE skill materialization.
+- Supported IDEs: antigravity, cursor.
+- Materialization modes: symlink (default), copy.
+- `--adopt` flag to replace foreign skill copies with managed symlinks or
+  junctions.
+- Dry-run, JSON output, and applied-action reporting.
+- ai-vault root resolution from CLI argument, environment variable, or
+  workspace-level configuration.
+
+### Catalog and Ticket State
+
+- Versioned service catalog contracts and workspace-local overlays.
+- Catalog list, validation, lookup, and search commands.
+- Ticket preparation based on worklogs, catalog matches, local repositories,
+  pull-request discovery, and known delivery paths.
+- Structured per-ticket state with independent delivery dimensions, blockers,
+  decisions, evidence references, next action, and atomic updates.
+
+### Read-Only Reconciliation
+
+- Jira, Git, GitHub, Jenkins, ArgoCD, and Tempo observers.
+- Deterministic reconciliation reports and blocking contradiction rules.
+- Shared report schema and rules used by both runtimes.
+- Redacted output and no external mutations.
+
+### Diagnostics
+
+- Declarative diagnostic-pack contracts.
+- Read-only Kubernetes, ArgoCD, observability, Jenkins, host-parity, and
+  inventory-oriented checks.
+- Timestamped and redacted evidence bundles.
+
+### Jenkins Operator
+
+- Controller listing and health.
+- Job, recent-build, plugin, credential-ID metadata, and seed-job inspection.
+- Nested job names and leading underscore or tilde support.
+- Internal HTTPS certificate trust in Groovy and Python.
+- Delegation to the canonical `ai-vault` Jenkins syntax validator.
+- No build triggers, configuration changes, or credential-value exposure.
+- Root, service, Jenkins operator, and Jenkins action help with documented
+  positional arguments, options, defaults, and accepted build selectors.
+- Jenkins commands use the canonical `ai-worklog service jenkins` path. The
+  former top-level path fails with migration guidance and does not execute.
+- Usage errors are written to standard error while reports remain on standard
+  output.
+- Single-artifact binary streaming with exact relative-path selection,
+  dry-run-by-default local writes, guarded replacement, path containment,
+  atomic completion, and configurable download limits.
+
+### Jira Operator
+
+- Canonical `ai-worklog service jira` namespace with ticket, summary, rejected,
+  reporter, Tempo, verification, identity, and time-logging actions.
+- Full ticket details including people, parent metadata, linked issues,
+  assignment history, and paginated Jira comments and worklogs.
+- Configurable board-column status mappings stored outside the repository.
+- Bounded Jira searches, Tempo daily totals, workspace-root worklog
+  verification, and machine-readable reports.
+- Tempo logging is dry-run by default and requires `--apply` for its single
+  external POST.
+- The legacy workspace launcher and `jira-cli` tool mapping fail with canonical
+  migration guidance instead of silently delegating.
+
+### Automox Operator
+
+- Canonical `ai-worklog service automox` namespace with 19 contract-driven
+  actions for profiles, authentication, organizations, groups, devices,
+  package inventory, activity, patch history, policies, queues, policy
+  execution, Worklet lifecycle, device movement, and policy assignment.
+- Bounded and paginated GET operations with deterministic JSON, human, and
+  RFC 4180 CSV reports.
+- Layered profile credentials with environment overrides, non-executing legacy
+  fallback parsing, and secret-safe public metadata.
+- Historical patch reports derive outcomes only from Automox event evidence
+  and distinguish successful applications, attempted packages, and explicit
+  failures.
+- All five mutation actions are dry-run by default. Apply paths enforce target
+  exclusivity, policy-wide confirmation, exact-name deletion confirmation,
+  workspace-contained Worklet files, post-move verification, or the required
+  policy rename round trip.
+- Local unit tests use injected transports and issue no live writes. Live smoke
+  verification is limited to GET requests and mutation dry runs.
+
+### New Relic Operator
+
+- Canonical `ai-worklog service newrelic` namespace with 27 contract-driven
+  actions: 20 reads and 7 apply-gated writes.
+- Profile-based credential resolution from
+  `integrations/newrelic/newrelic.properties` with backward-compatible
+  `cue.newrelic.*`, `konto.newrelic.*`, canonical profile keys, legacy
+  unprefixed keys, and environment overrides.
+- Read surface covers applications, hosts, deployments, legacy violations,
+  AI issues and incidents, TransactionError summaries, arbitrary NRQL, entity
+  and dashboard inventory, alert policies and conditions, and Terraform-capable
+  dashboard export.
+- Seven create/update actions for static NRQL conditions and dashboard
+  resources are dry-run by default, require semantic confirmations, and
+  re-read applied resources before reporting success.
+- Legacy `./scripts/run-groovy-tool.sh newrelic-cli` fails with migration
+  guidance to `ai-worklog service newrelic`; workspace reference scripts under
+  `integrations/newrelic/` remain unchanged.
+- Implemented in the Groovy runtime only. Python operator parity, Windows
+  entrypoint behavior, and cross-runtime parity coverage remain deferred.
+- Delete actions and host-side `newrelic-infra`, nri-flex, license, or restart
+  operations are intentionally excluded from this operator.
+- Hardcoded API key cleanup in external reference tooling (for example
+  `scripts/newrelic/sasha-tf/export-dashboard.py`) remains separate security
+  work and is not part of this operator change.
+
+### Persistent Workspace Configuration
+
+- Multiple named workspace registrations.
+- Default workspace selection.
+- Explicit path and named-workspace overrides.
+- Deterministic workspace resolution precedence.
+- Persisted Groovy or Python runtime preference.
+- Private global configuration permissions, atomic replacement, and
+  cross-runtime file locking.
+- Workspace removal deletes only the registration, never its directory.
+
+### ai-vault Integration
+
+- Operational activities represented as routines separately from governance
+  modes.
+- Expanded worklog template with repositories, decisions, blockers, delivery
+  state, next action, and structured-state references.
+- Framework command references added to daily protocol and ticket processing.
+- Delivery lifecycle states documented.
+- Legacy workspace setup script removed after framework ownership was
+  established.
+- Canonical Jenkins validator retained in `ai-vault`.
+
+## Original Roadmap Status
+
+### Phase 1: Repository Foundation and Safety Boundary — PARTIAL
+
+Implemented:
+
+- Modular dual-runtime CLI and package layout.
+- Workspace bootstrap, schemas, ignore rules, redaction, safe paths, normalized
+  results, and public-content checks.
+- Windows CLI entrypoints with exit code propagation and junction fallbacks.
+
+Remaining:
+
+- Continuous integration (GitHub Actions planned).
+- Windows, macOS, and Linux test matrix.
+- Automated secret scanning and generated-report leakage checks.
+- Automated cross-repository validation.
+
+### Phase 2: Service Catalog and Ticket Preparation — PARTIAL
+
+Implemented:
+
+- Catalog schema, examples, overlays, list, validation, show, and search.
+- Local worklog, repository, pull-request, and delivery-path discovery.
+
+Remaining:
+
+- Live Jira metadata in ticket preparation.
+- Acceptance-criteria extraction and gap reporting.
+- Required-interface checks and environment ambiguity analysis.
+
+### Phase 3: Session and Environment Preflight — PARTIAL
+
+Implemented:
+
+- Workspace structure, binaries, toolchains, local service files, Git identity,
+  selected authentication surfaces, AWS identity, Kubernetes context, and
+  session-age checks.
+- Read-only reconciliation adapters for six external systems.
+
+Remaining:
+
+- Live connectivity checks for Jira, Tempo, Jenkins, ArgoCD, New Relic,
+  Datadog, and other configured services.
+- Environment-scoped preflight.
+- Clear separation of local readiness from external reachability.
+
+### Phase 4: Structured State and Reconciliation — MOSTLY COMPLETE
+
+Implemented:
+
+- Structured ticket state.
+- Six-system read-only reconciliation.
+- Day Start and Day End commands.
+
+Remaining:
+
+- Worklog-text reconciliation.
+- Board priority, stale-blocker age, Tempo totals, monitoring signals, and open
+  delivery work in Day Start.
+- Time gaps, approvals, unresolved risks, and richer continuation capsules in
+  Day End.
+
+### Phase 5: ai-vault Protocol Refactor — PARTIAL
+
+Implemented:
+
+- Routine structure, framework command handoffs, delivery states, expanded
+  template, workspace ownership migration, and Jenkins validator ownership.
+
+Remaining:
+
+- Consistent routine terminology across all skills and guides.
+- First-class Plan, Verification, and Close-out lifecycle representation.
+- Investigation taxonomy for hypotheses, observations, evidence, attempted
+  fixes, and validated outcomes.
+- Separate Implementation Complete, Deployment Complete, and Administrative
+  Close-out states.
+- One unambiguous Ticket Done owner.
+- Semantic validation for template parity, lifecycle ownership, vocabulary, and
+  framework command references.
+
+### Phase 6: Reusable Diagnostics and Evidence — COMPLETE WITH LIMITATIONS
+
+Implemented:
+
+- Shared diagnostic packs, redacted execution, and evidence persistence.
+
+Remaining:
+
+- Validate generated bundles against the evidence JSON schema at write time.
+- Inventory and migrate proven ticket-local diagnostics where appropriate.
+
+### Phase 7: Jenkins Operator Capability — COMPLETE WITH LIMITATIONS
+
+Implemented:
+
+- Full planned read-only operator surface and syntax-validator delegation.
+
+Remaining:
+
+- Persistent versioned controller and job metadata catalog with explicit
+  freshness tracking.
+
+### Phase 8: Delivery Orchestration and Live Verification — NOT STARTED
+
+Present foundation:
+
+- Release-manifest schema.
+- Local-state-based `delivery status` command and gap rules.
+
+Remaining:
+
+- Release-manifest loading and validation.
+- Repository and pull-request dependency ordering.
+- Live Jenkins build and artifact verification.
+- GitOps revision and artifact-reference verification.
+- ArgoCD desired-versus-live revision, metadata, and generation verification.
+- Read-only verification-command execution.
+- End-to-end PR-to-build-to-GitOps-to-live delivery reporting.
+
+The current `delivery status` command reads structured local state; it does not
+yet calculate observed delivery state from live systems.
+
+### Phase 9: Close-out and Handover — PARTIAL
+
+Implemented:
+
+- Local-state closeout report.
+- PR, build, synchronization, verification, risk, and archive eligibility
+  rendering from recorded state.
+
+Remaining:
+
+- Reconcile closeout data with Jira, Tempo, GitHub, Jenkins, and ArgoCD.
+- Separate paste-ready Jira and stakeholder handover outputs.
+- Separate observed activity duration from user-confirmed Tempo time.
+- Explicit next-owner and unresolved-risk sections.
+
+### Phase 10: Consolidation and Migration — NOT STARTED
+
+Implemented:
+
+- Legacy workspace setup ownership moved from `ai-vault` to the framework.
+
+Remaining:
+
+- Inventory existing workspace tools and scripts.
+- Classify each as canonical, adapter-backed, ticket-local, generated,
+  credential-only, duplicate, or deprecated.
+- Define compatibility adapters and migration sequencing.
+- Preserve and regression-test existing command behavior before removal.
+- Publish migration status for routine terminology, templates, and script
+  ownership.
+
+## Post-Roadmap Capability
+
+Named global workspaces and persisted runtime selection are complete in both
+runtimes. This includes CLI management commands, resolution precedence, private
+configuration, file locking, atomic writes, documentation, and parity tests.
+
+IDE setup with per-IDE skill materialization, adopt mode, and dry-run reporting
+is complete in both runtimes.
+
+## Verification Baseline
+
+Last verified baseline (Windows, 2026-08-13):
+
+- 259 Python unit tests (250 passed, 9 Windows-specific failures).
+- 69 Groovy unit tests passed.
+- 186 cross-runtime parity assertions (171 passed, 15 Windows-specific failures).
+- No local linter or diff-format errors were reported.
+
+Current Groovy-first baseline (macOS, 2026-09-10):
+
+- 306 frozen Python unit tests passed.
+- 276 Groovy tests passed on 2026-09-10, including recursive command-contract,
+  Jira, Jenkins, Automox, New Relic, catalog-list, and binary-download tests.
+- 183 parity tests skipped successfully by default.
+- The parity override ran all 183 tests: 164 passed and 19 failed.
+- Automox live verification passed for GET-only authentication, service
+  discovery, preflight, organizations, groups, devices, package inventory,
+  activity, patch summaries, policies, policy statistics, queue inspection,
+  and CSV output. Mutation checks were dry-run only.
+- New Relic live verification passed for profile discovery, authentication,
+  and bounded application inventory reads. SaaS mutations were not invoked.
+
+Limitations:
+
+- Verification currently runs locally.
+- No repository CI pipeline enforces the baseline.
+- The frozen Python and deferred parity suites were not re-run on 2026-09-10
+  because the active Python 3.15 installation does not include `pytest`; the
+  last verified Python and parity counts above remain the baseline.
+- Cross-runtime parity is deferred independently of runtime selection during
+  the contract-driven Jenkins pilot. Set `AI_WORKLOG_PARITY_TESTS=1` to run it.
+- The 2026-09-09 override run completed with 164 passing and 19 failing parity
+  tests. Jenkins failures reflect the deliberate Groovy-only argument and
+  stream changes; the runtime-version and setup-state failures predate this
+  pilot.
+- Live external behavior depends on local credentials and service availability
+  and is not exercised by sanitized repository tests.
+
+## Outstanding Work Summary
+
+- CI and automated safety gates.
+- Jira-enriched ticket preparation.
+- Live connectivity preflight.
+- Rich operational Day Start and Day End reports.
+- Complete ai-vault lifecycle and semantic validation.
+- Release-manifest-driven live delivery verification.
+- Externally reconciled closeout and handover outputs.
+- Tooling inventory, compatibility classification, and migration.
+
+## Known Limitations and Superseded Assumptions
+
+- The original roadmap assumed a Python-only CLI; the product is now
+  Groovy-default with Python fallback.
+- The repository catalog intentionally contains fictional examples; verified
+  organization-specific mappings belong in workspace overlays.
+- Preflight primarily checks local readiness; reconciliation performs the
+  implemented external observations.
+- Diagnostic packs are declarative runners, not a completed migration of all
+  historical ticket-local scripts.
+- Windows is officially supported. Remaining Windows-specific test failures are
+  tracked: 9 unit tests (path normalization, POSIX permissions, shell fixtures)
+  and 15 parity tests (setup init actions, global config launcher, syntax-check
+  output, and adapter PATH resolution).
+- README requirements section still lists macOS or Linux only and needs update.
+- `prompt.log` remains an append-only audit trail, not structured ticket state.
+- Service discovery, catalog, and Jenkins use the shared command contract for
+  parsing. The remaining operational command groups retain their imperative
+  argument handling.
+- Python remains runnable but does not yet consume `shared/command-contract.json`;
+  JSON payload and exit-code parity is an acceptance gate for its later thaw.
+- The supported dispatcher rejects the former top-level Jenkins path for both
+  runtimes. Direct `ai-worklog-python jenkins` cleanup is deferred until Python
+  adopts the recursive service contract.
+- README command-reference generation and shell-completion generation from the
+  contract are not implemented.
+- Artifact downloading is implemented only in Groovy. The frozen Python runtime
+  has no corresponding action or parity coverage.
+- Bulk artifact downloading and caller-selected destination overrides remain
+  out of scope.
+- Jira comment posting, issue transitions, assignee changes, issue creation,
+  attachment downloading, arbitrary JQL, and custom-field updates are deferred.
+  Historical worklogs show recurring demand for closing comments and status
+  transitions, while deployment custom fields remain owned by the separate
+  Jenkins Jira integration.
+- Live Jira enrichment in `ticket prepare`, Jira connectivity in preflight,
+  summary snapshot persistence, and day-start orchestration are deferred.
+- The retained `integrations/jira/jira-ticket-info.groovy` implementation is a
+  temporary comparison reference and is no longer a supported launcher.
+- Python does not implement the Jira service operator. Future parity work must
+  reproduce command usage, JSON reports, exit codes, pagination, redaction,
+  verification, and dry-run/apply behavior.
+- Python does not implement the Automox service operator. Future parity work
+  must reproduce all 19 actions, output formats, pagination, redaction, exit
+  codes, and mutation gates.
+- Automox SSH agent operations, batch enrollment, and `setup-agents.sh`
+  wrappers remain intentionally outside the framework operator.
+- Automox live verification does not execute POST, PUT, or DELETE requests;
+  applied mutation paths remain covered by injected transport tests until an
+  explicitly approved external test is performed.
+- The standalone public-content check still flags pre-existing Jira test
+  fixtures that contain an organization ticket prefix. Automox files pass the
+  same identifier policy after technical SHA identifiers are allowlisted.
+- Python does not implement the New Relic service operator. Future parity
+  work must reproduce all 27 actions, profile resolution, JSON reports, exit
+  codes, pagination, redaction, dry-run/apply gates, and Terraform export
+  behavior.
+- New Relic live verification is limited to read-only actions and mutation
+  dry runs; production SaaS writes with `--apply` are not part of the public
+  verification baseline.
+- New Relic delete operations and host-side infra/license/restart mutations
+  remain outside the framework operator boundary by design.
+- Hardcoded credential removal in legacy reference scripts under
+  `scripts/newrelic/` is tracked separately and must not be conflated with
+  operator implementation.
+
+## Continuation Procedure
+
+Before resuming implementation:
+
+1. Re-read this document and the current repository history.
+2. Audit both repositories because statuses may have changed.
+3. Run existing Python, Groovy, parity, and ai-vault validation suites.
+4. Confirm the selected roadmap phase and its exact write boundary.
+5. Enter the required governance mode before planning or editing.
+6. Update this document after verified implementation work.
+7. Keep credentials, private identifiers, and operational evidence outside the
+   repositories.
+8. Do not commit or push unless the user explicitly changes the standing rule.

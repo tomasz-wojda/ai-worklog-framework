@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from ai_worklog_framework.adapters.preflight_scope import resolve_scope
+from ai_worklog_framework.journal_validation import workspace_audit_state
 from ai_worklog_framework.cli import EXIT_BLOCKED, EXIT_SUCCESS, EXIT_USER_ERROR
 from ai_worklog_framework.config import load_config
 from ai_worklog_framework.paths import resolve_workspace, WorkspacePaths
@@ -200,8 +201,10 @@ def _check_workspace_structure(paths: WorkspacePaths) -> Result:
     missing = []
     if not paths.worklog.is_dir():
         missing.append("worklog/")
-    if not paths.prompt_log.exists():
-        missing.append("prompt.log")
+
+    has_prompt_log, has_journal = workspace_audit_state(paths.root)
+    if not has_prompt_log and not has_journal:
+        missing.append("prompt.log or repos/ai-memory-ingester/data/journal.db")
 
     if missing:
         return Result(
@@ -209,7 +212,13 @@ def _check_workspace_structure(paths: WorkspacePaths) -> Result:
             source="workspace",
             message=f"Missing: {', '.join(missing)}",
         )
-    return Result(status=Status.READY, source="workspace", message="Structure valid")
+    if has_journal and not has_prompt_log:
+        message = "Structure valid (journal.db)"
+    elif has_prompt_log and not has_journal:
+        message = "Structure valid (legacy prompt.log)"
+    else:
+        message = "Structure valid"
+    return Result(status=Status.READY, source="workspace", message=message)
 
 
 def _check_binaries(results: ResultSet, config) -> None:
