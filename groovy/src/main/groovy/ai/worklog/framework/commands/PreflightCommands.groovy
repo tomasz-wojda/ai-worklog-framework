@@ -45,6 +45,7 @@ class PreflightCommands {
         if (selected(scope, 'newrelic')) {
             checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
         }
+        if (selected(scope, 'artifactory')) checkArtifactory(results, paths)
         if (selected(scope, 'datadog')) checkServiceDirectory(results, paths, 'datadog')
         if (selected(scope, 'repositories')) checkRepositories(results, paths, scope)
         if (selected(scope, 'catalog_binaries')) {
@@ -183,6 +184,35 @@ class PreflightCommands {
             message = "${filename} missing"
         }
         results.add(new CheckResult(status: status, source: service, message: message))
+    }
+
+    static void checkArtifactory(
+        ResultSet results,
+        FrameworkPaths paths,
+        Map environment = System.getenv()
+    ) {
+        File directory = paths.serviceDir('artifactory')
+        if (!directory.isDirectory()) {
+            results.add(new CheckResult(
+                status: Status.BLOCKED,
+                source: 'artifactory',
+                message: 'Directory not found'
+            ))
+            return
+        }
+        boolean environmentPresent =
+            !!environment.ARTIFACTORY_URL?.toString()?.trim() &&
+            !!environment.ARTIFACTORY_TOKEN?.toString()?.trim()
+        boolean filePresent = ['artifactory.properties', 'credentials', 'creds'].any { filename ->
+            new File(directory, filename).isFile()
+        }
+        results.add(new CheckResult(
+            status: environmentPresent || filePresent ? Status.READY : Status.NOT_CONFIGURED,
+            source: 'artifactory',
+            message: environmentPresent || filePresent ?
+                "Credential source present (${environmentPresent ? 'environment' : 'file'})" :
+                'Not configured'
+        ))
     }
 
     static void checkRepositories(

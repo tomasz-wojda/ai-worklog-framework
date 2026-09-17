@@ -62,6 +62,27 @@ commands:
         String rendered = new UsageRenderer(contract).renderPath(['service'])
         assertTrue(rendered.contains('list'))
         assertTrue(rendered.contains('jenkins'))
+        assertTrue(rendered.contains('artifactory'))
+    }
+
+    void testArtifactoryRenderingListsSevenReadOnlyActions() {
+        List<Map> actions = contract.children(['service', 'artifactory'])
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'artifactory'])
+        assertEquals(7, actions.size())
+        assertEquals(
+            ['profiles', 'status', 'auth-test', 'repositories', 'artifacts', 'artifact', 'manifest'],
+            actions*.name
+        )
+        actions*.name.each { assertTrue(rendered.contains(it.toString())) }
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'artifactory', 'artifacts'])
+                .contains('<repository> [path]')
+        )
+        assertEquals(
+            ['--json', '--profile', '--max-bytes', '--timeout'],
+            contract.node(['service', 'artifactory', 'manifest']).options*.name
+        )
     }
 
     void testJenkinsRenderingListsFifteenActions() {

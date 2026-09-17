@@ -56,6 +56,10 @@ class ServiceCommands {
                 return exitCodes.userError
             }
         }
+        if (service == 'artifactory') {
+            String action = args ? args.remove(0) : null
+            return ArtifactoryCommands.run(action, args, frameworkRoot, paths, config)
+        }
         if (service == 'automox') {
             String action = args ? args.remove(0) : null
             return AutomoxCommands.run(action, args, frameworkRoot, paths, config)

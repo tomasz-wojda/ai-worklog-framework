@@ -160,6 +160,33 @@ def test_preflight_reports_an_empty_service_directory_as_not_configured(tmp_path
     assert outputs["python"] == outputs["groovy"]
 
 
+def test_artifactory_preflight_uses_metadata_only_with_parity(tmp_path) -> None:
+    env = os.environ.copy()
+    env["AI_WORKLOG_HOME"] = str(tmp_path / "home")
+    env.pop("AI_WORKLOG_WORKSPACE", None)
+    env.pop("AI_WORKLOG_WORKSPACE_NAME", None)
+    env.pop("AI_WORKLOG_RUNTIME", None)
+    env.pop("ARTIFACTORY_URL", None)
+    env.pop("ARTIFACTORY_TOKEN", None)
+    outputs = {}
+    for runtime in ("python", "groovy"):
+        workspace = tmp_path / f"{runtime}-candidate"
+        (workspace / "worklog").mkdir(parents=True)
+        (workspace / "prompt.log").write_text("", encoding="utf-8")
+        service = workspace / "integrations/artifactory"
+        service.mkdir(parents=True)
+        (service / "creds").write_text("not valid credential syntax", encoding="utf-8")
+        result = run_in_workspace(
+            runtime, workspace, "preflight", "--service", "artifactory", env=env
+        )
+        outputs[runtime] = result.stdout
+        assert result.returncode == 0
+        assert "[OK] artifactory: Credential source present (file)" in result.stdout
+        assert "not valid credential syntax" not in result.stdout
+
+    assert outputs["python"] == outputs["groovy"]
+
+
 def test_workspace_apply_preserves_existing_integration_symlink_with_parity(tmp_path) -> None:
     vault = _minimal_vault(tmp_path)
     results = {}

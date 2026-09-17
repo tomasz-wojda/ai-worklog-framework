@@ -141,6 +141,373 @@
       "kind": "command",
       "subcommands": [
         {
+          "name": "artifactory",
+          "description": "Artifactory operator",
+          "kind": "service",
+          "subcommands": [
+            {
+              "name": "profiles",
+              "description": "List configured Artifactory profiles without exposing credentials",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "status",
+              "description": "Show public Artifactory reachability and version",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "auth-test",
+              "description": "Verify authenticated read access to a repository path",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "repository",
+                  "description": "Repository key",
+                  "required": true,
+                  "value": {
+                    "help_values": "REPOSITORY"
+                  }
+                },
+                {
+                  "name": "path",
+                  "description": "Optional repository path",
+                  "required": false,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "repositories",
+              "description": "List and filter Artifactory repositories",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter repository keys by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--type",
+                  "description": "Filter repository type",
+                  "takes_value": true,
+                  "value": {
+                    "choices": ["all", "local", "remote", "virtual", "federated"],
+                    "help_values": "all | local | remote | virtual | federated"
+                  }
+                },
+                {
+                  "name": "--package-type",
+                  "description": "Filter package type",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PACKAGE_TYPE"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of repositories",
+                  "takes_value": true,
+                  "default_from": "limits.repositories_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 1000,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "artifacts",
+              "description": "List and filter artifacts under a repository path",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "repository",
+                  "description": "Repository key",
+                  "required": true,
+                  "value": {
+                    "help_values": "REPOSITORY"
+                  }
+                },
+                {
+                  "name": "path",
+                  "description": "Optional folder path",
+                  "required": false,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--query",
+                  "description": "Filter artifact URIs by a case-insensitive query",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--since",
+                  "description": "Include artifacts modified at or after this UTC date/time",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "DATE_OR_TIMESTAMP"
+                  }
+                },
+                {
+                  "name": "--until",
+                  "description": "Include artifacts modified at or before this UTC date/time",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "DATE_OR_TIMESTAMP"
+                  }
+                },
+                {
+                  "name": "--recursive",
+                  "description": "List artifacts recursively",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of artifacts",
+                  "takes_value": true,
+                  "default_from": "limits.artifacts_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 1000,
+                    "help_values": "COUNT"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "artifact",
+              "description": "Show metadata for one artifact file",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "repository",
+                  "description": "Repository key",
+                  "required": true,
+                  "value": {
+                    "help_values": "REPOSITORY"
+                  }
+                },
+                {
+                  "name": "path",
+                  "description": "Artifact file path",
+                  "required": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "manifest",
+              "description": "Read bounded text content from one artifact without writing it",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "repository",
+                  "description": "Repository key",
+                  "required": true,
+                  "value": {
+                    "help_values": "REPOSITORY"
+                  }
+                },
+                {
+                  "name": "path",
+                  "description": "Text artifact path",
+                  "required": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "description": "Artifactory profile id",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PROFILE"
+                  }
+                },
+                {
+                  "name": "--max-bytes",
+                  "description": "Maximum UTF-8 content bytes to return",
+                  "takes_value": true,
+                  "default_from": "limits.manifest_default_bytes",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 1048576,
+                    "help_values": "BYTES"
+                  }
+                },
+                {
+                  "name": "--timeout",
+                  "description": "HTTP timeout in seconds",
+                  "takes_value": true,
+                  "default_from": "timeouts.default_seconds",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 120,
+                    "help_values": "SECONDS"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
           "name": "automox",
           "description": "Automox operator",
           "kind": "service",

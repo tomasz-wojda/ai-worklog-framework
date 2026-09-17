@@ -12,7 +12,8 @@
     "servicenow": ["servicenow"],
     "newrelic": ["newrelic"],
     "datadog": ["datadog"],
-    "automox": ["automox"]
+    "automox": ["automox"],
+    "artifactory": ["artifactory"]
   },
   "derived_checks": ["repositories", "catalog_binaries"]
 }

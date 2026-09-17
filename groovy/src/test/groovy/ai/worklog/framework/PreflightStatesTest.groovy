@@ -116,6 +116,55 @@ class PreflightStatesTest extends GroovyTestCase {
         assertEquals(Status.READY, only(results).status)
     }
 
+    void testArtifactoryMissingDirectoryIsBlocked() {
+        ResultSet results = new ResultSet()
+        PreflightCommands.checkArtifactory(results, paths, [:])
+        assertEquals(Status.BLOCKED, only(results).status)
+    }
+
+    void testArtifactoryEmptyDirectoryIsNotConfigured() {
+        service('artifactory')
+        ResultSet results = new ResultSet()
+        PreflightCommands.checkArtifactory(results, paths, [:])
+        assertEquals(Status.NOT_CONFIGURED, only(results).status)
+    }
+
+    void testArtifactoryRecognizesEachCredentialFilenameWithoutReadingIt() {
+        ['artifactory.properties', 'credentials', 'creds'].each { filename ->
+            File directory = service("artifactory-${filename.replace('.', '-')}")
+            File canonical = new File(workspace, 'integrations/artifactory')
+            canonical.deleteDir()
+            assertTrue(directory.renameTo(canonical))
+            new File(canonical, filename).setText('not valid credential syntax', 'UTF-8')
+            ResultSet results = new ResultSet()
+            PreflightCommands.checkArtifactory(results, paths, [:])
+            CheckResult result = only(results)
+            assertEquals(Status.READY, result.status)
+            assertEquals('Credential source present (file)', result.message)
+            canonical.deleteDir()
+        }
+    }
+
+    void testArtifactoryRequiresBothEnvironmentValues() {
+        service('artifactory')
+        ResultSet incomplete = new ResultSet()
+        PreflightCommands.checkArtifactory(
+            incomplete,
+            paths,
+            [ARTIFACTORY_URL: 'https://example.invalid']
+        )
+        assertEquals(Status.NOT_CONFIGURED, only(incomplete).status)
+
+        ResultSet configured = new ResultSet()
+        PreflightCommands.checkArtifactory(
+            configured,
+            paths,
+            [ARTIFACTORY_URL: 'https://example.invalid', ARTIFACTORY_TOKEN: 'secret']
+        )
+        assertEquals(Status.READY, only(configured).status)
+        assertEquals('Credential source present (environment)', only(configured).message)
+    }
+
     void testJiraFollowsTheSameFourStates() {
         File directory = service('jira')
 

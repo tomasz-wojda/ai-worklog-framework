@@ -1,6 +1,7 @@
 import pytest
 
 from ai_worklog_framework.adapters.preflight import (
+    _check_artifactory,
     _check_jira,
     _check_service_directory,
     _check_service_properties,
@@ -97,6 +98,57 @@ def test_required_file_present_is_ready(paths):
     _check_service_properties(results, paths, "jenkins", "jenkins.properties")
 
     assert _only(results).status == Status.READY
+
+
+def test_artifactory_missing_directory_is_blocked(paths):
+    results = ResultSet()
+    _check_artifactory(results, paths, {})
+
+    assert _only(results).status == Status.BLOCKED
+
+
+def test_artifactory_empty_directory_is_not_configured(paths):
+    _service(paths, "artifactory")
+    results = ResultSet()
+    _check_artifactory(results, paths, {})
+
+    assert _only(results).status == Status.NOT_CONFIGURED
+
+
+@pytest.mark.parametrize("filename", ["artifactory.properties", "credentials", "creds"])
+def test_artifactory_recognizes_credential_files_without_reading(paths, filename):
+    directory = _service(paths, "artifactory")
+    (directory / filename).write_text("not valid credential syntax", encoding="utf-8")
+    results = ResultSet()
+    _check_artifactory(results, paths, {})
+
+    result = _only(results)
+    assert result.status == Status.READY
+    assert result.message == "Credential source present (file)"
+
+
+def test_artifactory_requires_both_environment_values(paths):
+    _service(paths, "artifactory")
+    incomplete = ResultSet()
+    _check_artifactory(
+        incomplete,
+        paths,
+        {"ARTIFACTORY_URL": "https://example.invalid"},
+    )
+    assert _only(incomplete).status == Status.NOT_CONFIGURED
+
+    configured = ResultSet()
+    _check_artifactory(
+        configured,
+        paths,
+        {
+            "ARTIFACTORY_URL": "https://example.invalid",
+            "ARTIFACTORY_TOKEN": "secret",
+        },
+    )
+    result = _only(configured)
+    assert result.status == Status.READY
+    assert result.message == "Credential source present (environment)"
 
 
 def test_jira_follows_the_same_four_states(paths):

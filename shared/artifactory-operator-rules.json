@@ -1,0 +1,17 @@
+{
+  "default_profile": "default",
+  "auth_scheme": "auto",
+  "timeouts": {
+    "default_seconds": 15,
+    "max_seconds": 120
+  },
+  "limits": {
+    "repositories_default": 200,
+    "repositories_max": 1000,
+    "artifacts_default": 200,
+    "artifacts_max": 1000,
+    "manifest_default_bytes": 65536,
+    "manifest_max_bytes": 1048576,
+    "response_max_bytes": 4194304
+  }
+}

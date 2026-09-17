@@ -29,11 +29,12 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
             ServiceCommands.run('list', [], repository, paths, ConfigLoader.load(workspace))
         }
         assertEquals(0, captured.code)
-        assertTrue(captured.out.contains('Service operators (4):'))
-        assertTrue(captured.out.contains('  automox : Automox operator'))
-        assertTrue(captured.out.contains('  jenkins : Jenkins operator'))
-        assertTrue(captured.out.contains('  jira    : Jira and Tempo operator'))
-        assertTrue(captured.out.contains('  newrelic: New Relic operator'))
+        assertTrue(captured.out.contains('Service operators (5):'))
+        assertTrue(captured.out.contains('  artifactory: Artifactory operator'))
+        assertTrue(captured.out.contains('  automox    : Automox operator'))
+        assertTrue(captured.out.contains('  jenkins    : Jenkins operator'))
+        assertTrue(captured.out.contains('  jira       : Jira and Tempo operator'))
+        assertTrue(captured.out.contains('  newrelic   : New Relic operator'))
         assertEquals('', captured.err)
     }
 
@@ -44,7 +45,18 @@ class ServiceCatalogCommandTest extends GroovyTestCase {
         Map report = (Map) new JsonSlurper().parseText(captured.out)
         assertEquals(0, captured.code)
         assertEquals('ready', report.status)
-        assertEquals(['automox', 'jenkins', 'jira', 'newrelic'], report.items*.id)
+        assertEquals(['artifactory', 'automox', 'jenkins', 'jira', 'newrelic'], report.items*.id)
+    }
+
+    void testServiceHelpUsesCanonicalArtifactoryPath() {
+        Map captured = captureStreams {
+            Main.execute(['service', 'artifactory', 'artifacts', '--help'])
+        }
+        assertEquals(0, captured.code)
+        assertTrue(captured.out.contains(
+            'Usage: ai-worklog service artifactory artifacts <repository> [path]'
+        ))
+        assertEquals('', captured.err)
     }
 
     void testServiceHelpUsesCanonicalJenkinsPath() {

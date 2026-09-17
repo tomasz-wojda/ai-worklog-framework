@@ -108,6 +108,8 @@ def execute_preflight(
         _check_binary(results, "argocd")
     if selected("newrelic"):
         _check_service_directory(results, paths, "newrelic")
+    if selected("artifactory"):
+        _check_artifactory(results, paths)
     if selected("datadog"):
         _check_service_directory(results, paths, "datadog")
     if selected("repositories"):
@@ -159,6 +161,37 @@ def _check_service_properties(
     if status == Status.READY:
         status, message = Status.DEGRADED, f"{filename} missing"
     results.add(Result(status=status, source=service, message=message))
+
+
+def _check_artifactory(
+    results: ResultSet,
+    paths: WorkspacePaths,
+    environment: Optional[dict] = None,
+) -> None:
+    directory = paths.service_dir("artifactory")
+    if not directory.is_dir():
+        results.add(Result(
+            status=Status.BLOCKED,
+            source="artifactory",
+            message="Directory not found",
+        ))
+        return
+    environment = os.environ if environment is None else environment
+    environment_present = bool(
+        str(environment.get("ARTIFACTORY_URL", "")).strip()
+        and str(environment.get("ARTIFACTORY_TOKEN", "")).strip()
+    )
+    file_present = any(
+        (directory / filename).is_file()
+        for filename in ("artifactory.properties", "credentials", "creds")
+    )
+    configured = environment_present or file_present
+    source = "environment" if environment_present else "file"
+    results.add(Result(
+        status=Status.READY if configured else Status.NOT_CONFIGURED,
+        source="artifactory",
+        message=f"Credential source present ({source})" if configured else "Not configured",
+    ))
 
 
 def _check_repositories(
