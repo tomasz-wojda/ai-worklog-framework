@@ -1,12 +1,16 @@
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
-from ai_worklog_framework.adapters.http import basic_headers, http_get_json
+from ai_worklog_framework.adapters.http import (
+    basic_headers,
+    http_request_details,
+)
 from ai_worklog_framework.adapters.process import load_properties, run_process
 from ai_worklog_framework.catalog.loader import load_catalog
 from ai_worklog_framework.config import load_config
@@ -15,6 +19,7 @@ from ai_worklog_framework.reconciliation.models import Observation
 from ai_worklog_framework.redaction import redact_dict
 from ai_worklog_framework.result import Result, ResultSet, Status
 from ai_worklog_framework.shared import load_shared
+from ai_worklog_framework.jenkins.versioning import compare_versions, version_at_least, warning_matches
 
 
 DEFAULT_OPERATOR_RULES: Dict[str, Any] = {
@@ -22,6 +27,17 @@ DEFAULT_OPERATOR_RULES: Dict[str, Any] = {
     "max_builds": 5,
     "credential_domain": "_",
     "required_plugins": [],
+    "vulnerabilities": {
+        "update_center_url_template": "https://updates.jenkins.io/{core}/update-center.actual.json",
+        "update_center_fallback_url": "https://updates.jenkins.io/current/update-center.actual.json",
+        "update_center_max_characters": 25000000,
+        "advisory_max_characters": 2000000,
+        "nvd_api_url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+        "nvd_unauthenticated_interval_ms": 6000,
+        "nvd_authenticated_interval_ms": 600,
+        "nvd_retry_count": 1,
+        "nvd_max_retry_after_seconds": 30,
+    },
     "sensitive_parameter_patterns": [
         "password",
         "secret",
@@ -107,6 +123,7 @@ def jenkins_adapter_config(paths: WorkspacePaths) -> Dict[str, Any]:
         "max_builds": int(config.get("max_builds") or rules["max_builds"]),
         "required_plugins": list(config.get("required_plugins") or rules.get("required_plugins") or []),
         "credential_domain": str(config.get("credential_domain") or rules["credential_domain"]),
+        "vulnerabilities": dict(config.get("vulnerabilities") or {}),
     }
 
 
@@ -364,12 +381,32 @@ def _jenkins_get(
     path: str,
     timeout: int = 10,
 ) -> Tuple[int, Any]:
+    status, payload, _ = _jenkins_get_details(paths, controller, path, timeout)
+    return status, payload
+
+
+def _jenkins_get_details(
+    paths: WorkspacePaths,
+    controller: str,
+    path: str,
+    timeout: int = 10,
+) -> Tuple[int, Any, Dict[str, str]]:
     controllers = _load_controller_credentials(paths)
     url, user, token = _controller_auth(controllers, controller)
     if not url or not user or not token:
-        return 0, None
+        return 0, None, {}
     api_url = f"{url}{path}"
-    return http_get_json(api_url, headers=basic_headers(user, token), timeout=timeout)
+    status, body, headers = http_request_details(
+        api_url,
+        headers=basic_headers(user, token),
+        timeout=timeout,
+    )
+    if not body.strip():
+        return status, None, headers
+    try:
+        return status, json.loads(body), headers
+    except json.JSONDecodeError:
+        return status, None, headers
 
 
 def _access_blocked(status_code: int) -> bool:
@@ -824,6 +861,353 @@ def operator_plugins(
         "status": Status.READY,
         "message": "Plugins fetched",
         "items": items,
+        "required": {
+            "requested": sorted(required),
+            "missing": [],
+            "inactive": [],
+        } if required else None,
+    }
+
+
+def _external_get(url: str, headers: Optional[Dict[str, str]], timeout: int) -> Tuple[int, str, Dict[str, str]]:
+    return http_request_details(url, headers=headers, timeout=timeout)
+
+
+def _warning_projection(warning: Dict[str, Any]) -> Dict[str, Any]:
+    ranges = []
+    for entry in warning.get("versions") or []:
+        if isinstance(entry, dict):
+            ranges.append({
+                "pattern": entry.get("pattern"),
+                "last_version": entry.get("lastVersion"),
+            })
+    return {
+        "id": warning.get("id"),
+        "message": warning.get("message"),
+        "url": warning.get("url"),
+        "ranges": ranges,
+    }
+
+
+def _advisory_details(html: str, warning: Dict[str, Any]) -> Dict[str, Any]:
+    warning_id = str(warning.get("id") or "")
+    url = str(warning.get("url") or "")
+    fragment = url.rsplit("#", 1)[1] if "#" in url else warning_id
+    marker = re.search(
+        rf"""id=["']{re.escape(fragment)}["']""",
+        html,
+        re.IGNORECASE,
+    )
+    section = html
+    if marker:
+        section = html[marker.start():]
+        boundary = re.search(r"<h[23][^>]+id=[\"']", section[marker.end() - marker.start():], re.IGNORECASE)
+        if boundary:
+            section = section[:marker.end() - marker.start() + boundary.start()]
+    cves = sorted(set(re.findall(r"CVE-\d{4}-\d{4,}", section, re.IGNORECASE)))
+    severity_match = re.search(r"\b(Critical|High|Medium|Moderate|Low)\b", section, re.IGNORECASE)
+    return {
+        "cves": [value.upper() for value in cves],
+        "severity": severity_match.group(1).upper() if severity_match else None,
+    }
+
+
+def _nvd_details(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    vulnerabilities = payload.get("vulnerabilities")
+    if not isinstance(vulnerabilities, list) or not vulnerabilities:
+        return None
+    cve = vulnerabilities[0].get("cve") if isinstance(vulnerabilities[0], dict) else None
+    if not isinstance(cve, dict):
+        return None
+    candidates = []
+    metrics = cve.get("metrics") if isinstance(cve.get("metrics"), dict) else {}
+    for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+        for metric in metrics.get(key) or []:
+            if not isinstance(metric, dict):
+                continue
+            data = metric.get("cvssData") if isinstance(metric.get("cvssData"), dict) else {}
+            if data.get("baseScore") is not None:
+                candidates.append((float(data["baseScore"]), data, metric))
+    if not candidates:
+        return {
+            "published": cve.get("published"),
+            "last_modified": cve.get("lastModified"),
+        }
+    _, data, metric = max(candidates, key=lambda item: item[0])
+    return {
+        "cvss_version": data.get("version"),
+        "base_score": data.get("baseScore"),
+        "severity": data.get("baseSeverity") or metric.get("baseSeverity"),
+        "vector": data.get("vectorString"),
+        "published": cve.get("published"),
+        "last_modified": cve.get("lastModified"),
+    }
+
+
+def _highest_severity(items: Sequence[Dict[str, Any]]) -> Tuple[Optional[str], Optional[float]]:
+    ranks = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "MODERATE": 2, "LOW": 1}
+    severity = None
+    score = None
+    for item in items:
+        current_score = item.get("base_score")
+        if current_score is not None and (score is None or float(current_score) > score):
+            score = float(current_score)
+        current_severity = str(item.get("severity") or "").upper()
+        if current_severity and ranks.get(current_severity, 0) > ranks.get(severity or "", 0):
+            severity = current_severity
+    return severity, score
+
+
+def operator_plugin_vulnerabilities(
+    paths: WorkspacePaths,
+    controller: str,
+    plugins: Sequence[str],
+    enrich: Sequence[str],
+    timeout: int,
+) -> Dict[str, Any]:
+    fetched_at = _utc_now()
+    base_error, _, _, _ = _operator_base(paths, controller, "plugin-vulnerabilities")
+    if base_error:
+        return base_error
+    rules = load_operator_rules()
+    tree = rules["api_trees"]["plugins"]
+    status_code, payload, response_headers = _jenkins_get_details(
+        paths,
+        controller,
+        f"/pluginManager/api/json?depth=1&tree={tree}",
+        timeout=timeout,
+    )
+    if status_code != 200 or not isinstance(payload, dict):
+        return _operator_http_error("plugin-vulnerabilities", controller, fetched_at, status_code)
+    core_version = response_headers.get("x-jenkins")
+    if not core_version:
+        return {
+            "operation": "plugin-vulnerabilities",
+            "controller": controller,
+            "fetched_at": fetched_at,
+            "status": Status.ERROR,
+            "message": "Malformed Jenkins response: missing X-Jenkins header",
+            "items": [],
+        }
+    installed = {
+        str(item.get("shortName")): item
+        for item in payload.get("plugins") or []
+        if isinstance(item, dict) and item.get("shortName")
+    }
+    requested = sorted(set(plugins))
+    selected_names = sorted(set(installed) if not requested else set(requested) & set(installed))
+    missing = sorted(set(requested) - set(installed))
+    vulnerability_rules = dict(rules.get("vulnerabilities", {}))
+    vulnerability_rules.update(jenkins_adapter_config(paths).get("vulnerabilities") or {})
+    template = str(vulnerability_rules.get("update_center_url_template"))
+    update_url = template.format(core=quote(core_version, safe=""))
+    update_status, update_body, _ = _external_get(update_url, {"Accept": "application/json"}, timeout)
+    if update_status == 404:
+        update_url = str(vulnerability_rules.get("update_center_fallback_url"))
+        update_status, update_body, _ = _external_get(update_url, {"Accept": "application/json"}, timeout)
+    if update_status != 200:
+        return {
+            "operation": "plugin-vulnerabilities",
+            "controller": controller,
+            "fetched_at": fetched_at,
+            "status": Status.ERROR,
+            "message": f"Jenkins Update Center returned HTTP {update_status}",
+            "items": [],
+        }
+    if len(update_body) > int(vulnerability_rules.get("update_center_max_characters", 25000000)):
+        return {
+            "operation": "plugin-vulnerabilities",
+            "controller": controller,
+            "fetched_at": fetched_at,
+            "status": Status.ERROR,
+            "message": "Jenkins Update Center response exceeds configured limit",
+            "items": [],
+        }
+    try:
+        update_data = json.loads(update_body)
+    except json.JSONDecodeError:
+        update_data = None
+    if not isinstance(update_data, dict):
+        return {
+            "operation": "plugin-vulnerabilities",
+            "controller": controller,
+            "fetched_at": fetched_at,
+            "status": Status.ERROR,
+            "message": "Malformed Jenkins Update Center response",
+            "items": [],
+        }
+    warning_by_plugin: Dict[str, List[Dict[str, Any]]] = {}
+    for warning in update_data.get("warnings") or []:
+        if not isinstance(warning, dict) or warning.get("type") != "plugin":
+            continue
+        name = str(warning.get("name") or "")
+        if name:
+            warning_by_plugin.setdefault(name, []).append(warning)
+    update_plugins = update_data.get("plugins") if isinstance(update_data.get("plugins"), dict) else {}
+    requested_enrichment = set(enrich)
+    if "nvd" in requested_enrichment:
+        requested_enrichment.add("advisory")
+    advisory_cache: Dict[str, Tuple[int, str]] = {}
+    nvd_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+    enrichment_errors: List[str] = []
+    nvd_key = os.environ.get("NVD_API_KEY", "")
+    nvd_interval = int(vulnerability_rules.get(
+        "nvd_authenticated_interval_ms" if nvd_key else "nvd_unauthenticated_interval_ms",
+        600 if nvd_key else 6000,
+    ))
+    last_nvd_at = 0.0
+    items = []
+    for name in selected_names:
+        installed_entry = installed[name]
+        installed_version = str(installed_entry.get("version") or "")
+        applicable = [
+            warning for warning in warning_by_plugin.get(name, [])
+            if warning_matches(warning, installed_version)
+        ]
+        if not applicable:
+            continue
+        candidate = update_plugins.get(name) if isinstance(update_plugins.get(name), dict) else {}
+        candidate_version = str(candidate.get("version") or "")
+        candidate_vulnerable = (
+            not candidate_version
+            or compare_versions(candidate_version, installed_version) <= 0
+            or any(warning_matches(warning, candidate_version) for warning in warning_by_plugin.get(name, []))
+        )
+        required_core = str(candidate.get("requiredCore") or "")
+        blocking_dependencies = []
+        reasons = []
+        if candidate_vulnerable:
+            remediation_status = "UNFIXABLE"
+            reasons.append("No warning-free plugin version is published")
+        else:
+            if required_core and not version_at_least(core_version, required_core):
+                reasons.append(f"Requires Jenkins core {required_core}")
+            for dependency in candidate.get("dependencies") or []:
+                if not isinstance(dependency, dict) or dependency.get("optional") is True:
+                    continue
+                dependency_name = str(dependency.get("name") or "")
+                required_version = str(dependency.get("version") or "")
+                current = installed.get(dependency_name)
+                current_version = str(current.get("version") or "") if isinstance(current, dict) else ""
+                if not current or (required_version and compare_versions(current_version, required_version) < 0):
+                    blocking_dependencies.append({
+                        "name": dependency_name,
+                        "required_version": required_version,
+                        "installed_version": current_version or None,
+                    })
+            if blocking_dependencies:
+                reasons.append("Plugin dependencies are not currently compatible")
+            remediation_status = "BLOCKED" if reasons else "REMEDIABLE"
+        advisory_records = []
+        cves = set()
+        for warning in applicable:
+            if "advisory" not in requested_enrichment:
+                continue
+            warning_url = str(warning.get("url") or "")
+            advisory_url = warning_url.split("#", 1)[0]
+            if not advisory_url:
+                enrichment_errors.append(f"{warning.get('id')}: advisory URL unavailable")
+                continue
+            if advisory_url not in advisory_cache:
+                code, body, _ = _external_get(advisory_url, {"Accept": "text/html"}, timeout)
+                advisory_cache[advisory_url] = (code, body)
+            code, body = advisory_cache[advisory_url]
+            if code != 200:
+                enrichment_errors.append(f"{warning.get('id')}: advisory HTTP {code}")
+                continue
+            details = _advisory_details(body, warning)
+            cves.update(details["cves"])
+            advisory_records.append({
+                "warning_id": warning.get("id"),
+                "severity": details["severity"],
+                "cves": details["cves"],
+            })
+        nvd_records = []
+        if "nvd" in requested_enrichment:
+            for cve in sorted(cves):
+                if cve not in nvd_cache:
+                    wait_seconds = max(0.0, (last_nvd_at + nvd_interval / 1000.0) - time.monotonic())
+                    if wait_seconds:
+                        time.sleep(wait_seconds)
+                    headers = {"Accept": "application/json"}
+                    if nvd_key:
+                        headers["apiKey"] = nvd_key
+                    nvd_url = f"{vulnerability_rules.get('nvd_api_url')}?cveId={quote(cve, safe='')}"
+                    retries = int(vulnerability_rules.get("nvd_retry_count", 1))
+                    code = 0
+                    body = ""
+                    response_headers = {}
+                    for attempt in range(retries + 1):
+                        code, body, response_headers = _external_get(nvd_url, headers, timeout)
+                        last_nvd_at = time.monotonic()
+                        if code != 429 or attempt == retries:
+                            break
+                        retry_after = min(
+                            int(response_headers.get("retry-after", "1") or "1"),
+                            int(vulnerability_rules.get("nvd_max_retry_after_seconds", 30)),
+                        )
+                        time.sleep(max(0, retry_after))
+                    if code == 200:
+                        try:
+                            parsed_nvd = json.loads(body)
+                        except json.JSONDecodeError:
+                            parsed_nvd = None
+                        nvd_cache[cve] = _nvd_details(parsed_nvd) if isinstance(parsed_nvd, dict) else None
+                        if nvd_cache[cve] is None:
+                            enrichment_errors.append(f"{cve}: malformed NVD response")
+                    else:
+                        nvd_cache[cve] = None
+                        enrichment_errors.append(f"{cve}: NVD HTTP {code}")
+                if nvd_cache[cve]:
+                    nvd_records.append({"cve": cve, **nvd_cache[cve]})
+        severity, score = _highest_severity([*advisory_records, *nvd_records])
+        items.append({
+            "short_name": name,
+            "installed_version": installed_version,
+            "candidate_version": candidate_version or None,
+            "active": installed_entry.get("active"),
+            "enabled": installed_entry.get("enabled"),
+            "remediation_status": remediation_status,
+            "reasons": reasons,
+            "required_core": required_core or None,
+            "blocking_dependencies": blocking_dependencies,
+            "warnings": [_warning_projection(warning) for warning in applicable],
+            "cves": sorted(cves),
+            "highest_severity": severity,
+            "highest_cvss": score,
+            "advisories": advisory_records,
+            "nvd": nvd_records,
+        })
+    counts = {"REMEDIABLE": 0, "UNFIXABLE": 0, "BLOCKED": 0}
+    for item in items:
+        counts[item["remediation_status"]] += 1
+    scan_status = Status.DEGRADED if enrichment_errors else Status.READY
+    return {
+        "operation": "plugin-vulnerabilities",
+        "controller": controller,
+        "fetched_at": fetched_at,
+        "status": scan_status,
+        "message": "Plugin vulnerability scan completed",
+        "core_version": core_version,
+        "update_center": {
+            "url": update_url,
+            "generated_at": update_data.get("generationTimestamp"),
+        },
+        "filter": {
+            "requested": requested,
+            "missing": missing,
+        },
+        "enrichment": {
+            "requested": sorted(requested_enrichment),
+            "errors": sorted(set(enrichment_errors)),
+        },
+        "summary": {
+            "installed": len(installed),
+            "scanned": len(selected_names),
+            "affected": len(items),
+            **counts,
+        },
+        "items": sorted(items, key=lambda item: item["short_name"]),
     }
 
 
@@ -1590,7 +1974,21 @@ def report_to_json(report: Dict[str, Any]) -> str:
         "status": status,
         "items": report.get("items") or [],
     }
-    for key in ("controller", "message", "domain", "folder", "query", "view", "job", "build_selector"):
+    for key in (
+        "controller",
+        "message",
+        "domain",
+        "folder",
+        "query",
+        "view",
+        "job",
+        "build_selector",
+        "core_version",
+        "update_center",
+        "filter",
+        "enrichment",
+        "summary",
+    ):
         value = report.get(key)
         if value not in (None, ""):
             payload[key] = value

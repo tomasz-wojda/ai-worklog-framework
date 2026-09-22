@@ -18,6 +18,11 @@ class JenkinsOperatorReport {
     String job
     String buildSelector
     Map required
+    String coreVersion
+    Map updateCenter
+    Map filter
+    Map enrichment
+    Map summary
     List<Map> items = []
 
     static JenkinsOperatorReport fromPayload(Map payload) {
@@ -36,6 +41,11 @@ class JenkinsOperatorReport {
             job: payload.job?.toString(),
             buildSelector: payload.build_selector?.toString(),
             required: payload.required instanceof Map ? (Map) payload.required : null,
+            coreVersion: payload.core_version?.toString(),
+            updateCenter: payload.update_center instanceof Map ? (Map) payload.update_center : null,
+            filter: payload.filter instanceof Map ? (Map) payload.filter : null,
+            enrichment: payload.enrichment instanceof Map ? (Map) payload.enrichment : null,
+            summary: payload.summary instanceof Map ? (Map) payload.summary : null,
             items: (payload.items ?: []).collect { it instanceof Map ? new LinkedHashMap(it) : [:] }
         )
     }
@@ -74,6 +84,21 @@ class JenkinsOperatorReport {
         if (required) {
             payload.required = required
         }
+        if (coreVersion) {
+            payload.core_version = coreVersion
+        }
+        if (updateCenter) {
+            payload.update_center = updateCenter
+        }
+        if (filter) {
+            payload.filter = filter
+        }
+        if (enrichment) {
+            payload.enrichment = enrichment
+        }
+        if (summary) {
+            payload.summary = summary
+        }
         payload
     }
 
@@ -106,6 +131,37 @@ class JenkinsOperatorReport {
         output.append("  Status: ${status.value}").append(System.lineSeparator())
         if (message) {
             output.append("  Message: ${redaction.redact(message)}").append(System.lineSeparator())
+        }
+        if (required?.requested) {
+            Set verified = (required.requested as Set) -
+                ((required.missing ?: []) as Set) -
+                ((required.inactive ?: []) as Set)
+            if (verified) {
+                output.append("  Verified required: ${verified.toList().sort().join(', ')}")
+                    .append(System.lineSeparator())
+            }
+        }
+        if (operation == 'plugin-vulnerabilities') {
+            if (coreVersion) {
+                output.append("  Jenkins core: ${coreVersion}").append(System.lineSeparator())
+            }
+            Map totals = summary ?: [:]
+            output.append('  Summary: ')
+                .append("scanned=${totals.scanned ?: 0}, ")
+                .append("affected=${totals.affected ?: 0}, ")
+                .append("remediable=${totals.REMEDIABLE ?: 0}, ")
+                .append("unfixable=${totals.UNFIXABLE ?: 0}, ")
+                .append("blocked=${totals.BLOCKED ?: 0}")
+                .append(System.lineSeparator())
+            items.each { item ->
+                output.append("  - ${item.short_name} ${item.installed_version}: ")
+                    .append(item.remediation_status)
+                if (item.candidate_version) {
+                    output.append(" -> ${item.candidate_version}")
+                }
+                output.append(System.lineSeparator())
+            }
+            return output.toString()
         }
         items.each { item ->
             output.append("  - ${pythonItemString(redactItem(item, redaction))}").append(System.lineSeparator())

@@ -29,7 +29,16 @@ class JenkinsCommands {
             System.err.print usage.renderPath(['service', 'jenkins'])
             return exitCodes.userError
         }
-        Map actionDefinition = contract.node(['service', 'jenkins', action])
+        String dispatchAction = action
+        List<String> actionPath = ['service', 'jenkins', action]
+        if (action == 'plugins') {
+            String pluginAction = args && args[0] in ['list', 'vulnerabilities'] ?
+                args.remove(0) : 'list'
+            actionPath << pluginAction
+            dispatchAction = pluginAction == 'vulnerabilities' ?
+                'plugin-vulnerabilities' : 'plugins'
+        }
+        Map actionDefinition = contract.node(actionPath)
         if (!actionDefinition) {
             System.err.print usage.renderPath(['service', 'jenkins'])
             return exitCodes.userError
@@ -59,24 +68,24 @@ class JenkinsCommands {
                 defaults
             )
             json = parsed.flag('--json')
-            payload = dispatch(action, parsed, adapter, settings)
+            payload = dispatch(dispatchAction, parsed, adapter, settings)
         } catch (UsageError exception) {
             JenkinsOperatorReport report = errorReport(
-                action,
-                errorController(action, null, original),
+                dispatchAction,
+                errorController(dispatchAction, null, original),
                 exception.message
             )
             System.err.println(exception.message)
             System.err.println()
-            System.err.print usage.renderPath(['service', 'jenkins', action])
+            System.err.print usage.renderPath(actionPath)
             if (json) {
                 print report.renderJson(redaction)
             }
             return exitCodes.userError
         } catch (IllegalArgumentException exception) {
             JenkinsOperatorReport report = errorReport(
-                action,
-                errorController(action, parsed, original),
+                dispatchAction,
+                errorController(dispatchAction, parsed, original),
                 exception.message
             )
             if (json) {
@@ -122,6 +131,16 @@ class JenkinsCommands {
                 return adapter.operatorPlugins(
                     parsed.positional('controller'),
                     required.unique().sort(),
+                    settings.timeout_seconds as int
+                )
+            case 'plugin-vulnerabilities':
+                return adapter.operatorPluginVulnerabilities(
+                    parsed.positional('controller'),
+                    parsed.values('--plugin').unique().sort(),
+                    parsed.values('--enrich')
+                        .collect { it.toLowerCase() }
+                        .unique()
+                        .sort(),
                     settings.timeout_seconds as int
                 )
             case 'credentials':
@@ -213,7 +232,10 @@ class JenkinsCommands {
         if (parsed?.positional('controller')) {
             return parsed.positional('controller')
         }
-        List<String> optionsWithValues = ['--builds', '--require', '--domain', '--limit', '--folder', '--query', '--view']
+        List<String> optionsWithValues = [
+            '--builds', '--require', '--plugin', '--enrich', '--domain',
+            '--limit', '--folder', '--query', '--view'
+        ]
         int index = 0
         while (index < args.size()) {
             String token = args[index]

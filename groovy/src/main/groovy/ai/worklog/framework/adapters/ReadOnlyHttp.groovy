@@ -19,6 +19,17 @@ class ReadOnlyHttp {
             }
             return requestHandler(method, url, headers, timeoutSeconds)
         }
+        networkRequest(method, url, headers, timeoutSeconds, responseBodyMaxCharacters, 5)
+    }
+
+    private Map networkRequest(
+        String method,
+        String url,
+        Map headers,
+        int timeoutSeconds,
+        int responseBodyMaxCharacters,
+        int redirectsRemaining
+    ) {
         URI uri
         try {
             uri = new URI(url)
@@ -35,12 +46,38 @@ class ReadOnlyHttp {
                 InternalSslSupport.applyHttpsConnection((HttpsURLConnection) connection, uri)
             }
             connection.requestMethod = method
+            connection.instanceFollowRedirects = false
             connection.connectTimeout = timeoutSeconds * 1000
             connection.readTimeout = timeoutSeconds * 1000
             headers.each { key, value ->
                 connection.setRequestProperty(key.toString(), value.toString())
             }
             int code = connection.responseCode
+            Map responseHeaders = [:]
+            connection.headerFields.each { key, values ->
+                if (key && values) {
+                    responseHeaders[key.toString().toLowerCase()] = values[0]?.toString()
+                }
+            }
+            if (code in [301, 302, 303, 307, 308] && responseHeaders.location) {
+                if (redirectsRemaining <= 0) {
+                    return [
+                        code: 0,
+                        body: '',
+                        error: 'Too many redirects',
+                        headers: responseHeaders
+                    ]
+                }
+                String target = uri.resolve(responseHeaders.location.toString()).toString()
+                return networkRequest(
+                    method,
+                    target,
+                    headers,
+                    timeoutSeconds,
+                    responseBodyMaxCharacters,
+                    redirectsRemaining - 1
+                )
+            }
             InputStream stream = code >= 400 ? connection.errorStream : connection.inputStream
             String body
             if (stream) {
@@ -52,9 +89,9 @@ class ReadOnlyHttp {
             } else {
                 body = ''
             }
-            [code: code, body: body, error: code >= 400 ? body : '']
+            [code: code, body: body, error: code >= 400 ? body : '', headers: responseHeaders]
         } catch (Exception exception) {
-            [code: 0, body: '', error: exception.message ?: exception.class.simpleName]
+            [code: 0, body: '', error: exception.message ?: exception.class.simpleName, headers: [:]]
         } finally {
             connection?.disconnect()
         }

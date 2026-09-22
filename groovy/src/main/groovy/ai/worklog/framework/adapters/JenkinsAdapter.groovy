@@ -4,6 +4,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Status
+import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.reconciliation.Observation
 import groovy.json.JsonSlurper
@@ -63,6 +64,8 @@ class JenkinsAdapter {
             download_timeout_seconds: (operatorRules.downloads?.timeout_seconds ?: 300) as int,
             download_max_bytes: (operatorRules.downloads?.max_bytes ?: 1073741824L) as long,
             download_buffer_bytes: (operatorRules.downloads?.buffer_bytes ?: 65536) as int,
+            vulnerabilities: jenkins.vulnerabilities instanceof Map ?
+                (Map) jenkins.vulnerabilities : [:],
             ai_vault_root: jenkins.ai_vault_root?.toString(),
             syntax_check_script: jenkins.syntax_check_script?.toString()
         ]
@@ -285,12 +288,336 @@ class JenkinsAdapter {
             ]
             return report
         }
-        [
+        Map report = [
             operation: 'plugins',
             controller: controller,
             fetched_at: fetchedAt,
             status: Status.READY,
             message: 'Plugins fetched',
+            items: items
+        ]
+        if (required) {
+            report.required = [
+                requested: required.sort(),
+                missing: [],
+                inactive: []
+            ]
+        }
+        report
+    }
+
+    Map operatorPluginVulnerabilities(
+        String controller,
+        List<String> pluginFilter,
+        List<String> enrich,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                "Controller '${controller}' not found"
+            )
+        }
+        Map controllerInfo = (Map) controllers[controller]
+        if (!controllerInfo.url?.toString() || !controllerInfo.user?.toString() ||
+            !controllerInfo.token?.toString()) {
+            return blockedReport(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                'Controller credentials unavailable'
+            )
+        }
+        String tree = operatorRules.api_trees?.plugins?.toString() ?:
+            'plugins[shortName,version,active,enabled]'
+        List pluginResponse = jenkinsGet(
+            controller,
+            "/pluginManager/api/json?depth=1&tree=${tree}",
+            timeout
+        )
+        int pluginStatus = pluginResponse[0] as int
+        Object pluginPayload = pluginResponse[1]
+        if (pluginStatus != 200 || !(pluginPayload instanceof Map)) {
+            return operatorHttpError(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                pluginStatus
+            )
+        }
+        Map pluginHeaders = pluginResponse.size() > 2 && pluginResponse[2] instanceof Map ?
+            (Map) pluginResponse[2] : [:]
+        String coreVersion = pluginHeaders['x-jenkins']?.toString()
+        if (!coreVersion) {
+            return errorReport(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                'Malformed Jenkins response: missing X-Jenkins header'
+            )
+        }
+        Map<String, Map> installed = [:]
+        ((List) (((Map) pluginPayload).plugins ?: [])).each { entry ->
+            if (entry instanceof Map && entry.shortName) {
+                installed[entry.shortName.toString()] = (Map) entry
+            }
+        }
+        List<String> requested = pluginFilter.collect { it.toString() }.unique().sort()
+        List<String> selectedNames = requested ?
+            requested.findAll { installed.containsKey(it) } :
+            installed.keySet().toList().sort()
+        List<String> missing = requested.findAll { !installed.containsKey(it) }.sort()
+        Map vulnerabilityRules = operatorRules.vulnerabilities instanceof Map ?
+            new LinkedHashMap((Map) operatorRules.vulnerabilities) : [:]
+        vulnerabilityRules.putAll((Map) (settings().vulnerabilities ?: [:]))
+        String updateUrl = vulnerabilityRules.update_center_url_template.toString()
+            .replace('{core}', URLEncoder.encode(coreVersion, 'UTF-8').replace('+', '%20'))
+        Map updateResponse = http.get(
+            updateUrl,
+            [Accept: 'application/json'],
+            timeout,
+            vulnerabilityRules.update_center_max_characters as int
+        )
+        if ((updateResponse.code as int) == 404) {
+            updateUrl = vulnerabilityRules.update_center_fallback_url.toString()
+            updateResponse = http.get(
+                updateUrl,
+                [Accept: 'application/json'],
+                timeout,
+                vulnerabilityRules.update_center_max_characters as int
+            )
+        }
+        if ((updateResponse.code as int) != 200) {
+            return errorReport(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                "Jenkins Update Center returned HTTP ${updateResponse.code}"
+            )
+        }
+        Map updateData
+        try {
+            Object parsed = updateResponse.body?.trim() ?
+                new JsonSlurper().parseText(updateResponse.body.toString()) : null
+            updateData = parsed instanceof Map ? (Map) parsed : null
+        } catch (Exception ignored) {
+            updateData = null
+        }
+        if (!updateData) {
+            return errorReport(
+                'plugin-vulnerabilities',
+                controller,
+                fetchedAt,
+                'Malformed Jenkins Update Center response'
+            )
+        }
+        Map<String, List<Map>> warningsByPlugin = [:].withDefault { [] }
+        ((List) (updateData.warnings ?: [])).each { warning ->
+            if (warning instanceof Map && warning.type == 'plugin' && warning.name) {
+                warningsByPlugin[warning.name.toString()] << (Map) warning
+            }
+        }
+        Map updatePlugins = updateData.plugins instanceof Map ? (Map) updateData.plugins : [:]
+        Set<String> requestedEnrichment = enrich.collect { it.toString() } as Set
+        if (requestedEnrichment.contains('nvd')) {
+            requestedEnrichment << 'advisory'
+        }
+        Map<String, Map> advisoryCache = [:]
+        Map<String, Map> nvdCache = [:]
+        List<String> enrichmentErrors = []
+        String nvdKey = System.getenv('NVD_API_KEY') ?: ''
+        int nvdInterval = (vulnerabilityRules[
+            nvdKey ? 'nvd_authenticated_interval_ms' : 'nvd_unauthenticated_interval_ms'
+        ] ?: (nvdKey ? 600 : 6000)) as int
+        long lastNvdAt = 0L
+        List<Map> items = []
+        selectedNames.each { String name ->
+            Map installedEntry = installed[name]
+            String installedVersion = installedEntry.version?.toString() ?: ''
+            List<Map> applicable = warningsByPlugin[name].findAll {
+                JenkinsVersioning.warningMatches(it, installedVersion)
+            }
+            if (!applicable) {
+                return
+            }
+            Map candidate = updatePlugins[name] instanceof Map ? (Map) updatePlugins[name] : [:]
+            String candidateVersion = candidate.version?.toString() ?: ''
+            boolean candidateVulnerable = !candidateVersion ||
+                JenkinsVersioning.compare(candidateVersion, installedVersion) <= 0 ||
+                warningsByPlugin[name].any {
+                    JenkinsVersioning.warningMatches(it, candidateVersion)
+                }
+            String requiredCore = candidate.requiredCore?.toString() ?: ''
+            List<Map> blockingDependencies = []
+            List<String> reasons = []
+            String remediationStatus
+            if (candidateVulnerable) {
+                remediationStatus = 'UNFIXABLE'
+                reasons << 'No warning-free plugin version is published'
+            } else {
+                if (requiredCore && !JenkinsVersioning.atLeast(coreVersion, requiredCore)) {
+                    reasons << "Requires Jenkins core ${requiredCore}"
+                }
+                ((List) (candidate.dependencies ?: [])).each { dependency ->
+                    if (!(dependency instanceof Map) || dependency.optional == true) {
+                        return
+                    }
+                    String dependencyName = dependency.name?.toString() ?: ''
+                    String requiredVersion = dependency.version?.toString() ?: ''
+                    Map current = installed[dependencyName]
+                    String currentVersion = current?.version?.toString() ?: ''
+                    if (!current || (requiredVersion &&
+                        JenkinsVersioning.compare(currentVersion, requiredVersion) < 0)) {
+                        blockingDependencies << [
+                            name: dependencyName,
+                            required_version: requiredVersion,
+                            installed_version: currentVersion ?: null
+                        ]
+                    }
+                }
+                if (blockingDependencies) {
+                    reasons << 'Plugin dependencies are not currently compatible'
+                }
+                remediationStatus = reasons ? 'BLOCKED' : 'REMEDIABLE'
+            }
+            Set<String> cves = [] as Set
+            List<Map> advisoryRecords = []
+            applicable.each { Map warning ->
+                if (!requestedEnrichment.contains('advisory')) {
+                    return
+                }
+                String warningUrl = warning.url?.toString() ?: ''
+                String advisoryUrl = warningUrl.contains('#') ?
+                    warningUrl.substring(0, warningUrl.indexOf('#')) : warningUrl
+                if (!advisoryUrl) {
+                    enrichmentErrors << "${warning.id}: advisory URL unavailable"
+                    return
+                }
+                if (!advisoryCache.containsKey(advisoryUrl)) {
+                    Map response = http.get(
+                        advisoryUrl,
+                        [Accept: 'text/html'],
+                        timeout,
+                        vulnerabilityRules.advisory_max_characters as int
+                    )
+                    advisoryCache[advisoryUrl] = response
+                }
+                Map response = advisoryCache[advisoryUrl]
+                if ((response.code as int) != 200) {
+                    enrichmentErrors << "${warning.id}: advisory HTTP ${response.code}"
+                    return
+                }
+                Map details = advisoryDetails(response.body?.toString() ?: '', warning)
+                cves.addAll((List<String>) details.cves)
+                advisoryRecords << [
+                    warning_id: warning.id,
+                    severity: details.severity,
+                    cves: details.cves
+                ]
+            }
+            List<Map> nvdRecords = []
+            if (requestedEnrichment.contains('nvd')) {
+                cves.toList().sort().each { String cve ->
+                    if (!nvdCache.containsKey(cve)) {
+                        long waitMillis = Math.max(0L, lastNvdAt + nvdInterval - System.currentTimeMillis())
+                        if (waitMillis) {
+                            Thread.sleep(waitMillis)
+                        }
+                        Map headers = [Accept: 'application/json']
+                        if (nvdKey) {
+                            headers.apiKey = nvdKey
+                        }
+                        String nvdUrl = "${vulnerabilityRules.nvd_api_url}?cveId=" +
+                            URLEncoder.encode(cve, 'UTF-8')
+                        int retries = (vulnerabilityRules.nvd_retry_count ?: 1) as int
+                        Map response = [:]
+                        for (int attempt = 0; attempt <= retries; attempt++) {
+                            response = http.get(nvdUrl, headers, timeout)
+                            lastNvdAt = System.currentTimeMillis()
+                            if ((response.code as int) != 429 || attempt == retries) {
+                                break
+                            }
+                            int retryAfter = Math.min(
+                                ((Map) (response.headers ?: [:]))['retry-after']?.toString()?.isInteger() ?
+                                    ((Map) response.headers)['retry-after'].toString().toInteger() : 1,
+                                (vulnerabilityRules.nvd_max_retry_after_seconds ?: 30) as int
+                            )
+                            Thread.sleep(Math.max(0, retryAfter) * 1000L)
+                        }
+                        if ((response.code as int) == 200) {
+                            try {
+                                Object parsedNvd = new JsonSlurper().parseText(response.body.toString())
+                                Map details = parsedNvd instanceof Map ?
+                                    nvdDetails((Map) parsedNvd) : null
+                                nvdCache[cve] = details ?: [:]
+                                if (!details) {
+                                    enrichmentErrors << "${cve}: malformed NVD response"
+                                }
+                            } catch (Exception ignored) {
+                                nvdCache[cve] = [:]
+                                enrichmentErrors << "${cve}: malformed NVD response"
+                            }
+                        } else {
+                            nvdCache[cve] = [:]
+                            enrichmentErrors << "${cve}: NVD HTTP ${response.code}"
+                        }
+                    }
+                    if (nvdCache[cve]) {
+                        nvdRecords << ([cve: cve] + nvdCache[cve])
+                    }
+                }
+            }
+            Map highest = highestSeverity(advisoryRecords + nvdRecords)
+            items << [
+                short_name: name,
+                installed_version: installedVersion,
+                candidate_version: candidateVersion ?: null,
+                active: installedEntry.active,
+                enabled: installedEntry.enabled,
+                remediation_status: remediationStatus,
+                reasons: reasons,
+                required_core: requiredCore ?: null,
+                blocking_dependencies: blockingDependencies,
+                warnings: applicable.collect { warningProjection(it) },
+                cves: cves.toList().sort(),
+                highest_severity: highest.severity,
+                highest_cvss: highest.score,
+                advisories: advisoryRecords,
+                nvd: nvdRecords
+            ]
+        }
+        Map counts = [REMEDIABLE: 0, UNFIXABLE: 0, BLOCKED: 0]
+        items.each { counts[it.remediation_status] = (counts[it.remediation_status] as int) + 1 }
+        items.sort { a, b -> a.short_name.toString() <=> b.short_name.toString() }
+        [
+            operation: 'plugin-vulnerabilities',
+            controller: controller,
+            fetched_at: fetchedAt,
+            status: enrichmentErrors ? Status.DEGRADED : Status.READY,
+            message: 'Plugin vulnerability scan completed',
+            core_version: coreVersion,
+            update_center: [
+                url: updateUrl,
+                generated_at: updateData.generationTimestamp
+            ],
+            filter: [requested: requested, missing: missing],
+            enrichment: [
+                requested: requestedEnrichment.toList().sort(),
+                errors: enrichmentErrors.unique().sort()
+            ],
+            summary: [
+                installed: installed.size(),
+                scanned: selectedNames.size(),
+                affected: items.size(),
+                REMEDIABLE: counts.REMEDIABLE,
+                UNFIXABLE: counts.UNFIXABLE,
+                BLOCKED: counts.BLOCKED
+            ],
             items: items
         ]
     }
@@ -1197,6 +1524,17 @@ class JenkinsAdapter {
             required_plugins: [],
             sensitive_parameter_patterns: ['password', 'secret', 'token', 'credential', 'key', 'auth'],
             seed_failure_results: ['FAILURE', 'failure', 'UNSTABLE', 'unstable'],
+            vulnerabilities: [
+                update_center_url_template: 'https://updates.jenkins.io/{core}/update-center.actual.json',
+                update_center_fallback_url: 'https://updates.jenkins.io/current/update-center.actual.json',
+                update_center_max_characters: 25000000,
+                advisory_max_characters: 2000000,
+                nvd_api_url: 'https://services.nvd.nist.gov/rest/json/cves/2.0',
+                nvd_unauthenticated_interval_ms: 6000,
+                nvd_authenticated_interval_ms: 600,
+                nvd_retry_count: 1,
+                nvd_max_retry_after_seconds: 30
+            ],
             downloads: [
                 timeout_seconds: 300,
                 max_bytes: 1073741824L,
@@ -1431,7 +1769,7 @@ class JenkinsAdapter {
         } catch (Exception ignored) {
             payload = null
         }
-        [response.code as int, payload]
+        [response.code as int, payload, response.headers instanceof Map ? (Map) response.headers : [:]]
     }
 
     private List<Map> extractParameters(Map payload) {
@@ -1468,6 +1806,131 @@ class JenkinsAdapter {
 
     private String parameterName(String name) {
         sensitiveParameterPattern.matcher(name).find() ? '***REDACTED***' : name
+    }
+
+    private static Map warningProjection(Map warning) {
+        List<Map> ranges = []
+        ((List) (warning.versions ?: [])).each { entry ->
+            if (entry instanceof Map) {
+                ranges << [
+                    pattern: entry.pattern,
+                    last_version: entry.lastVersion
+                ]
+            }
+        }
+        [
+            id: warning.id,
+            message: warning.message,
+            url: warning.url,
+            ranges: ranges
+        ]
+    }
+
+    private static Map advisoryDetails(String html, Map warning) {
+        String warningId = warning.id?.toString() ?: ''
+        String url = warning.url?.toString() ?: ''
+        String fragment = url.contains('#') ?
+            url.substring(url.indexOf('#') + 1) : warningId
+        String section = html
+        def marker = Pattern.compile(
+            "id=[\"']${Pattern.quote(fragment)}[\"']",
+            Pattern.CASE_INSENSITIVE
+        ).matcher(html)
+        if (marker.find()) {
+            section = html.substring(marker.start())
+            def boundary = Pattern.compile(
+                /<h[23][^>]+id=["']/,
+                Pattern.CASE_INSENSITIVE
+            ).matcher(section.substring(marker.end() - marker.start()))
+            if (boundary.find()) {
+                section = section.substring(
+                    0,
+                    marker.end() - marker.start() + boundary.start()
+                )
+            }
+        }
+        Set<String> cves = [] as Set
+        def cveMatcher = Pattern.compile(
+            /CVE-\d{4}-\d{4,}/,
+            Pattern.CASE_INSENSITIVE
+        ).matcher(section)
+        while (cveMatcher.find()) {
+            cves << cveMatcher.group().toUpperCase()
+        }
+        def severityMatcher = Pattern.compile(
+            /\b(Critical|High|Medium|Moderate|Low)\b/,
+            Pattern.CASE_INSENSITIVE
+        ).matcher(section)
+        [
+            cves: cves.toList().sort(),
+            severity: severityMatcher.find() ?
+                severityMatcher.group(1).toUpperCase() : null
+        ]
+    }
+
+    private static Map nvdDetails(Map payload) {
+        List vulnerabilities = payload.vulnerabilities instanceof List ?
+            (List) payload.vulnerabilities : []
+        if (!vulnerabilities || !(vulnerabilities[0] instanceof Map) ||
+            !(((Map) vulnerabilities[0]).cve instanceof Map)) {
+            return null
+        }
+        Map cve = (Map) ((Map) vulnerabilities[0]).cve
+        Map metrics = cve.metrics instanceof Map ? (Map) cve.metrics : [:]
+        List<Map> candidates = []
+        ['cvssMetricV40', 'cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2'].each { key ->
+            ((List) (metrics[key] ?: [])).each { metric ->
+                if (metric instanceof Map && metric.cvssData instanceof Map &&
+                    ((Map) metric.cvssData).baseScore != null) {
+                    candidates << [data: (Map) metric.cvssData, metric: (Map) metric]
+                }
+            }
+        }
+        if (!candidates) {
+            return [
+                published: cve.published,
+                last_modified: cve.lastModified
+            ]
+        }
+        Map selected = candidates.max {
+            ((Map) it.data).baseScore as BigDecimal
+        }
+        Map data = (Map) selected.data
+        Map metric = (Map) selected.metric
+        [
+            cvss_version: data.version,
+            base_score: data.baseScore,
+            severity: data.baseSeverity ?: metric.baseSeverity,
+            vector: data.vectorString,
+            published: cve.published,
+            last_modified: cve.lastModified
+        ]
+    }
+
+    private static Map highestSeverity(List<Map> records) {
+        Map<String, Integer> ranks = [
+            CRITICAL: 4,
+            HIGH: 3,
+            MEDIUM: 2,
+            MODERATE: 2,
+            LOW: 1
+        ]
+        String severity
+        BigDecimal score
+        records.each { record ->
+            if (record.base_score != null) {
+                BigDecimal current = record.base_score as BigDecimal
+                if (score == null || current > score) {
+                    score = current
+                }
+            }
+            String currentSeverity = record.severity?.toString()?.toUpperCase()
+            if (currentSeverity &&
+                (ranks[currentSeverity] ?: 0) > (ranks[severity] ?: 0)) {
+                severity = currentSeverity
+            }
+        }
+        [severity: severity, score: score]
     }
 
     private Pattern buildSensitivePattern() {

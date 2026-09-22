@@ -12,6 +12,7 @@
           "minItems": 1,
           "uniqueItems": true
         },
+        "case_insensitive": {"type": "boolean"},
         "pattern": {"type": "string"},
         "integer_min": {"type": "integer"},
         "integer_max": {"type": "integer"},

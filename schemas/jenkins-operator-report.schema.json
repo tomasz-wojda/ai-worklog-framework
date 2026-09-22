@@ -11,6 +11,7 @@
         "health",
         "job",
         "plugins",
+        "plugin-vulnerabilities",
         "credentials",
         "seed",
         "syntax-check",
@@ -37,6 +38,46 @@
     "view": {"type": "string"},
     "job": {"type": "string"},
     "build_selector": {"type": "string"},
+    "core_version": {"type": "string"},
+    "update_center": {
+      "type": "object",
+      "properties": {
+        "url": {"type": "string"},
+        "generated_at": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "filter": {
+      "type": "object",
+      "properties": {
+        "requested": {"type": "array", "items": {"type": "string"}},
+        "missing": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["requested", "missing"],
+      "additionalProperties": false
+    },
+    "enrichment": {
+      "type": "object",
+      "properties": {
+        "requested": {"type": "array", "items": {"type": "string"}},
+        "errors": {"type": "array", "items": {"type": "string"}}
+      },
+      "required": ["requested", "errors"],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "installed": {"type": "integer", "minimum": 0},
+        "scanned": {"type": "integer", "minimum": 0},
+        "affected": {"type": "integer", "minimum": 0},
+        "REMEDIABLE": {"type": "integer", "minimum": 0},
+        "UNFIXABLE": {"type": "integer", "minimum": 0},
+        "BLOCKED": {"type": "integer", "minimum": 0}
+      },
+      "required": ["installed", "scanned", "affected", "REMEDIABLE", "UNFIXABLE", "BLOCKED"],
+      "additionalProperties": false
+    },
     "required": {
       "type": "object",
       "properties": {

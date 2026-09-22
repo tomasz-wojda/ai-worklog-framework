@@ -26,6 +26,11 @@ _ALLOWED_REPORT_KEYS = frozenset({
     "view",
     "job",
     "build_selector",
+    "core_version",
+    "update_center",
+    "filter",
+    "enrichment",
+    "summary",
 })
 _ALLOWED_REQUIRED_KEYS = frozenset({"requested", "missing", "inactive"})
 
@@ -92,6 +97,38 @@ def _render_human(report: JenkinsReport, payload: Optional[dict] = None) -> None
     print(f"  Status: {report.status.value}")
     if report.message:
         print(f"  Message: {redact_string(report.message)}")
+    required = payload.get("required")
+    if required and required.get("requested"):
+        verified = sorted(
+            set(required.get("requested") or [])
+            - set(required.get("missing") or [])
+            - set(required.get("inactive") or [])
+        )
+        if verified:
+            print(f"  Verified required: {', '.join(verified)}")
+    if report.operation == "plugin-vulnerabilities":
+        if payload.get("core_version"):
+            print(f"  Jenkins core: {payload['core_version']}")
+        summary = payload.get("summary") or {}
+        print(
+            "  Summary: "
+            f"scanned={summary.get('scanned', 0)}, "
+            f"affected={summary.get('affected', 0)}, "
+            f"remediable={summary.get('REMEDIABLE', 0)}, "
+            f"unfixable={summary.get('UNFIXABLE', 0)}, "
+            f"blocked={summary.get('BLOCKED', 0)}"
+        )
+        for item in report.items:
+            print(
+                f"  - {item.get('short_name')} {item.get('installed_version')}: "
+                f"{item.get('remediation_status')}"
+                + (
+                    f" -> {item.get('candidate_version')}"
+                    if item.get("candidate_version")
+                    else ""
+                )
+            )
+        return
     for item in report.items:
         print(f"  - {redact_string(str(item))}")
 
@@ -144,14 +181,36 @@ def run(args) -> int:
                 timeout=http_timeout,
             )
         elif operation == "plugins":
-            controller = _require(getattr(args, "controller", None), "controller")
-            required = list(args.require or []) + list(config["required_plugins"])
-            payload = jenkins_adapter.operator_plugins(
-                paths,
-                controller,
-                required=sorted(set(required)),
-                timeout=http_timeout,
-            )
+            plugin_args = list(getattr(args, "plugin_args", None) or [])
+            plugin_action = getattr(args, "plugin_action", None)
+            controller = getattr(args, "controller", None)
+            if plugin_args:
+                if plugin_args[0] in ("list", "vulnerabilities"):
+                    plugin_action = plugin_args.pop(0)
+                else:
+                    plugin_action = "list"
+                if plugin_args:
+                    controller = plugin_args.pop(0)
+                if plugin_args:
+                    raise ValueError(f"Unexpected plugin argument: {plugin_args[0]}")
+            plugin_action = plugin_action or "list"
+            controller = _require(controller, "controller")
+            if plugin_action == "vulnerabilities":
+                payload = jenkins_adapter.operator_plugin_vulnerabilities(
+                    paths,
+                    controller,
+                    plugins=sorted(set(getattr(args, "plugin", None) or [])),
+                    enrich=sorted(set(getattr(args, "enrich", None) or [])),
+                    timeout=http_timeout,
+                )
+            else:
+                required = list(getattr(args, "require", None) or []) + list(config["required_plugins"])
+                payload = jenkins_adapter.operator_plugins(
+                    paths,
+                    controller,
+                    required=sorted(set(required)),
+                    timeout=http_timeout,
+                )
         elif operation == "credentials":
             controller = _require(getattr(args, "controller", None), "controller")
             domain = args.domain if args.domain is not None else config["credential_domain"]

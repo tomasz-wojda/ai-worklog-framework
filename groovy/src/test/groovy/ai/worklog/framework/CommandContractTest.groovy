@@ -92,6 +92,28 @@ commands:
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
+    void testJenkinsPluginsNestedContract() {
+        List<Map> actions = contract.children(['service', 'jenkins', 'plugins'])
+        assertEquals(['list', 'vulnerabilities'], actions*.name)
+        String groupHelp = new UsageRenderer(contract).renderPath(
+            ['service', 'jenkins', 'plugins']
+        )
+        assertTrue(groupHelp.contains('{list|vulnerabilities}'))
+        String scanHelp = new UsageRenderer(contract).renderPath(
+            ['service', 'jenkins', 'plugins', 'vulnerabilities']
+        )
+        assertTrue(scanHelp.contains('<controller>'))
+        assertTrue(scanHelp.contains('--plugin <PLUGIN>'))
+        assertTrue(scanHelp.contains('--enrich <SOURCE>'))
+        ParsedArguments parsed = parser().parse(
+            'service jenkins plugins',
+            contract.node(['service', 'jenkins', 'plugins', 'vulnerabilities']),
+            ['primary', '--enrich', 'NVD'],
+            rules
+        )
+        assertEquals(['NVD'], parsed.values('--enrich'))
+    }
+
     void testJiraRenderingListsEightActions() {
         List<Map> actions = contract.children(['service', 'jira'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])

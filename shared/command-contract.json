@@ -1624,32 +1624,81 @@
             },
             {
               "name": "plugins",
-              "description": "List plugins and verify required plugin names",
+              "description": "Inspect installed plugins and security vulnerabilities",
               "kind": "action",
-              "positionals": [
+              "subcommands": [
                 {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
-              ],
-              "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
+                  "name": "list",
+                  "description": "List plugins and verify required plugin names",
+                  "kind": "action",
+                  "positionals": [
+                    {
+                      "name": "controller",
+                      "description": "Controller id from jenkins.properties",
+                      "required": true,
+                      "value": {
+                        "help_values": "CONTROLLER"
+                      }
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--json",
+                      "description": "Emit the machine-readable report",
+                      "takes_value": false
+                    },
+                    {
+                      "name": "--require",
+                      "description": "Require the named plugin to be active",
+                      "takes_value": true,
+                      "repeatable": true,
+                      "value": {
+                        "help_values": "PLUGIN"
+                      }
+                    }
+                  ]
                 },
                 {
-                  "name": "--require",
-                  "description": "Require the named plugin to be active",
-                  "takes_value": true,
-                  "repeatable": true,
-                  "value": {
-                    "help_values": "PLUGIN"
-                  }
+                  "name": "vulnerabilities",
+                  "description": "Report vulnerable installed plugins",
+                  "kind": "action",
+                  "positionals": [
+                    {
+                      "name": "controller",
+                      "description": "Controller id from jenkins.properties",
+                      "required": true,
+                      "value": {
+                        "help_values": "CONTROLLER"
+                      }
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--json",
+                      "description": "Emit the machine-readable report",
+                      "takes_value": false
+                    },
+                    {
+                      "name": "--plugin",
+                      "description": "Limit the scan to a named installed plugin",
+                      "takes_value": true,
+                      "repeatable": true,
+                      "value": {
+                        "help_values": "PLUGIN"
+                      }
+                    },
+                    {
+                      "name": "--enrich",
+                      "description": "Enrich findings from Jenkins advisories or NVD",
+                      "takes_value": true,
+                      "repeatable": true,
+                      "value": {
+                        "choices": ["advisory", "nvd"],
+                        "case_insensitive": true,
+                        "help_values": "SOURCE"
+                      }
+                    }
+                  ]
                 }
               ]
             },

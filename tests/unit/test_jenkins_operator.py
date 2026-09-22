@@ -10,8 +10,10 @@ from ai_worklog_framework.cli import (
     EXIT_SUCCESS,
     EXIT_SYSTEM_ERROR,
     EXIT_USER_ERROR,
+    build_parser,
 )
 from ai_worklog_framework.jenkins import commands as jenkins_commands
+from ai_worklog_framework.jenkins import versioning
 from ai_worklog_framework.paths import WorkspacePaths
 from ai_worklog_framework.result import Status
 
@@ -1157,3 +1159,314 @@ def test_operator_credentials_regression_unchanged(tmp_path, monkeypatch):
     assert report["status"] == Status.READY
     assert report["domain"] == "_"
     assert report["items"][0]["id"] == "id"
+
+
+def test_jenkins_version_vectors():
+    vectors = json.loads(
+        (
+            Path(__file__).parents[2]
+            / "shared/jenkins-version-vectors.json"
+        ).read_text()
+    )
+    for item in vectors["comparisons"]:
+        actual = versioning.compare_versions(item["left"], item["right"])
+        assert (actual > 0) - (actual < 0) == item["expected"]
+    for item in vectors["warnings"]:
+        warning = {"versions": [{"pattern": item["pattern"]}]}
+        assert versioning.warning_matches(warning, item["version"]) is item["expected"]
+
+
+def test_operator_plugins_success_exposes_verified_requirements(tmp_path, monkeypatch):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get",
+        lambda *_a, **_k: (
+            200,
+            {"plugins": [{
+                "shortName": "workflow-job",
+                "version": "1.0",
+                "active": True,
+                "enabled": True,
+            }]},
+        ),
+    )
+    report = jenkins.operator_plugins(
+        WorkspacePaths(tmp_path),
+        "primary",
+        required=["workflow-job"],
+        timeout=5,
+    )
+    assert report["status"] == Status.READY
+    assert report["required"] == {
+        "requested": ["workflow-job"],
+        "missing": [],
+        "inactive": [],
+    }
+
+
+def test_operator_plugin_vulnerabilities_classifies_all_statuses(tmp_path, monkeypatch):
+    _write_properties(tmp_path, _default_properties())
+    installed = {
+        "plugins": [
+            {"shortName": name, "version": "1.0", "active": True, "enabled": True}
+            for name in ("fixable", "unfixable", "core-blocked", "dependency-blocked")
+        ]
+    }
+    update_center = {
+        "updateCenterVersion": "2026-09-22",
+        "warnings": [
+            {
+                "id": f"SECURITY-{index}",
+                "type": "plugin",
+                "name": name,
+                "message": f"{name} issue",
+                "url": f"https://www.jenkins.io/security/advisory/2026-09-22/#SECURITY-{index}",
+                "versions": [{"pattern": "1[.]0", "lastVersion": "1.0"}],
+            }
+            for index, name in enumerate(
+                ("fixable", "unfixable", "core-blocked", "dependency-blocked"),
+                start=1,
+            )
+        ],
+        "plugins": {
+            "fixable": {"version": "2.0", "requiredCore": "2.400"},
+            "unfixable": {"version": "1.0", "requiredCore": "2.400"},
+            "core-blocked": {"version": "2.0", "requiredCore": "2.600"},
+            "dependency-blocked": {
+                "version": "2.0",
+                "requiredCore": "2.400",
+                "dependencies": [{
+                    "name": "missing-dependency",
+                    "version": "3.0",
+                    "optional": False,
+                }],
+            },
+        },
+    }
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get_details",
+        lambda *_a, **_k: (200, installed, {"x-jenkins": "2.500"}),
+    )
+    monkeypatch.setattr(
+        jenkins,
+        "_external_get",
+        lambda *_a, **_k: (200, json.dumps(update_center), {}),
+    )
+    report = jenkins.operator_plugin_vulnerabilities(
+        WorkspacePaths(tmp_path),
+        "primary",
+        plugins=[],
+        enrich=[],
+        timeout=5,
+    )
+    statuses = {
+        item["short_name"]: item["remediation_status"]
+        for item in report["items"]
+    }
+    assert report["status"] == Status.READY
+    assert statuses == {
+        "core-blocked": "BLOCKED",
+        "dependency-blocked": "BLOCKED",
+        "fixable": "REMEDIABLE",
+        "unfixable": "UNFIXABLE",
+    }
+    assert report["summary"]["affected"] == 4
+
+
+def test_operator_plugin_vulnerabilities_exact_advisory_and_nvd_enrichment(
+    tmp_path,
+    monkeypatch,
+):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get_details",
+        lambda *_a, **_k: (
+            200,
+            {"plugins": [{
+                "shortName": "demo",
+                "version": "1.0",
+                "active": True,
+                "enabled": True,
+            }]},
+            {"x-jenkins": "2.500"},
+        ),
+    )
+    update_center = {
+        "warnings": [{
+            "id": "SECURITY-100",
+            "type": "plugin",
+            "name": "demo",
+            "message": "Demo issue",
+            "url": "https://advisory.example/a/#SECURITY-100",
+            "versions": [{"pattern": "1[.]0"}],
+        }],
+        "plugins": {
+            "demo": {"version": "2.0", "requiredCore": "2.400"},
+        },
+    }
+    advisory = """
+    <h2 id="SECURITY-100">Demo vulnerability (High)</h2>
+    <p>CVE-2026-12345</p>
+    <h2 id="SECURITY-200">Other vulnerability (Critical)</h2>
+    <p>CVE-2026-99999</p>
+    """
+    nvd = {
+        "vulnerabilities": [{
+            "cve": {
+                "published": "2026-09-01T00:00:00Z",
+                "lastModified": "2026-09-02T00:00:00Z",
+                "metrics": {
+                    "cvssMetricV31": [{
+                        "cvssData": {
+                            "version": "3.1",
+                            "baseScore": 8.8,
+                            "baseSeverity": "HIGH",
+                            "vectorString": "CVSS:3.1/AV:N",
+                        },
+                    }],
+                },
+            },
+        }],
+    }
+
+    def external(url, _headers, _timeout):
+        if "update-center" in url:
+            return 200, json.dumps(update_center), {}
+        if "advisory.example" in url:
+            return 200, advisory, {}
+        return 200, json.dumps(nvd), {}
+
+    monkeypatch.setattr(jenkins, "_external_get", external)
+    report = jenkins.operator_plugin_vulnerabilities(
+        WorkspacePaths(tmp_path),
+        "primary",
+        plugins=["demo", "missing"],
+        enrich=["nvd"],
+        timeout=5,
+    )
+    item = report["items"][0]
+    assert item["cves"] == ["CVE-2026-12345"]
+    assert item["highest_cvss"] == 8.8
+    assert report["filter"]["missing"] == ["missing"]
+    assert report["enrichment"]["errors"] == []
+
+
+def test_python_parser_accepts_plugin_canonical_and_legacy_paths():
+    parser = build_parser()
+    canonical = parser.parse_args([
+        "jenkins",
+        "plugins",
+        "vulnerabilities",
+        "primary",
+        "--plugin",
+        "demo",
+        "--enrich",
+        "NVD",
+    ])
+    legacy = parser.parse_args([
+        "jenkins",
+        "plugins",
+        "primary",
+        "--require",
+        "workflow-job",
+    ])
+    assert canonical.plugin_args == ["vulnerabilities", "primary"]
+    assert canonical.plugin == ["demo"]
+    assert canonical.enrich == ["nvd"]
+    assert legacy.plugin_args == ["primary"]
+    assert legacy.require == ["workflow-job"]
+
+
+def test_cli_plugin_vulnerabilities_findings_exit_zero(tmp_path, monkeypatch, capsys):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "operator_plugin_vulnerabilities",
+        lambda *_a, **_k: {
+            "operation": "plugin-vulnerabilities",
+            "controller": "primary",
+            "fetched_at": "2026-09-22T00:00:00Z",
+            "status": Status.READY,
+            "message": "Plugin vulnerability scan completed",
+            "core_version": "2.500",
+            "update_center": {"url": "https://updates.example", "generated_at": None},
+            "filter": {"requested": [], "missing": []},
+            "enrichment": {"requested": [], "errors": []},
+            "summary": {
+                "installed": 1,
+                "scanned": 1,
+                "affected": 1,
+                "REMEDIABLE": 1,
+                "UNFIXABLE": 0,
+                "BLOCKED": 0,
+            },
+            "items": [{
+                "short_name": "demo",
+                "installed_version": "1.0",
+                "candidate_version": "2.0",
+                "remediation_status": "REMEDIABLE",
+            }],
+        },
+    )
+    code = jenkins_commands.run(Namespace(
+        jenkins_action="plugins",
+        plugin_args=["vulnerabilities", "primary"],
+        require=[],
+        plugin=[],
+        enrich=[],
+        json=False,
+        workspace=str(tmp_path),
+    ))
+    output = capsys.readouterr().out
+    assert code == EXIT_SUCCESS
+    assert "remediable=1" in output
+    assert "demo 1.0: REMEDIABLE -> 2.0" in output
+
+
+def test_plugin_vulnerability_enrichment_failure_is_degraded(tmp_path, monkeypatch):
+    _write_properties(tmp_path, _default_properties())
+    monkeypatch.setattr(
+        jenkins,
+        "_jenkins_get_details",
+        lambda *_a, **_k: (
+            200,
+            {"plugins": [{
+                "shortName": "demo",
+                "version": "1.0",
+                "active": True,
+                "enabled": True,
+            }]},
+            {"x-jenkins": "2.500"},
+        ),
+    )
+    update_center = {
+        "warnings": [{
+            "id": "SECURITY-100",
+            "type": "plugin",
+            "name": "demo",
+            "message": "Demo issue",
+            "url": "https://advisory.example/a/#SECURITY-100",
+            "versions": [{"pattern": "1[.]0"}],
+        }],
+        "plugins": {"demo": {"version": "2.0", "requiredCore": "2.400"}},
+    }
+
+    def external(url, _headers, _timeout):
+        if "update-center" in url:
+            return 200, json.dumps(update_center), {}
+        return 503, "", {}
+
+    monkeypatch.setattr(jenkins, "_external_get", external)
+    report = jenkins.operator_plugin_vulnerabilities(
+        WorkspacePaths(tmp_path),
+        "primary",
+        plugins=[],
+        enrich=["advisory"],
+        timeout=5,
+    )
+    assert report["status"] == Status.DEGRADED
+    assert report["items"][0]["remediation_status"] == "REMEDIABLE"
+    assert report["enrichment"]["errors"] == ["SECURITY-100: advisory HTTP 503"]

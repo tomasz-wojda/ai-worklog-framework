@@ -17,13 +17,19 @@ pytestmark = defer_parity_suite()
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CLI = ROOT / "bin" / ("ai-worklog.cmd" if platform.system() == "Windows" else "ai-worklog")
+PYTHON_CLI = ROOT / "bin" / (
+    "ai-worklog-python.cmd" if platform.system() == "Windows" else "ai-worklog-python"
+)
+GROOVY_CLI = ROOT / "bin" / (
+    "ai-worklog-groovy.cmd" if platform.system() == "Windows" else "ai-worklog-groovy"
+)
 
 
 class _JenkinsMockState:
     routes: dict[str, tuple[int, Any]] = {}
     default_status = 404
     default_body: Any = {"error": "not found"}
+    response_headers: dict[str, str] = {}
 
 
 class _JenkinsMockHandler(BaseHTTPRequestHandler):
@@ -42,6 +48,8 @@ class _JenkinsMockHandler(BaseHTTPRequestHandler):
         payload = json.dumps(body).encode("utf-8") if body is not None else b""
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        for key, value in _JenkinsMockState.response_headers.items():
+            self.send_header(key, value)
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         if payload:
@@ -53,6 +61,7 @@ def jenkins_mock():
     _JenkinsMockState.routes = {}
     _JenkinsMockState.default_status = 404
     _JenkinsMockState.default_body = {"error": "not found"}
+    _JenkinsMockState.response_headers = {}
     server = HTTPServer(("127.0.0.1", 0), _JenkinsMockHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -63,15 +72,23 @@ def jenkins_mock():
 
 
 def _run(runtime: str, workspace: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
-    command = [
-        str(CLI),
-        "--runtime",
-        runtime,
-        "--workspace",
-        str(workspace),
-        "jenkins",
-        *arguments,
-    ]
+    if runtime == "python":
+        command = [
+            str(PYTHON_CLI),
+            "--workspace",
+            str(workspace),
+            "jenkins",
+            *arguments,
+        ]
+    else:
+        command = [
+            str(GROOVY_CLI),
+            "--workspace",
+            str(workspace),
+            "service",
+            "jenkins",
+            *arguments,
+        ]
     return subprocess.run(
         command,
         capture_output=True,
@@ -433,6 +450,66 @@ def test_jenkins_plugins_malformed_json(tmp_path: Path, jenkins_mock: str) -> No
     groovy = _run("groovy", tmp_path, "plugins", "primary", "--json")
     _assert_parity_json(python, groovy)
     assert python.returncode == groovy.returncode == 2
+
+
+def test_jenkins_plugin_vulnerabilities_json(tmp_path: Path, jenkins_mock: str) -> None:
+    _write_properties(tmp_path, _properties_for(jenkins_mock))
+    _write_config(tmp_path, {
+        "vulnerabilities": {
+            "update_center_url_template": (
+                f"{jenkins_mock}/updates/{{core}}/update-center.actual.json"
+            ),
+            "update_center_fallback_url": (
+                f"{jenkins_mock}/updates/current/update-center.actual.json"
+            ),
+        },
+    })
+    _JenkinsMockState.response_headers = {"X-Jenkins": "2.500"}
+    _JenkinsMockState.routes["/pluginManager/api/json"] = (
+        200,
+        {
+            "plugins": [{
+                "shortName": "demo",
+                "version": "1.0",
+                "active": True,
+                "enabled": True,
+            }],
+        },
+    )
+    _JenkinsMockState.routes["/updates/2.500/update-center.actual.json"] = (
+        200,
+        {
+            "updateCenterVersion": "2026-09-22",
+            "warnings": [{
+                "id": "SECURITY-100",
+                "type": "plugin",
+                "name": "demo",
+                "message": "Demo vulnerability",
+                "url": "https://advisory.example/#SECURITY-100",
+                "versions": [{"pattern": "1[.]0", "lastVersion": "1.0"}],
+            }],
+            "plugins": {
+                "demo": {
+                    "version": "2.0",
+                    "requiredCore": "2.400",
+                    "dependencies": [],
+                },
+            },
+        },
+    )
+    arguments = (
+        "plugins",
+        "vulnerabilities",
+        "primary",
+        "--plugin",
+        "demo",
+        "--json",
+    )
+    python = _run("python", tmp_path, *arguments)
+    groovy = _run("groovy", tmp_path, *arguments)
+    _assert_parity_json(python, groovy)
+    assert python.returncode == groovy.returncode == 0
+    assert json.loads(python.stdout)["items"][0]["remediation_status"] == "REMEDIABLE"
 
 
 def test_jenkins_credentials_metadata_json(tmp_path: Path, jenkins_mock: str) -> None:

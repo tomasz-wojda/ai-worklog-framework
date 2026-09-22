@@ -132,7 +132,12 @@ class ArgumentParser {
 
         List<Boolean> results = []
         if (definition.choices instanceof List) {
-            results << ((List) definition.choices)*.toString().contains(supplied)
+            List<String> choices = ((List) definition.choices)*.toString()
+            results << (
+                definition.case_insensitive == true ?
+                    choices*.toLowerCase().contains(supplied.toLowerCase()) :
+                    choices.contains(supplied)
+            )
         }
         if (definition.pattern) {
             results << (supplied ==~ definition.pattern.toString())

@@ -13,6 +13,7 @@ import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsOperatorReport
+import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.reconciliation.Observation
 import ai.worklog.framework.reconciliation.ReconciliationComparators
 import ai.worklog.framework.reconciliation.ReconciliationEngine
@@ -183,6 +184,132 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(Status.BLOCKED, report.status)
         assertEquals(['missing'], report.required.missing)
         assertEquals(3, exitCode(report))
+    }
+
+    void testOperatorPluginsSuccessExposesVerifiedRequirements() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [
+                code: 200,
+                body: '{"plugins":[{"shortName":"workflow-job","version":"1.0","active":true,"enabled":true}]}',
+                error: ''
+            ]
+        }
+        Map report = adapter.operatorPlugins('primary', ['workflow-job'], 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals(
+            [requested: ['workflow-job'], missing: [], inactive: []],
+            report.required
+        )
+    }
+
+    void testJenkinsVersionVectors() {
+        Map vectors = (Map) JsonFiles.read(
+            new File(repository, 'shared/jenkins-version-vectors.json'),
+            [:]
+        )
+        vectors.comparisons.each { item ->
+            int actual = JenkinsVersioning.compare(
+                item.left.toString(),
+                item.right.toString()
+            )
+            assertEquals(item.expected as int, actual <=> 0)
+        }
+        vectors.warnings.each { item ->
+            assertEquals(
+                item.expected as boolean,
+                JenkinsVersioning.warningMatches(
+                    [versions: [[pattern: item.pattern]]],
+                    item.version.toString()
+                )
+            )
+        }
+    }
+
+    void testOperatorPluginVulnerabilitiesClassifiesAllStatuses() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        adapter.http.requestHandler = { method, url, headers, timeout, maxCharacters ->
+            if (url.contains('/pluginManager/api/json')) {
+                return [
+                    code: 200,
+                    body: JsonOutputWrapper.json([
+                        plugins: [
+                            'fixable',
+                            'unfixable',
+                            'core-blocked',
+                            'dependency-blocked'
+                        ].collect { name ->
+                            [
+                                shortName: name,
+                                version: '1.0',
+                                active: true,
+                                enabled: true
+                            ]
+                        }
+                    ]),
+                    error: '',
+                    headers: ['x-jenkins': '2.500']
+                ]
+            }
+            List names = [
+                'fixable',
+                'unfixable',
+                'core-blocked',
+                'dependency-blocked'
+            ]
+            Map updateCenter = [
+                updateCenterVersion: '2026-09-22',
+                warnings: names.withIndex().collect { name, index ->
+                    [
+                        id: "SECURITY-${index + 1}",
+                        type: 'plugin',
+                        name: name,
+                        message: "${name} issue",
+                        url: "https://advisory.example/#SECURITY-${index + 1}",
+                        versions: [[pattern: '1[.]0', lastVersion: '1.0']]
+                    ]
+                },
+                plugins: [
+                    fixable: [version: '2.0', requiredCore: '2.400'],
+                    unfixable: [version: '1.0', requiredCore: '2.400'],
+                    'core-blocked': [version: '2.0', requiredCore: '2.600'],
+                    'dependency-blocked': [
+                        version: '2.0',
+                        requiredCore: '2.400',
+                        dependencies: [[
+                            name: 'missing-dependency',
+                            version: '3.0',
+                            optional: false
+                        ]]
+                    ]
+                ]
+            ]
+            [
+                code: 200,
+                body: JsonOutputWrapper.json(updateCenter),
+                error: '',
+                headers: [:]
+            ]
+        }
+        Map report = adapter.operatorPluginVulnerabilities(
+            'primary',
+            [],
+            [],
+            5
+        )
+        Map statuses = report.items.collectEntries {
+            [(it.short_name): it.remediation_status]
+        }
+        assertEquals(Status.READY, report.status)
+        assertEquals([
+            'core-blocked': 'BLOCKED',
+            'dependency-blocked': 'BLOCKED',
+            fixable: 'REMEDIABLE',
+            unfixable: 'UNFIXABLE'
+        ], statuses)
+        assertEquals(4, report.summary.affected)
     }
 
     void testOperatorCredentialsProjection() {

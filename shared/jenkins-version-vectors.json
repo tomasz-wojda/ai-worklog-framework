@@ -1,0 +1,18 @@
+{
+  "comparisons": [
+    {"left": "1.0", "right": "1", "expected": 0},
+    {"left": "2.0", "right": "1.99", "expected": 1},
+    {"left": "1.0-rc1", "right": "1.0", "expected": -1},
+    {"left": "1.0-beta", "right": "1.0-rc1", "expected": -1},
+    {"left": "1.0-sp1", "right": "1.0", "expected": 1},
+    {"left": "2.414.1", "right": "2.414", "expected": 1},
+    {"left": "1234.vabc_def", "right": "1233.vzzz", "expected": 1},
+    {"left": "1234.vabc_def", "right": "1234", "expected": 1}
+  ],
+  "warnings": [
+    {"pattern": "1[.]([0-4]|5[.]0)", "version": "1.5.0", "expected": true},
+    {"pattern": "1[.]([0-4]|5[.]0)", "version": "1.5.1", "expected": false},
+    {"pattern": "", "version": "99", "expected": true},
+    {"pattern": "[", "version": "99", "expected": true}
+  ]
+}

@@ -318,9 +318,17 @@ def build_parser() -> argparse.ArgumentParser:
     jenkins_job.add_argument("--builds", type=int)
     jenkins_job.add_argument("--parameters", action="store_true")
     jenkins_job.add_argument("--json", action="store_true")
-    jenkins_plugins = jenkins_sub.add_parser("plugins", help="Installed plugins")
-    jenkins_plugins.add_argument("controller", nargs="?")
+    jenkins_plugins = jenkins_sub.add_parser("plugins", help="Installed plugins and vulnerabilities")
+    jenkins_plugins.add_argument("plugin_args", nargs="*")
     jenkins_plugins.add_argument("--require", action="append", default=[])
+    jenkins_plugins.add_argument("--plugin", action="append", default=[])
+    jenkins_plugins.add_argument(
+        "--enrich",
+        action="append",
+        type=str.lower,
+        choices=["advisory", "nvd"],
+        default=[],
+    )
     jenkins_plugins.add_argument("--json", action="store_true")
     jenkins_credentials = jenkins_sub.add_parser("credentials", help="Credential metadata")
     jenkins_credentials.add_argument("controller", nargs="?")

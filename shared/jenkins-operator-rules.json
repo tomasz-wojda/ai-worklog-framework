@@ -20,6 +20,17 @@
     "max_bytes": 1073741824,
     "buffer_bytes": 65536
   },
+  "vulnerabilities": {
+    "update_center_url_template": "https://updates.jenkins.io/{core}/update-center.actual.json",
+    "update_center_fallback_url": "https://updates.jenkins.io/current/update-center.actual.json",
+    "update_center_max_characters": 25000000,
+    "advisory_max_characters": 2000000,
+    "nvd_api_url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+    "nvd_unauthenticated_interval_ms": 6000,
+    "nvd_authenticated_interval_ms": 600,
+    "nvd_retry_count": 1,
+    "nvd_max_retry_after_seconds": 30
+  },
   "limits": {
     "queue_default": 50,
     "queue_max": 50,
