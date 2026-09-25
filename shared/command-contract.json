@@ -1730,6 +1730,21 @@
                   "value": {
                     "help_values": "DOMAIN"
                   }
+                },
+                {
+                  "name": "--id",
+                  "description": "Exact credential identifier for terminal reveal",
+                  "takes_value": true,
+                  "hidden": true,
+                  "value": {
+                    "help_values": "CREDENTIAL_ID"
+                  }
+                },
+                {
+                  "name": "--show-secretValue",
+                  "description": "Reveal secret components in an interactive terminal",
+                  "takes_value": false,
+                  "hidden": true
                 }
               ]
             },

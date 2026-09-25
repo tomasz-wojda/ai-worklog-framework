@@ -4,6 +4,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Status
+import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.reconciliation.Observation
@@ -21,6 +22,8 @@ import java.util.regex.Pattern
 class JenkinsAdapter {
     private static final Pattern SAFE_COMPONENT = ~/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
     private static final Pattern JOB_NAME_PART = ~/^[A-Za-z0-9_~][A-Za-z0-9._~-]{0,127}$/
+    private static final int CREDENTIAL_SECRET_MAX_BYTES = 8388608
+    private static final int CREDENTIAL_SECRET_RESPONSE_MAX_CHARACTERS = 12582912
 
     final FrameworkPaths paths
     final ReadOnlyHttp http
@@ -29,6 +32,7 @@ class JenkinsAdapter {
     final Map config
     final ReadOnlyProcess process
     final BinaryDownloadClient binaryDownload
+    final JenkinsScriptConsoleClient scriptConsole
     final Map operatorRules
     Pattern sensitiveParameterPattern
 
@@ -39,7 +43,8 @@ class JenkinsAdapter {
         File frameworkRoot = null,
         Map config = [:],
         ReadOnlyProcess process = null,
-        BinaryDownloadClient binaryDownload = null
+        BinaryDownloadClient binaryDownload = null,
+        JenkinsScriptConsoleClient scriptConsole = null
     ) {
         this.paths = paths
         this.http = http
@@ -48,6 +53,8 @@ class JenkinsAdapter {
         this.config = config ?: [:]
         this.process = process ?: new ReadOnlyProcess()
         this.binaryDownload = binaryDownload ?: new BinaryDownloadClient()
+        this.scriptConsole = scriptConsole ?:
+            new JenkinsScriptConsoleClient(http)
         this.operatorRules = frameworkRoot ? loadOperatorRules(frameworkRoot) : [:]
         this.sensitiveParameterPattern = buildSensitivePattern()
     }
@@ -681,6 +688,133 @@ class JenkinsAdapter {
             message: 'Credential metadata fetched',
             items: items,
             domain: domain
+        ]
+    }
+
+    Map operatorCredentialSecret(
+        String controller,
+        String domain,
+        String credentialId,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        validateDomain(domain)
+        validateCredentialId(credentialId)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                "Controller '${controller}' not found"
+            )
+        }
+        Map info = (Map) controllers[controller]
+        if (
+            !info.url?.toString() ||
+            !info.user?.toString() ||
+            !info.token?.toString()
+        ) {
+            return blockedReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                'Controller credentials unavailable'
+            )
+        }
+        String script = JenkinsCredentialSecretScript.render(
+            domain,
+            credentialId,
+            CREDENTIAL_SECRET_MAX_BYTES
+        )
+        Map response = scriptConsole.execute(
+            info.url.toString(),
+            info.user.toString(),
+            info.token.toString(),
+            script,
+            timeout,
+            CREDENTIAL_SECRET_RESPONSE_MAX_CHARACTERS
+        )
+        int statusCode = response.code as int
+        if (accessBlocked(statusCode)) {
+            return blockedReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                "Jenkins returned HTTP ${statusCode}"
+            )
+        }
+        if (statusCode != 200) {
+            return errorReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                statusCode ?
+                    "Jenkins returned HTTP ${statusCode}" :
+                    'Jenkins credential reveal failed'
+            )
+        }
+        Map payload
+        try {
+            payload = (Map) new JsonSlurper().parseText(
+                response.body?.toString() ?: ''
+            )
+        } catch (Exception ignored) {
+            return errorReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                'Malformed Jenkins credential response'
+            )
+        }
+        if (payload.status != 'ok') {
+            return credentialSecretError(
+                controller,
+                fetchedAt,
+                credentialId,
+                payload.code?.toString()
+            )
+        }
+        List components = payload.components instanceof List ?
+            (List) payload.components :
+            []
+        boolean validComponents = components && components.every {
+            it instanceof Map &&
+                it.name instanceof String &&
+                it.name ==~ /[A-Za-z0-9_.\[\]-]{1,128}/ &&
+                it.encoding in ['text', 'base64'] &&
+                it.value instanceof String
+        }
+        if (
+            payload.id?.toString() != credentialId ||
+            !(payload.credential_type?.toString() ==~
+                /[A-Za-z0-9_.$-]{1,256}/) ||
+            !validComponents
+        ) {
+            return errorReport(
+                'credential-secret',
+                controller,
+                fetchedAt,
+                'Malformed Jenkins credential response'
+            )
+        }
+        [
+            operation: 'credential-secret',
+            controller: controller,
+            fetched_at: fetchedAt,
+            status: Status.READY,
+            message: 'Credential secret fetched',
+            domain: domain,
+            credential_id: credentialId,
+            credential_type: payload.credential_type.toString(),
+            secret_components: components.collect {
+                [
+                    name: it.name.toString(),
+                    encoding: it.encoding.toString(),
+                    value: it.value.toString()
+                ]
+            }
         ]
     }
 
@@ -1454,6 +1588,18 @@ class JenkinsAdapter {
         }
     }
 
+    static void validateCredentialId(String credentialId) {
+        if (
+            !credentialId ||
+            credentialId.length() > 256 ||
+            credentialId.any { Character.isISOControl((char) it) }
+        ) {
+            throw new IllegalArgumentException(
+                "Invalid credential id: ${credentialId}"
+            )
+        }
+    }
+
     static File validateSyntaxFile(String path) {
         File file = new File(path).canonicalFile
         if (!file.isFile()) {
@@ -1950,6 +2096,31 @@ class JenkinsAdapter {
 
     private static boolean accessBlocked(int statusCode) {
         statusCode in [401, 403]
+    }
+
+    private static Map credentialSecretError(
+        String controller,
+        String fetchedAt,
+        String credentialId,
+        String code
+    ) {
+        Map messages = [
+            domain_not_found: 'Credential domain not found',
+            credential_not_found: "Credential '${credentialId}' not found",
+            credential_ambiguous:
+                "Credential '${credentialId}' is ambiguous",
+            unsupported_credential_type:
+                'Credential type has no supported secret accessor',
+            secret_too_large:
+                'Credential secret exceeds the terminal output limit',
+            extraction_failed: 'Credential secret extraction failed'
+        ]
+        errorReport(
+            'credential-secret',
+            controller,
+            fetchedAt,
+            messages[code] ?: 'Credential secret extraction failed'
+        )
     }
 
     private static Map errorReport(String operation, String controller, String fetchedAt, String message) {

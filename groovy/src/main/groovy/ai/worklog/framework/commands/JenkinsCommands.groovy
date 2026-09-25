@@ -20,7 +20,12 @@ class JenkinsCommands {
         List<String> args,
         File frameworkRoot,
         FrameworkPaths paths,
-        Map config
+        Map config,
+        Closure<Boolean> interactiveTerminal = {
+            System.console() != null &&
+                (System.getenv('TERM') ?: '') != 'dumb'
+        },
+        JenkinsAdapter adapterOverride = null
     ) {
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
         CommandContract contract = CommandContract.load(frameworkRoot)
@@ -45,20 +50,22 @@ class JenkinsCommands {
         }
         List<String> original = new ArrayList<>(args)
         Redaction redaction = new Redaction(frameworkRoot)
-        JenkinsAdapter adapter = new JenkinsAdapter(
-            paths,
-            new ReadOnlyHttp(),
-            [:],
-            frameworkRoot,
-            config,
-            new ReadOnlyProcess(redaction)
-        )
+        JenkinsAdapter adapter = adapterOverride ?: new JenkinsAdapter(
+                paths,
+                new ReadOnlyHttp(),
+                [:],
+                frameworkRoot,
+                config,
+                new ReadOnlyProcess(redaction)
+            )
         Map defaults = new LinkedHashMap(adapter.operatorRules)
         Map settings = adapter.settings()
         defaults.max_builds = settings.max_builds
         defaults.credential_domain = settings.credential_domain
         ParsedArguments parsed
-        boolean json = original.contains('--json')
+        boolean requestedJson = original.contains('--json')
+        boolean json = requestedJson
+        boolean revealSecret = false
         Map payload
         try {
             parsed = new ArgumentParser(contract).parse(
@@ -68,6 +75,17 @@ class JenkinsCommands {
                 defaults
             )
             json = parsed.flag('--json')
+            revealSecret = dispatchAction == 'credentials' &&
+                parsed.flag('--show-secretValue')
+            if (revealSecret || parsed.value('--id')) {
+                json = false
+            }
+            validateCredentialReveal(
+                parsed,
+                revealSecret,
+                requestedJson,
+                interactiveTerminal
+            )
             payload = dispatch(dispatchAction, parsed, adapter, settings)
         } catch (UsageError exception) {
             JenkinsOperatorReport report = errorReport(
@@ -97,6 +115,10 @@ class JenkinsCommands {
         } catch (Exception exception) {
             System.err.println "Jenkins operation failed: ${exception.message ?: exception.class.simpleName}"
             return exitCodes.systemError
+        }
+        if (revealSecret && payload.status == Status.READY) {
+            print renderCredentialSecret(payload)
+            return exitCodes.success
         }
         JenkinsOperatorReport report = JenkinsOperatorReport.fromPayload(payload)
         print json ? report.renderJson(redaction) : report.renderHuman(redaction)
@@ -144,6 +166,14 @@ class JenkinsCommands {
                     settings.timeout_seconds as int
                 )
             case 'credentials':
+                if (parsed.flag('--show-secretValue')) {
+                    return adapter.operatorCredentialSecret(
+                        parsed.positional('controller'),
+                        parsed.value('--domain').toString(),
+                        parsed.value('--id').toString(),
+                        settings.timeout_seconds as int
+                    )
+                }
                 return adapter.operatorCredentials(
                     parsed.positional('controller'),
                     parsed.value('--domain').toString(),
@@ -234,7 +264,7 @@ class JenkinsCommands {
         }
         List<String> optionsWithValues = [
             '--builds', '--require', '--plugin', '--enrich', '--domain',
-            '--limit', '--folder', '--query', '--view'
+            '--limit', '--folder', '--query', '--view', '--id'
         ]
         int index = 0
         while (index < args.size()) {
@@ -249,6 +279,65 @@ class JenkinsCommands {
             index++
         }
         null
+    }
+
+    private static void validateCredentialReveal(
+        ParsedArguments parsed,
+        boolean revealSecret,
+        boolean requestedJson,
+        Closure<Boolean> interactiveTerminal
+    ) {
+        if (parsed.value('--id') && !revealSecret) {
+            throw new UsageError(
+                '--id requires --show-secretValue',
+                'service jenkins',
+                'credentials'
+            )
+        }
+        if (!revealSecret) {
+            return
+        }
+        if (!parsed.value('--id')) {
+            throw new UsageError(
+                '--show-secretValue requires --id',
+                'service jenkins',
+                'credentials'
+            )
+        }
+        if (requestedJson) {
+            throw new UsageError(
+                '--show-secretValue cannot be combined with --json',
+                'service jenkins',
+                'credentials'
+            )
+        }
+        if (!interactiveTerminal.call()) {
+            throw new UsageError(
+                '--show-secretValue requires an interactive terminal',
+                'service jenkins',
+                'credentials'
+            )
+        }
+    }
+
+    private static String renderCredentialSecret(Map payload) {
+        String newline = System.lineSeparator()
+        StringBuilder output = new StringBuilder()
+        output.append('Jenkins credential secret').append(newline)
+        output.append("  Controller: ${payload.controller}").append(newline)
+        output.append("  Domain: ${payload.domain}").append(newline)
+        output.append("  ID: ${payload.credential_id}").append(newline)
+        output.append("  Type: ${payload.credential_type}").append(newline)
+        ((List<Map>) payload.secret_components).each { component ->
+            output.append("  ${component.name} (${component.encoding}):")
+                .append(newline)
+            String value = component.value.toString()
+            output.append(value)
+            if (!value.endsWith(newline)) {
+                output.append(newline)
+            }
+        }
+        output.toString()
     }
 
     private static JenkinsOperatorReport errorReport(String action, String controller, String message) {

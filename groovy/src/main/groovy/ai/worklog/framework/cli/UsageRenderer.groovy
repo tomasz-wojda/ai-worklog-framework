@@ -63,7 +63,9 @@ class UsageRenderer {
 
     private String renderLeaf(List<String> path, Map node) {
         List<Map> positionals = (List<Map>) (node.positionals ?: [])
-        List<Map> options = (List<Map>) (node.options ?: [])
+        List<Map> options = ((List<Map>) (node.options ?: [])).findAll {
+            it.hidden != true
+        }
         List<String> usageParts = ['Usage:', contract.data.program.toString()] + path
         positionals.each { Map positional ->
             String name = positional.name.toString()
@@ -100,7 +102,7 @@ class UsageRenderer {
 
     Map describe(String commandName = null, String actionName = null) {
         if (!commandName) {
-            return contract.data
+            return (Map) publicValue(contract.data)
         }
         List<String> path = actionName ?
             [commandName, actionName] :
@@ -110,7 +112,10 @@ class UsageRenderer {
 
     Map describePath(List<String> path) {
         Map node = contract.node(path)
-        node ? [version: contract.data.version, node: node] : null
+        node ? [
+            version: contract.data.version,
+            node: publicValue(node)
+        ] : null
     }
 
     private static String optionLabel(Map option) {
@@ -124,5 +129,23 @@ class UsageRenderer {
         }
         names << longName
         names.join(', ')
+    }
+
+    private static Object publicValue(Object value) {
+        if (value instanceof Map) {
+            Map output = [:]
+            ((Map) value).each { key, item ->
+                if (key != 'hidden') {
+                    output[key] = publicValue(item)
+                }
+            }
+            return output
+        }
+        if (value instanceof List) {
+            return ((List) value)
+                .findAll { !(it instanceof Map) || ((Map) it).hidden != true }
+                .collect { publicValue(it) }
+        }
+        value
     }
 }

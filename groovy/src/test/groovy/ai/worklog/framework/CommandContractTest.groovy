@@ -114,6 +114,36 @@ commands:
         assertEquals(['NVD'], parsed.values('--enrich'))
     }
 
+    void testHiddenCredentialRevealOptionsParseButNeverRender() {
+        Map action = jenkinsAction('credentials')
+        ParsedArguments parsed = parser().parse(
+            'service jenkins',
+            action,
+            [
+                'primary',
+                '--id',
+                'credential-1',
+                '--show-secretValue'
+            ],
+            rules
+        )
+        assertEquals('credential-1', parsed.value('--id'))
+        assertTrue(parsed.flag('--show-secretValue'))
+        UsageRenderer usage = new UsageRenderer(contract)
+        String human = usage.renderPath(
+            ['service', 'jenkins', 'credentials']
+        )
+        String pathJson = groovy.json.JsonOutput.toJson(
+            usage.describePath(['service', 'jenkins', 'credentials'])
+        )
+        String rootJson = groovy.json.JsonOutput.toJson(usage.describe())
+        [human, pathJson, rootJson].each { rendered ->
+            assertFalse(rendered.contains('--id'))
+            assertFalse(rendered.contains('--show-secretValue'))
+            assertFalse(rendered.contains('terminal reveal'))
+        }
+    }
+
     void testJiraRenderingListsEightActions() {
         List<Map> actions = contract.children(['service', 'jira'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])

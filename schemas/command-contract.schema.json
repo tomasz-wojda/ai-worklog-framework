@@ -36,11 +36,12 @@
       "type": "object",
       "required": ["name", "description", "takes_value"],
       "properties": {
-        "name": {"type": "string", "pattern": "^--[a-z0-9][a-z0-9-]*$"},
+        "name": {"type": "string", "pattern": "^--[a-z0-9][A-Za-z0-9-]*$"},
         "short": {"type": "string", "pattern": "^-[A-Za-z0-9]$"},
         "description": {"type": "string", "minLength": 1},
         "takes_value": {"type": "boolean"},
         "repeatable": {"type": "boolean"},
+        "hidden": {"type": "boolean"},
         "default_from": {"type": "string", "minLength": 1},
         "value": {"$ref": "#/definitions/value"}
       },

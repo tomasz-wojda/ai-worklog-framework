@@ -2,6 +2,8 @@ package ai.worklog.framework
 
 import ai.worklog.framework.adapters.JenkinsAdapter
 import ai.worklog.framework.adapters.BinaryDownloadClient
+import ai.worklog.framework.adapters.FormHttp
+import ai.worklog.framework.adapters.JenkinsScriptConsoleClient
 import ai.worklog.framework.adapters.PropertiesSupport
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.adapters.ReadOnlyProcess
@@ -13,6 +15,7 @@ import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsOperatorReport
+import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.reconciliation.Observation
 import ai.worklog.framework.reconciliation.ReconciliationComparators
@@ -334,6 +337,402 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(['id', 'type_name', 'display_name', 'description'] as Set, item.keySet())
         assertEquals('_', report.domain)
         assertFalse JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('must-not-appear')
+    }
+
+    void testCredentialSecretScriptEncodesInputsAndSupportsSecretShapes() {
+        String domain = "domain'; println 'unsafe"
+        String credentialId = "id'; println 'unsafe"
+        String script = JenkinsCredentialSecretScript.render(
+            domain,
+            credentialId,
+            1024
+        )
+        assertFalse(script.contains(domain))
+        assertFalse(script.contains(credentialId))
+        assertTrue(script.contains('hudson.util.Secret'))
+        assertTrue(script.contains('SecretBytes'))
+        assertTrue(script.contains('InputStream'))
+        assertTrue(script.contains('KeyStore'))
+        assertTrue(script.contains('Character.isISOControl'))
+        assertTrue(script.contains('unsupported_credential_type'))
+        assertTrue(script.contains('get.*(secret|password|passphrase'))
+    }
+
+    void testCredentialSecretScriptExtractsPluginTextAndBinaryValues() {
+        String script = JenkinsCredentialSecretScript.render(
+            '_',
+            'credential-1',
+            1024
+        )
+            .replace(
+                'import com.cloudbees.plugins.credentials.SystemCredentialsProvider\n',
+                ''
+            )
+            .replace(
+                'def provider = SystemCredentialsProvider.getInstance()',
+                'def provider = binding.getVariable("provider")'
+            )
+        Binding binding = new Binding([
+            provider: new FakeCredentialProvider(
+                new FakeCredential('credential-1')
+            )
+        ])
+        Map captured = captureStreams {
+            new GroovyShell(binding).evaluate(script)
+            0
+        }
+        assertEquals(0, captured.code)
+        Map payload = (Map) new JsonSlurper().parseText(captured.out)
+        assertEquals(payload.toString(), 'ok', payload.status)
+        assertEquals('credential-1', payload.id)
+        Map components = payload.components.collectEntries {
+            [(it.name): it]
+        }
+        assertEquals('plain-secret', components.secretToken.value)
+        assertEquals('text', components.secretToken.encoding)
+        assertEquals(
+            'YmFkG3NlY3JldA==',
+            components.password.value
+        )
+        assertEquals('base64', components.password.encoding)
+        assertEquals('AAEC', components.content.value)
+        assertEquals('base64', components.content.encoding)
+        assertEquals('private-one', components['privateKeys[0]'].value)
+        assertEquals('private-two', components['privateKeys[1]'].value)
+    }
+
+    void testScriptConsoleClientUsesCrumbAndFormPost() {
+        ReadOnlyHttp readHttp = new ReadOnlyHttp()
+        readHttp.requestHandler = { method, url, headers, timeout ->
+            assertEquals('GET', method)
+            assertTrue(url.endsWith('/crumbIssuer/api/json'))
+            assertTrue(headers.Authorization.toString().startsWith('Basic '))
+            [
+                code: 200,
+                body: '{"crumbRequestField":"Jenkins-Crumb","crumb":"crumb-1"}',
+                error: ''
+            ]
+        }
+        FormHttp formHttp = new FormHttp()
+        formHttp.requestHandler = {
+            url,
+            headers,
+            form,
+            timeout,
+            maxCharacters ->
+            assertTrue(url.endsWith('/scriptText'))
+            assertEquals('crumb-1', headers['Jenkins-Crumb'])
+            assertEquals('println 1', form.script)
+            assertEquals(2048, maxCharacters)
+            [code: 200, body: '{"status":"ok"}', error: '']
+        }
+        Map response = new JenkinsScriptConsoleClient(
+            readHttp,
+            formHttp
+        ).execute(
+            'https://jenkins.example/',
+            'bot',
+            'secret-token',
+            'println 1',
+            5,
+            2048
+        )
+        assertEquals(200, response.code)
+    }
+
+    void testOperatorCredentialSecretReturnsLabelledComponents() {
+        writeProperties(defaultProperties())
+        JenkinsScriptConsoleClient client = scriptClient {
+            [
+                code: 200,
+                body: JsonOutputWrapper.json([
+                    status: 'ok',
+                    id: 'credential-1',
+                    credential_type:
+                        'com.example.CustomCredential',
+                    components: [
+                        [
+                            name: 'password',
+                            encoding: 'text',
+                            value: 'plain-secret'
+                        ],
+                        [
+                            name: 'file',
+                            encoding: 'base64',
+                            value: 'AAEC'
+                        ]
+                    ]
+                ]),
+                error: ''
+            ]
+        }
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            client
+        )
+        Map report = adapter.operatorCredentialSecret(
+            'primary',
+            '_',
+            'credential-1',
+            5
+        )
+        assertEquals(Status.READY, report.status)
+        assertEquals('credential-1', report.credential_id)
+        assertEquals(
+            ['password', 'file'],
+            report.secret_components*.name
+        )
+        assertEquals(
+            ['text', 'base64'],
+            report.secret_components*.encoding
+        )
+    }
+
+    void testOperatorCredentialSecretFailsClosedForUnsupportedType() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            scriptClient {
+                [
+                    code: 200,
+                    body: '{"status":"error","code":"unsupported_credential_type"}',
+                    error: ''
+                ]
+            }
+        )
+        Map report = adapter.operatorCredentialSecret(
+            'primary',
+            '_',
+            'credential-1',
+            5
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertEquals(
+            'Credential type has no supported secret accessor',
+            report.message
+        )
+    }
+
+    void testOperatorCredentialSecretMapsAmbiguousAndOversizedErrors() {
+        writeProperties(defaultProperties())
+        [
+            credential_ambiguous:
+                "Credential 'credential-1' is ambiguous",
+            secret_too_large:
+                'Credential secret exceeds the terminal output limit',
+            extraction_failed:
+                'Credential secret extraction failed'
+        ].each { code, message ->
+            JenkinsAdapter adapter = adapterWithMocks(
+                [:],
+                null,
+                scriptClient {
+                    [
+                        code: 200,
+                        body: JsonOutputWrapper.json([
+                            status: 'error',
+                            code: code
+                        ]),
+                        error: ''
+                    ]
+                }
+            )
+            Map report = adapter.operatorCredentialSecret(
+                'primary',
+                '_',
+                'credential-1',
+                5
+            )
+            assertEquals(Status.ERROR, report.status)
+            assertEquals(message, report.message)
+        }
+    }
+
+    void testOperatorCredentialSecretRejectsMalformedSecretPayload() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            scriptClient {
+                [
+                    code: 200,
+                    body: JsonOutputWrapper.json([
+                        status: 'ok',
+                        id: 'credential-1',
+                        credential_type: 'com.example.Credential',
+                        components: [[
+                            name: 'password\u001B',
+                            encoding: 'text',
+                            value: 'must-not-appear'
+                        ]]
+                    ]),
+                    error: ''
+                ]
+            }
+        )
+        Map report = adapter.operatorCredentialSecret(
+            'primary',
+            '_',
+            'credential-1',
+            5
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertEquals(
+            'Malformed Jenkins credential response',
+            report.message
+        )
+        assertFalse(report.message.contains('must-not-appear'))
+    }
+
+    void testOperatorCredentialSecretBlocksUnauthorizedScriptConsole() {
+        writeProperties(defaultProperties())
+        ReadOnlyHttp readHttp = new ReadOnlyHttp()
+        readHttp.requestHandler = { method, url, headers, timeout ->
+            [code: 403, body: 'forbidden-secret', error: '']
+        }
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            new JenkinsScriptConsoleClient(
+                readHttp,
+                new FormHttp()
+            )
+        )
+        Map report = adapter.operatorCredentialSecret(
+            'primary',
+            '_',
+            'credential-1',
+            5
+        )
+        assertEquals(Status.BLOCKED, report.status)
+        assertFalse(report.message.contains('forbidden-secret'))
+    }
+
+    void testCredentialSecretCommandRequiresIdAndInteractiveTerminal() {
+        writeProperties(defaultProperties())
+        Map missingId = captureStreams {
+            JenkinsCommands.run(
+                'credentials',
+                ['primary', '--show-secretValue'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true }
+            )
+        }
+        assertEquals(1, missingId.code)
+        assertTrue(missingId.err.contains('requires --id'))
+        Map nonInteractive = captureStreams {
+            JenkinsCommands.run(
+                'credentials',
+                [
+                    'primary',
+                    '--id',
+                    'credential-1',
+                    '--show-secretValue'
+                ],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { false }
+            )
+        }
+        assertEquals(1, nonInteractive.code)
+        assertTrue(
+            nonInteractive.err.contains('requires an interactive terminal')
+        )
+        Map idOnly = captureStreams {
+            JenkinsCommands.run(
+                'credentials',
+                ['primary', '--id', 'credential-1'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true }
+            )
+        }
+        assertEquals(1, idOnly.code)
+        assertTrue(idOnly.err.contains('--id requires --show-secretValue'))
+    }
+
+    void testCredentialSecretCommandRejectsJsonWithoutNetwork() {
+        writeProperties(defaultProperties())
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'credentials',
+                [
+                    'primary',
+                    '--id',
+                    'credential-1',
+                    '--show-secretValue',
+                    '--json'
+                ],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true }
+            )
+        }
+        assertEquals(1, captured.code)
+        assertTrue(captured.err.contains('cannot be combined with --json'))
+        assertFalse(captured.out.trim().startsWith('{'))
+    }
+
+    void testCredentialSecretCommandRendersRawTerminalValues() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            scriptClient {
+                [
+                    code: 200,
+                    body: JsonOutputWrapper.json([
+                        status: 'ok',
+                        id: 'credential-1',
+                        credential_type:
+                            'com.example.CustomCredential',
+                        components: [
+                            [
+                                name: 'password',
+                                encoding: 'text',
+                                value: 'plain-secret'
+                            ],
+                            [
+                                name: 'file',
+                                encoding: 'base64',
+                                value: 'AAEC'
+                            ]
+                        ]
+                    ]),
+                    error: ''
+                ]
+            }
+        )
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'credentials',
+                [
+                    'primary',
+                    '--domain',
+                    '_',
+                    '--id',
+                    'credential-1',
+                    '--show-secretValue'
+                ],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true },
+                adapter
+            )
+        }
+        assertEquals(0, captured.code)
+        assertTrue(captured.out.contains('password (text):'))
+        assertTrue(captured.out.contains('plain-secret'))
+        assertTrue(captured.out.contains('file (base64):'))
+        assertTrue(captured.out.contains('AAEC'))
     }
 
     void testOperatorSeedRecentFailure() {
@@ -1151,9 +1550,29 @@ class JenkinsOperatorTest extends GroovyTestCase {
         })
     }
 
+    private static JenkinsScriptConsoleClient scriptClient(
+        Closure<Map> response
+    ) {
+        ReadOnlyHttp readHttp = new ReadOnlyHttp()
+        readHttp.requestHandler = { method, url, headers, timeout ->
+            [code: 404, body: '', error: '']
+        }
+        FormHttp formHttp = new FormHttp()
+        formHttp.requestHandler = {
+            url,
+            headers,
+            form,
+            timeout,
+            maxCharacters ->
+            response.call()
+        }
+        new JenkinsScriptConsoleClient(readHttp, formHttp)
+    }
+
     private JenkinsAdapter adapterWithMocks(
         Map config,
-        BinaryDownloadClient binaryDownload = null
+        BinaryDownloadClient binaryDownload = null,
+        JenkinsScriptConsoleClient scriptConsole = null
     ) {
         new JenkinsAdapter(
             new FrameworkPaths(workspace),
@@ -1162,7 +1581,8 @@ class JenkinsOperatorTest extends GroovyTestCase {
             repository,
             config ?: ConfigLoader.load(workspace),
             new ReadOnlyProcess(new Redaction(repository)),
-            binaryDownload
+            binaryDownload,
+            scriptConsole
         )
     }
 
@@ -1197,6 +1617,44 @@ class JenkinsOperatorTest extends GroovyTestCase {
     private static class JsonOutputWrapper {
         static String json(Object value) {
             groovy.json.JsonOutput.toJson(value)
+        }
+    }
+
+    static class FakeCredentialProvider {
+        final Map domainCredentialsMap
+
+        FakeCredentialProvider(FakeCredential credential) {
+            domainCredentialsMap = [
+                (new FakeDomain()): [credential]
+            ]
+        }
+    }
+
+    static class FakeDomain {
+        String name
+    }
+
+    static class FakeCredential {
+        final String id
+
+        FakeCredential(String id) {
+            this.id = id
+        }
+
+        String getSecretToken() {
+            'plain-secret'
+        }
+
+        String getPassword() {
+            'bad\u001Bsecret'
+        }
+
+        InputStream getContent() {
+            new ByteArrayInputStream([0, 1, 2] as byte[])
+        }
+
+        List<String> getPrivateKeys() {
+            ['private-one', 'private-two']
         }
     }
 }
