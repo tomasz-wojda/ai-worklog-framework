@@ -247,6 +247,28 @@ commands:
         )
     }
 
+    void testJobExportContractAndHelp() {
+        Map action = jenkinsAction('job-export')
+        assertEquals(['controller', 'job'], action.positionals*.name)
+        assertEquals(['--json', '--apply', '--force', '--cwd'], action.options*.name)
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'job-export'])
+        assertTrue(rendered.contains('<controller> <job>'))
+        assertTrue(rendered.contains('dry-run unless --apply'))
+        Map schema = (Map) JsonFiles.read(
+            new File(repository, 'schemas/command-contract.schema.json'),
+            [:]
+        )
+        assertEquals(
+            [],
+            validate(
+                new UsageRenderer(contract).describePath(['service', 'jenkins', 'job-export']),
+                schema,
+                schema,
+                '$'
+            )
+        )
+    }
+
     void testPositionalOrderIsAuthoritative() {
         Map action = jenkinsAction('artifacts')
         String message = shouldFail(UsageError) {

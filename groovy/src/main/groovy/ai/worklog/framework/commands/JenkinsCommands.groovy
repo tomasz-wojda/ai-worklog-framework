@@ -226,6 +226,14 @@ class JenkinsCommands {
                     parsed.flag('--apply'),
                     parsed.flag('--force')
                 )
+            case 'job-export':
+                return adapter.operatorJobExport(
+                    parsed.positional('controller'),
+                    parsed.positional('job'),
+                    parsed.flag('--cwd') ? new File(System.getProperty('user.dir')) : null,
+                    parsed.flag('--apply'),
+                    parsed.flag('--force')
+                )
             case 'views':
                 return adapter.operatorViews(
                     parsed.positional('controller'),

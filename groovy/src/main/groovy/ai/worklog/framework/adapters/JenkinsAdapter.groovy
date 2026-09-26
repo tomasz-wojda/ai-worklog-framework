@@ -1143,6 +1143,135 @@ class JenkinsAdapter {
         ]
     }
 
+    Map operatorJobExport(
+        String controller,
+        String jobName,
+        File cwdBase,
+        boolean apply,
+        boolean force
+    ) {
+        String operation = 'job-export'
+        String fetchedAt = utcNow()
+        Map settings = settings()
+        validateControllerId(controller)
+        validateJobName(jobName)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(operation, controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport(operation, controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        List response = jenkinsGet(
+            controller,
+            "/${encodeJobPath(jobName)}/api/json?tree=name,url",
+            settings.timeout_seconds as int
+        )
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (accessBlocked(statusCode)) {
+            return blockedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        if (statusCode == 404) {
+            return errorReport(operation, controller, fetchedAt, "Job '${jobName}' not found")
+        }
+        if (statusCode == 0 || payload == null) {
+            return errorReport(operation, controller, fetchedAt, 'Jenkins query failed')
+        }
+        if (!(payload instanceof Map)) {
+            return errorReport(operation, controller, fetchedAt, 'Malformed Jenkins response')
+        }
+        if (statusCode >= 400) {
+            return degradedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+
+        Map destination = resolveJobExportDestination(controller, jobName, cwdBase)
+        File target = (File) destination.file
+        boolean exists = Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS)
+        if (exists && (Files.isSymbolicLink(target.toPath()) ||
+            !Files.isRegularFile(target.toPath(), LinkOption.NOFOLLOW_LINKS))) {
+            return errorReport(operation, controller, fetchedAt, "Invalid destination: ${destination.local_path}")
+        }
+        if (exists && !force) {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Invalid destination: already exists: ${destination.local_path}"
+            )
+        }
+
+        Map item = [
+            job: jobName,
+            file_name: target.name,
+            local_path: destination.local_path,
+            destination_mode: destination.destination_mode,
+            bytes: 0L,
+            applied: false,
+            dry_run: !apply,
+            force: force,
+            replaced: false,
+            max_bytes: settings.download_max_bytes
+        ]
+        if (!apply) {
+            return [
+                operation: operation,
+                controller: controller,
+                job: jobName,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: 'Job config export planned',
+                items: [item]
+            ]
+        }
+
+        Files.createDirectories(target.parentFile.toPath())
+        rejectSymbolicLinks((Path) destination.root, target.toPath())
+        String url = "${info.url.toString().replaceAll(/\/+$/, '')}/${encodeJobPath(jobName)}/config.xml"
+        Map headers = authHeaders(info.user.toString(), info.token.toString())
+        headers.Accept = 'application/xml'
+        Map result = binaryDownload.download(
+            url,
+            headers,
+            target,
+            settings.download_timeout_seconds as int,
+            settings.download_max_bytes as long,
+            settings.download_buffer_bytes as int,
+            force
+        )
+        if ((result.code as int) in [401, 403]) {
+            return blockedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${result.code}")
+        }
+        if ((result.code as int) == 404) {
+            return errorReport(operation, controller, fetchedAt, "Job config not found: ${jobName}")
+        }
+        if ((result.code as int) != 200 || result.error) {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                result.error?.toString() ?: 'Job config export failed'
+            )
+        }
+        item.bytes = result.bytes as long
+        if ((result.content_length as long) >= 0L) {
+            item.content_length = result.content_length as long
+        }
+        item.applied = true
+        item.dry_run = false
+        item.replaced = result.replaced as boolean
+        [
+            operation: operation,
+            controller: controller,
+            job: jobName,
+            fetched_at: fetchedAt,
+            status: Status.READY,
+            message: 'Job config exported',
+            items: [item]
+        ]
+    }
+
     Map operatorJobs(String controller, String folder, String query, int limit, int timeout) {
         String fetchedAt = utcNow()
         validateControllerId(controller)
@@ -1845,6 +1974,42 @@ class JenkinsAdapter {
             root: workspaceRoot,
             file: target.toFile(),
             local_path: workspaceRoot.relativize(target).toString().replace(File.separatorChar, '/' as char)
+        ]
+    }
+
+    private Map resolveJobExportDestination(String controller, String jobName, File cwdBase) {
+        validateControllerId(controller)
+        validateJobName(jobName)
+        List<String> jobParts = jobName.split('/').toList()
+        if (cwdBase != null) {
+            Path base = cwdBase.canonicalFile.toPath()
+            String fileName = jobParts.join('_') + '_config.xml'
+            if (fileName.getBytes('UTF-8').length > 255) {
+                throw new IllegalArgumentException('Invalid destination: file name too long')
+            }
+            Path target = base.resolve(fileName).normalize()
+            rejectSymbolicLinks(base, target)
+            return [
+                root: base,
+                file: target.toFile(),
+                local_path: target.toString(),
+                destination_mode: 'cwd'
+            ]
+        }
+        Path workspaceRoot = paths.root.toPath().toAbsolutePath().normalize()
+        Path exportRoot = workspaceRoot.resolve('tmp/services/jenkins').normalize()
+        Path target = exportRoot.resolve(controller)
+        jobParts.each { target = target.resolve(it) }
+        target = target.resolve('config.xml').toAbsolutePath().normalize()
+        if (!target.startsWith(exportRoot)) {
+            throw new IllegalArgumentException("Invalid job: ${jobName}")
+        }
+        rejectSymbolicLinks(workspaceRoot, target)
+        [
+            root: workspaceRoot,
+            file: target.toFile(),
+            local_path: workspaceRoot.relativize(target).toString().replace(File.separatorChar, '/' as char),
+            destination_mode: 'workspace'
         ]
     }
 

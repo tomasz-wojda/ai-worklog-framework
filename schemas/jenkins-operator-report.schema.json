@@ -20,6 +20,7 @@
         "jobs",
         "artifacts",
         "download-artifact",
+        "job-export",
         "views",
         "whoami",
         "credential-domains"

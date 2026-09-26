@@ -1538,6 +1538,238 @@ class JenkinsOperatorTest extends GroovyTestCase {
         adapter
     }
 
+    void testJobExportDefaultWritesConfigUnderServicesRoot() {
+        List<String> downloads = []
+        List<Map> headers = []
+        BinaryDownloadClient binary = new BinaryDownloadClient(requestHandler: { url, requestHeaders, timeout ->
+            downloads << url
+            headers << requestHeaders
+            byte[] content = '<project/>'.bytes
+            [code: 200, stream: new ByteArrayInputStream(content), content_length: content.length, error: '']
+        })
+        Map report = adapterWithJobResponse(200, binary).operatorJobExport(
+            'primary',
+            'folder/sub/myjob',
+            null,
+            true,
+            false
+        )
+        File target = new File(workspace, 'tmp/services/jenkins/primary/folder/sub/myjob/config.xml')
+        assertEquals(Status.READY, report.status)
+        assertEquals('Job config exported', report.message)
+        assertEquals('<project/>', target.text)
+        assertEquals('tmp/services/jenkins/primary/folder/sub/myjob/config.xml', report.items[0].local_path)
+        assertEquals('workspace', report.items[0].destination_mode)
+        assertEquals(1, downloads.size())
+        assertTrue(downloads[0].endsWith('/job/folder/job/sub/job/myjob/config.xml'))
+        assertEquals('application/xml', headers[0].Accept)
+    }
+
+    void testJobExportCwdWritesFlattenedFileName() {
+        File cwd = File.createTempDir('ai-worklog-job-export-cwd-', '-test')
+        try {
+            List<String> downloads = []
+            Map report = adapterWithJobResponse(200, binaryClient('<flow/>'.bytes, downloads)).operatorJobExport(
+                'primary',
+                'folder/sub/myjob',
+                cwd,
+                true,
+                false
+            )
+            File target = new File(cwd.canonicalFile, 'folder_sub_myjob_config.xml')
+            assertEquals(Status.READY, report.status)
+            assertEquals('<flow/>', target.text)
+            assertEquals(target.path, report.items[0].local_path)
+            assertEquals('cwd', report.items[0].destination_mode)
+            assertEquals('folder_sub_myjob_config.xml', report.items[0].file_name)
+            assertEquals(1, downloads.size())
+            assertFalse(new File(workspace, 'tmp').exists())
+        } finally {
+            cwd.deleteDir()
+        }
+    }
+
+    void testJobExportDryRunDoesNotFetchConfigOrCreateFiles() {
+        File cwd = File.createTempDir('ai-worklog-job-export-dry-', '-test')
+        try {
+            List<String> downloads = []
+            JenkinsAdapter adapter = adapterWithJobResponse(200, binaryClient([1] as byte[], downloads))
+            Map workspaceReport = adapter.operatorJobExport('primary', 'Demo', null, false, false)
+            Map cwdReport = adapter.operatorJobExport('primary', 'Demo', cwd, false, false)
+            [workspaceReport, cwdReport].each { Map report ->
+                assertEquals(Status.READY, report.status)
+                assertEquals('Job config export planned', report.message)
+                assertTrue(report.items[0].dry_run)
+                assertFalse(report.items[0].applied)
+            }
+            assertEquals([], downloads)
+            assertFalse(new File(workspace, 'tmp').exists())
+            assertEquals([], cwd.list().toList())
+        } finally {
+            cwd.deleteDir()
+        }
+    }
+
+    void testJobExportPreservesRawBytes() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream()
+        buffer.write('<?xml version="1.1"?>\r\n<secret>{AQAAABAAAAAQ+abc==}</secret>\r\n'.getBytes('UTF-8'))
+        buffer.write(0xE9)
+        buffer.write(0x0A)
+        byte[] content = buffer.toByteArray()
+        adapterWithJobResponse(200, binaryClient(content, [])).operatorJobExport(
+            'primary',
+            'Demo',
+            null,
+            true,
+            false
+        )
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/config.xml')
+        assertEquals(content.toList(), target.bytes.toList())
+    }
+
+    void testJobExportRefusesExistingFileWithoutForce() {
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/config.xml')
+        target.parentFile.mkdirs()
+        target.text = 'existing'
+        List<String> downloads = []
+        Map report = adapterWithJobResponse(200, binaryClient([1] as byte[], downloads)).operatorJobExport(
+            'primary',
+            'Demo',
+            null,
+            true,
+            false
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertTrue(report.message.contains('already exists'))
+        assertEquals([], downloads)
+        assertEquals('existing', target.text)
+    }
+
+    void testJobExportForceReplacesExistingFile() {
+        File target = new File(workspace, 'tmp/services/jenkins/primary/Demo/config.xml')
+        target.parentFile.mkdirs()
+        target.text = 'existing'
+        Map report = adapterWithJobResponse(200, binaryClient('<new/>'.bytes, [])).operatorJobExport(
+            'primary',
+            'Demo',
+            null,
+            true,
+            true
+        )
+        assertEquals(Status.READY, report.status)
+        assertEquals('<new/>', target.text)
+        assertTrue(report.items[0].replaced)
+    }
+
+    void testJobExportRejectsSymbolicLinks() {
+        File outside = File.createTempDir('ai-worklog-job-export-outside-', '-test')
+        File cwd = File.createTempDir('ai-worklog-job-export-link-', '-test')
+        try {
+            File services = new File(workspace, 'tmp/services')
+            services.mkdirs()
+            java.nio.file.Files.createSymbolicLink(new File(services, 'jenkins').toPath(), outside.toPath())
+            JenkinsAdapter adapter = adapterWithJobResponse(200, binaryClient([1] as byte[], []))
+            assertTrue(shouldFail(IllegalArgumentException) {
+                adapter.operatorJobExport('primary', 'Demo', null, false, false)
+            }.contains('symbolic link'))
+            java.nio.file.Files.createSymbolicLink(
+                new File(cwd, 'Demo_config.xml').toPath(),
+                new File(outside, 'target.xml').toPath()
+            )
+            assertTrue(shouldFail(IllegalArgumentException) {
+                adapter.operatorJobExport('primary', 'Demo', cwd, true, true)
+            }.contains('symbolic link'))
+            assertFalse(new File(outside, 'target.xml').exists())
+        } finally {
+            outside.deleteDir()
+            cwd.deleteDir()
+        }
+    }
+
+    void testJobExportMissingJobReturnsError() {
+        List<String> downloads = []
+        Map report = adapterWithJobResponse(404, binaryClient([1] as byte[], downloads)).operatorJobExport(
+            'primary',
+            'Missing',
+            null,
+            true,
+            false
+        )
+        assertEquals(Status.ERROR, report.status)
+        assertEquals("Job 'Missing' not found", report.message)
+        assertEquals([], downloads)
+    }
+
+    void testJobExportMapsBlockedAndMissingConfig() {
+        [401, 403].each { int code ->
+            Map report = adapterWithJobResponse(code, binaryClient([1] as byte[], [])).operatorJobExport(
+                'primary',
+                'Demo',
+                null,
+                true,
+                false
+            )
+            assertEquals(Status.BLOCKED, report.status)
+            assertEquals("Jenkins returned HTTP ${code}".toString(), report.message)
+        }
+        BinaryDownloadClient forbidden = new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
+            [code: 403, error: 'HTTP 403', content_length: -1]
+        })
+        Map blocked = adapterWithJobResponse(200, forbidden).operatorJobExport('primary', 'Demo', null, true, false)
+        assertEquals(Status.BLOCKED, blocked.status)
+        assertEquals('Jenkins returned HTTP 403', blocked.message)
+        BinaryDownloadClient missing = new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
+            [code: 404, error: 'HTTP 404', content_length: -1]
+        })
+        Map notFound = adapterWithJobResponse(200, missing).operatorJobExport('primary', 'Demo', null, true, true)
+        assertEquals(Status.ERROR, notFound.status)
+        assertEquals('Job config not found: Demo', notFound.message)
+    }
+
+    void testJobExportRejectsInvalidJobNames() {
+        JenkinsAdapter adapter = adapterWithJobResponse(200, binaryClient([1] as byte[], []))
+        ['../x', 'a//b', 'a/./b', '/abs'].each { String unsafe ->
+            shouldFail(IllegalArgumentException) {
+                adapter.operatorJobExport('primary', unsafe, null, false, false)
+            }
+        }
+        assertFalse(new File(workspace, 'tmp').exists())
+    }
+
+    void testJobExportReportJsonPreservesFields() {
+        Map payload = adapterWithJobResponse(200, binaryClient([1] as byte[], [])).operatorJobExport(
+            'primary',
+            'folder/Demo',
+            null,
+            false,
+            true
+        )
+        String json = JenkinsOperatorReport.fromPayload(payload).renderJson(new Redaction(repository))
+        Map parsed = (Map) new JsonSlurper().parseText(json)
+        assertEquals('job-export', parsed.operation)
+        assertEquals('folder/Demo', parsed.job)
+        assertEquals(true, parsed.items[0].dry_run)
+        assertEquals(false, parsed.items[0].applied)
+        assertEquals(true, parsed.items[0].force)
+        assertEquals('workspace', parsed.items[0].destination_mode)
+        assertEquals('tmp/services/jenkins/primary/folder/Demo/config.xml', parsed.items[0].local_path)
+    }
+
+    private JenkinsAdapter adapterWithJobResponse(int code, BinaryDownloadClient binaryDownload) {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:], binaryDownload)
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [
+                code: code,
+                body: code == 200 ?
+                    groovy.json.JsonOutput.toJson([name: 'Demo', url: 'https://jenkins.example/job/Demo/']) :
+                    '',
+                error: ''
+            ]
+        }
+        adapter
+    }
+
     private static BinaryDownloadClient binaryClient(byte[] content, List<String> downloads) {
         new BinaryDownloadClient(requestHandler: { url, headers, timeout ->
             downloads << url

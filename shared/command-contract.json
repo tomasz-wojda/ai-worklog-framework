@@ -2008,6 +2008,51 @@
               ]
             },
             {
+              "name": "job-export",
+              "description": "Export one job config.xml; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "job",
+                  "description": "Job path including any folder prefix",
+                  "required": true,
+                  "value": {
+                    "help_values": "JOB"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Write config.xml to the destination",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "description": "Replace an existing regular destination file",
+                  "takes_value": false
+                },
+                {
+                  "name": "--cwd",
+                  "description": "Write <job_path_with_underscores>_config.xml to the current directory",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
               "name": "views",
               "description": "List views or inspect one view",
               "kind": "action",

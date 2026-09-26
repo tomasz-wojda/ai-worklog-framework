@@ -472,6 +472,9 @@ ai-worklog service jenkins artifacts primary folder/job 42
 ai-worklog service jenkins download-artifact primary folder/job last-successful dist/app.jar
 ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply
 ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply --force
+ai-worklog service jenkins job-export primary folder/job
+ai-worklog service jenkins job-export primary folder/job --apply
+ai-worklog service jenkins job-export primary folder/job --apply --force --cwd
 ```
 
 Jenkins operations do not mutate the controller. Credential output is limited
@@ -488,6 +491,14 @@ Nested job and artifact paths are preserved under
 stream through a temporary file, default to a five-minute timeout, and are
 limited to 1 GiB. Run `ai-worklog service jenkins download-artifact --help` for complete
 usage.
+
+`job-export` checks that the job exists and plans an export of its `config.xml`.
+Add `--apply` to write it to
+`tmp/services/jenkins/<controller>/<job>/config.xml`, or add `--cwd` to write
+`<folder>_<job>_config.xml` to the current directory instead. Existing files
+are refused unless `--force` is also supplied. The export is raw and keeps
+Jenkins-encrypted values, so do not commit it. Reading `config.xml` requires
+the Job/ExtendedRead or Configure permission.
 
 The former `ai-worklog jenkins ...` path was removed in version 0.10.0.
 Existing scripts must use `ai-worklog service jenkins ...`.
