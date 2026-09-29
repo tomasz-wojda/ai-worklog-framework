@@ -71,6 +71,9 @@ class JenkinsAdapter {
             download_timeout_seconds: (operatorRules.downloads?.timeout_seconds ?: 300) as int,
             download_max_bytes: (operatorRules.downloads?.max_bytes ?: 1073741824L) as long,
             download_buffer_bytes: (operatorRules.downloads?.buffer_bytes ?: 65536) as int,
+            script_timeout_seconds: (operatorRules.script_console?.timeout_seconds ?: 60) as int,
+            script_max_bytes: (operatorRules.script_console?.script_max_bytes ?: 1048576L) as long,
+            script_output_max_bytes: (operatorRules.script_console?.output_max_bytes ?: 1048576) as int,
             vulnerabilities: jenkins.vulnerabilities instanceof Map ?
                 (Map) jenkins.vulnerabilities : [:],
             ai_vault_root: jenkins.ai_vault_root?.toString(),
@@ -1272,6 +1275,101 @@ class JenkinsAdapter {
         ]
     }
 
+    Map operatorRunScript(String controller, Map scriptSource, boolean apply) {
+        String operation = 'run-script'
+        String fetchedAt = utcNow()
+        Map settings = settings()
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(operation, controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport(operation, controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        if (!runScriptsEnabled(info)) {
+            return blockedReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Script execution disabled for controller '${controller}'; set ${controller}.run_scripts=true"
+            )
+        }
+        Map item = [source: scriptSource.source]
+        if (scriptSource.path) {
+            item.path = scriptSource.path
+        }
+        item.putAll([
+            bytes: scriptSource.bytes,
+            sha256: scriptSource.sha256,
+            applied: false,
+            dry_run: !apply,
+            truncated: false,
+            output_bytes: 0
+        ])
+        if (!apply) {
+            return [
+                operation: operation,
+                controller: controller,
+                fetched_at: fetchedAt,
+                status: Status.READY,
+                message: 'Script execution planned',
+                items: [item]
+            ]
+        }
+        int outputLimit = settings.script_output_max_bytes as int
+        Map response = scriptConsole.execute(
+            info.url.toString(),
+            info.user.toString(),
+            info.token.toString(),
+            scriptSource.text.toString(),
+            settings.script_timeout_seconds as int,
+            outputLimit + 1
+        )
+        int statusCode = (response.code ?: 0) as int
+        if (accessBlocked(statusCode)) {
+            return blockedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        if (statusCode != 200) {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                statusCode ? "Jenkins returned HTTP ${statusCode}" : 'Script execution failed'
+            )
+        }
+        Map output = limitUtf8(response.body?.toString() ?: '', outputLimit)
+        item.output = output.text
+        item.output_bytes = output.bytes
+        item.truncated = output.truncated
+        item.applied = true
+        item.dry_run = false
+        [
+            operation: operation,
+            controller: controller,
+            fetched_at: fetchedAt,
+            status: output.truncated ? Status.DEGRADED : Status.READY,
+            message: output.truncated ? 'Script executed; output truncated' : 'Script executed',
+            items: [item]
+        ]
+    }
+
+    private static Map limitUtf8(String text, int maxBytes) {
+        byte[] encoded = text.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        if (encoded.length <= maxBytes) {
+            return [text: text, bytes: encoded.length, truncated: false]
+        }
+        java.nio.charset.CharsetDecoder decoder = java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.IGNORE)
+        String limited = decoder.decode(java.nio.ByteBuffer.wrap(encoded, 0, maxBytes)).toString()
+        [
+            text: limited,
+            bytes: limited.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
+            truncated: true
+        ]
+    }
+
     Map operatorJobs(String controller, String folder, String query, int limit, int timeout) {
         String fetchedAt = utcNow()
         validateControllerId(controller)
@@ -1787,8 +1885,13 @@ class JenkinsAdapter {
 
     static List<Map> controllerPublicInfo(Map controllers) {
         controllers.keySet().sort().collect { id ->
-            PropertiesSupport.publicController(id.toString(), (Map) controllers[id])
+            Map info = (Map) controllers[id]
+            PropertiesSupport.publicController(id.toString(), info) + [run_scripts: runScriptsEnabled(info)]
         }
+    }
+
+    static boolean runScriptsEnabled(Map info) {
+        info?.run_scripts?.toString()?.trim()?.equalsIgnoreCase('true') ?: false
     }
 
     static Map loadOperatorRules(File frameworkRoot) {

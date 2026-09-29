@@ -2053,6 +2053,49 @@
               ]
             },
             {
+              "name": "run-script",
+              "description": "Run Groovy in the Jenkins Script Console from exactly one file, stdin (-) or --script source; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "controller",
+                  "description": "Controller id from jenkins.properties",
+                  "required": true,
+                  "value": {
+                    "help_values": "CONTROLLER"
+                  }
+                },
+                {
+                  "name": "script_file",
+                  "description": "Path to a UTF-8 Groovy script, or - to read standard input",
+                  "required": false,
+                  "value": {
+                    "help_values": "SCRIPT_FILE | -"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Execute the script on the controller",
+                  "takes_value": false
+                },
+                {
+                  "name": "--script",
+                  "description": "Inline Groovy script",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "CODE"
+                  }
+                }
+              ]
+            },
+            {
               "name": "views",
               "description": "List views or inspect one view",
               "kind": "action",

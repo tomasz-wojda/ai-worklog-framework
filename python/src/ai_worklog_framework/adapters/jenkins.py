@@ -360,8 +360,13 @@ def controller_public_info(
             "url": info.get("url", ""),
             "has_user": bool(info.get("user")),
             "has_token": bool(info.get("token")),
+            "run_scripts": _run_scripts_enabled(info),
         })
     return items
+
+
+def _run_scripts_enabled(info: Dict[str, str]) -> bool:
+    return str(info.get("run_scripts", "")).strip().lower() == "true"
 
 
 def _controller_auth(
@@ -2022,6 +2027,7 @@ def report_to_json(report: Dict[str, Any]) -> str:
             "truncated",
             "stuck",
             "blocked",
+            "run_scripts",
         ):
             if safe_key in item:
                 target[safe_key] = item[safe_key]

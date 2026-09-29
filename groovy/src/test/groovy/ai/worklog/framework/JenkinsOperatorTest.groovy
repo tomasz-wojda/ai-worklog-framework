@@ -16,6 +16,7 @@ import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsOperatorReport
 import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
+import ai.worklog.framework.jenkins.JenkinsScriptSource
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.reconciliation.Observation
 import ai.worklog.framework.reconciliation.ReconciliationComparators
@@ -56,7 +57,10 @@ class JenkinsOperatorTest extends GroovyTestCase {
         writeProperties('primary.url=https://jenkins.example\nprimary.user=bot\nprimary.token=secret-token\n')
         Map controllers = PropertiesSupport.controllers(new File(workspace, 'integrations/jenkins/jenkins.properties'))
         List publicInfo = JenkinsAdapter.controllerPublicInfo(controllers)
-        assertEquals([[id: 'primary', url: 'https://jenkins.example', has_user: true, has_token: true]], publicInfo)
+        assertEquals(
+            [[id: 'primary', url: 'https://jenkins.example', has_user: true, has_token: true, run_scripts: false]],
+            publicInfo
+        )
         assertFalse JsonOutputWrapper.json(publicInfo).contains('secret-token')
         assertFalse JsonOutputWrapper.json(publicInfo).contains('bot')
     }
@@ -1780,6 +1784,224 @@ class JenkinsOperatorTest extends GroovyTestCase {
                 error: ''
             ]
         })
+    }
+
+    void testControllersReportRunScriptsFlag() {
+        writeProperties(
+            'a.url=u\na.run_scripts=true\n' +
+            'b.url=u\nb.run_scripts= TRUE \n' +
+            'c.url=u\n' +
+            'd.url=u\nd.run_scripts=false\n' +
+            'e.url=u\ne.run_scripts=yes\n'
+        )
+        Map report = adapterWithMocks([:]).operatorControllers()
+        assertEquals(
+            [a: true, b: true, c: false, d: false, e: false],
+            report.items.collectEntries { [(it.id): it.run_scripts] }
+        )
+    }
+
+    void testRunScriptDisabledControllerBlockedWithoutNetwork() {
+        ['', 'primary.run_scripts=false\n', 'primary.run_scripts=yes\n'].each { String flag ->
+            List<Map> calls = []
+            writeProperties(defaultProperties() + flag)
+            JenkinsAdapter adapter = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: 'x', error: '']))
+            [false, true].each { boolean apply ->
+                Map report = adapter.operatorRunScript('primary', inlineSource('println 1'), apply)
+                assertEquals(Status.BLOCKED, report.status)
+                assertEquals(
+                    "Script execution disabled for controller 'primary'; set primary.run_scripts=true",
+                    report.message
+                )
+                assertEquals(3, exitCode(report))
+            }
+            assertEquals([], calls)
+        }
+    }
+
+    void testRunScriptDryRunReportsSourceHashWithoutNetwork() {
+        List<Map> calls = []
+        writeProperties(runScriptProperties())
+        Map source = JenkinsScriptSource.read(null, 'println 1', null, 1024L)
+        Map report = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: 'x', error: '']))
+            .operatorRunScript('primary', source, false)
+        assertEquals(Status.READY, report.status)
+        assertEquals('Script execution planned', report.message)
+        Map item = report.items[0]
+        assertEquals('inline', item.source)
+        assertEquals(9, item.bytes)
+        assertEquals(source.sha256, item.sha256)
+        assertTrue(item.dry_run)
+        assertFalse(item.applied)
+        assertFalse(item.containsKey('output'))
+        assertEquals([], calls)
+    }
+
+    void testRunScriptApplyPostsScriptAndReturnsOutput() {
+        List<Map> calls = []
+        writeProperties(runScriptProperties())
+        Map report = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: 'hello\n', error: '']))
+            .operatorRunScript('primary', inlineSource('println "hello"'), true)
+        assertEquals(Status.READY, report.status)
+        assertEquals('Script executed', report.message)
+        assertEquals('hello\n', report.items[0].output)
+        assertEquals(6, report.items[0].output_bytes)
+        assertTrue(report.items[0].applied)
+        assertFalse(report.items[0].dry_run)
+        assertFalse(report.items[0].truncated)
+        assertEquals(1, calls.size())
+        assertTrue(calls[0].url.toString().endsWith('/scriptText'))
+        assertEquals('println "hello"', calls[0].form.script)
+    }
+
+    void testRunScriptTruncatesOutput() {
+        writeProperties(runScriptProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            recordingScriptClient(calls, [code: 200, body: 'abcdefghij', error: ''])
+        )
+        adapter.operatorRules.script_console = [output_max_bytes: 4]
+        Map report = adapter.operatorRunScript('primary', inlineSource('x'), true)
+        assertEquals(Status.DEGRADED, report.status)
+        assertEquals('Script executed; output truncated', report.message)
+        assertEquals('abcd', report.items[0].output)
+        assertEquals(4, report.items[0].output_bytes)
+        assertTrue(report.items[0].truncated)
+        assertEquals(5, calls[0].max)
+    }
+
+    void testRunScriptMapsBlockedAndErrorStatuses() {
+        writeProperties(runScriptProperties())
+        [401: Status.BLOCKED, 403: Status.BLOCKED, 500: Status.ERROR].each { int code, Status expected ->
+            Map report = adapterWithMocks([:], null, recordingScriptClient([], [code: code, body: '', error: "HTTP ${code}"]))
+                .operatorRunScript('primary', inlineSource('x'), true)
+            assertEquals(expected, report.status)
+            assertEquals("Jenkins returned HTTP ${code}".toString(), report.message)
+        }
+        Map failed = adapterWithMocks([:], null, recordingScriptClient([], [code: 0, body: '', error: 'refused']))
+            .operatorRunScript('primary', inlineSource('x'), true)
+        assertEquals(Status.ERROR, failed.status)
+        assertEquals('Script execution failed', failed.message)
+    }
+
+    void testRunScriptMissingControllerAndCredentials() {
+        writeProperties('partial.url=https://jenkins.example\npartial.run_scripts=true\n')
+        JenkinsAdapter adapter = adapterWithMocks([:], null, recordingScriptClient([], [code: 200, body: '', error: '']))
+        Map missing = adapter.operatorRunScript('absent', inlineSource('x'), true)
+        assertEquals(Status.ERROR, missing.status)
+        assertEquals("Controller 'absent' not found", missing.message)
+        Map partial = adapter.operatorRunScript('partial', inlineSource('x'), true)
+        assertEquals(Status.BLOCKED, partial.status)
+        assertEquals('Controller credentials unavailable', partial.message)
+    }
+
+    void testCliRunScriptRequiresExactlyOneSource() {
+        writeProperties(runScriptProperties())
+        File script = File.createTempFile('run-script-', '.groovy')
+        script.text = 'println 1'
+        try {
+            [
+                ['primary'],
+                ['primary', script.path, '--script', 'println 2'],
+                ['primary', '-', '--script', 'println 2']
+            ].each { List<String> arguments ->
+                Map captured = captureStreams {
+                    JenkinsCommands.run(
+                        'run-script',
+                        new ArrayList<>(arguments),
+                        repository,
+                        new FrameworkPaths(workspace),
+                        ConfigLoader.load(workspace),
+                        { true },
+                        null,
+                        new ByteArrayInputStream(new byte[0])
+                    )
+                }
+                assertEquals(1, captured.code)
+                assertTrue(captured.err.contains('run-script requires exactly one of <script_file>, - (stdin), or --script'))
+            }
+        } finally {
+            script.delete()
+        }
+    }
+
+    void testCliRunScriptReadsStdin() {
+        writeProperties(runScriptProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: '42\n', error: '']))
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'run-script',
+                ['primary', '-', '--apply', '--json'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true },
+                adapter,
+                new ByteArrayInputStream('println 42'.getBytes('UTF-8'))
+            )
+        }
+        assertEquals(0, captured.code)
+        Map parsed = (Map) new JsonSlurper().parseText(captured.out)
+        assertEquals('run-script', parsed.operation)
+        assertEquals('stdin', parsed.items[0].source)
+        assertEquals('42\n', parsed.items[0].output)
+        assertEquals(true, parsed.items[0].applied)
+        assertEquals('println 42', calls[0].form.script)
+    }
+
+    void testCliRunScriptHumanOutputPrintsOutputBlock() {
+        writeProperties(runScriptProperties())
+        JenkinsAdapter adapter = adapterWithMocks(
+            [:],
+            null,
+            recordingScriptClient([], [code: 200, body: 'line one\nline two', error: ''])
+        )
+        File script = File.createTempFile('run-script-', '.groovy')
+        script.text = 'println "line one"'
+        try {
+            Map captured = captureStreams {
+                JenkinsCommands.run(
+                    'run-script',
+                    ['primary', script.path, '--apply'],
+                    repository,
+                    new FrameworkPaths(workspace),
+                    ConfigLoader.load(workspace),
+                    { true },
+                    adapter,
+                    new ByteArrayInputStream(new byte[0])
+                )
+            }
+            assertEquals(0, captured.code)
+            assertTrue(captured.out.contains("  Source: file ${script.path}"))
+            assertTrue(captured.out.contains('  Applied: true'))
+            assertTrue(captured.out.contains("  Output:${System.lineSeparator()}line one\nline two${System.lineSeparator()}"))
+        } finally {
+            script.delete()
+        }
+    }
+
+    private static Map inlineSource(String script) {
+        JenkinsScriptSource.read(null, script, null, 1048576L)
+    }
+
+    private static String runScriptProperties() {
+        defaultProperties() + 'primary.run_scripts=true\n'
+    }
+
+    private static JenkinsScriptConsoleClient recordingScriptClient(List<Map> calls, Map response) {
+        ReadOnlyHttp readHttp = new ReadOnlyHttp()
+        readHttp.requestHandler = { method, url, headers, timeout ->
+            [code: 404, body: '', error: '']
+        }
+        FormHttp formHttp = new FormHttp()
+        formHttp.requestHandler = { url, headers, form, timeout, maxCharacters ->
+            calls << [url: url, form: form, max: maxCharacters]
+            response
+        }
+        new JenkinsScriptConsoleClient(readHttp, formHttp)
     }
 
     private static JenkinsScriptConsoleClient scriptClient(

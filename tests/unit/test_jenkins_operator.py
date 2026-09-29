@@ -57,9 +57,30 @@ def test_controller_public_info_redacts_secrets(tmp_path):
         "url": "https://jenkins.example",
         "has_user": True,
         "has_token": True,
+        "run_scripts": False,
     }]
     assert "secret-token" not in json.dumps(public)
     assert "bot" not in json.dumps(public)
+
+
+def test_controller_public_info_run_scripts_flag(tmp_path):
+    _write_properties(
+        tmp_path,
+        "a.url=u\na.run_scripts=true\n"
+        "b.url=u\nb.run_scripts= TRUE \n"
+        "c.url=u\n"
+        "d.url=u\nd.run_scripts=false\n"
+        "e.url=u\ne.run_scripts=yes\n",
+    )
+    controllers = jenkins._load_controller_credentials(WorkspacePaths(tmp_path))
+    public = jenkins.controller_public_info(controllers)
+    assert {item["id"]: item["run_scripts"] for item in public} == {
+        "a": True,
+        "b": True,
+        "c": False,
+        "d": False,
+        "e": False,
+    }
 
 
 def test_operator_controllers_no_network(tmp_path):

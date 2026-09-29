@@ -20,6 +20,11 @@
     "max_bytes": 1073741824,
     "buffer_bytes": 65536
   },
+  "script_console": {
+    "timeout_seconds": 60,
+    "script_max_bytes": 1048576,
+    "output_max_bytes": 1048576
+  },
   "vulnerabilities": {
     "update_center_url_template": "https://updates.jenkins.io/{core}/update-center.actual.json",
     "update_center_fallback_url": "https://updates.jenkins.io/current/update-center.actual.json",

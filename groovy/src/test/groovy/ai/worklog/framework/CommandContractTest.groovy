@@ -85,10 +85,10 @@ commands:
         )
     }
 
-    void testJenkinsRenderingListsFifteenActions() {
+    void testJenkinsRenderingListsSeventeenActions() {
         List<Map> actions = contract.children(['service', 'jenkins'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins'])
-        assertEquals(15, actions.size())
+        assertEquals(17, actions.size())
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
@@ -262,6 +262,29 @@ commands:
             [],
             validate(
                 new UsageRenderer(contract).describePath(['service', 'jenkins', 'job-export']),
+                schema,
+                schema,
+                '$'
+            )
+        )
+    }
+
+    void testRunScriptContractAndHelp() {
+        Map action = jenkinsAction('run-script')
+        assertEquals(['controller', 'script_file'], action.positionals*.name)
+        assertEquals([true, false], action.positionals*.required)
+        assertEquals(['--json', '--apply', '--script'], action.options*.name)
+        String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins', 'run-script'])
+        assertTrue(rendered.contains('dry-run unless --apply'))
+        assertTrue(rendered.contains('SCRIPT_FILE | -'))
+        Map schema = (Map) JsonFiles.read(
+            new File(repository, 'schemas/command-contract.schema.json'),
+            [:]
+        )
+        assertEquals(
+            [],
+            validate(
+                new UsageRenderer(contract).describePath(['service', 'jenkins', 'run-script']),
                 schema,
                 schema,
                 '$'

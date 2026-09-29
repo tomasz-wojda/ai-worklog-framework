@@ -21,6 +21,7 @@
         "artifacts",
         "download-artifact",
         "job-export",
+        "run-script",
         "views",
         "whoami",
         "credential-domains"

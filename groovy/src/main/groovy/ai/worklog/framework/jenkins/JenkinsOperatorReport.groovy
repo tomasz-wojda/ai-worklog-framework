@@ -163,10 +163,39 @@ class JenkinsOperatorReport {
             }
             return output.toString()
         }
+        if (operation == 'run-script') {
+            items.each { Map item ->
+                renderRunScriptItem(output, (Map) redactItem(item, redaction))
+            }
+            return output.toString()
+        }
         items.each { item ->
             output.append("  - ${pythonItemString(redactItem(item, redaction))}").append(System.lineSeparator())
         }
         output.toString()
+    }
+
+    private static void renderRunScriptItem(StringBuilder output, Map item) {
+        String newline = System.lineSeparator()
+        output.append("  Source: ${item.source}")
+        if (item.path) {
+            output.append(" ${item.path}")
+        }
+        output.append(newline)
+        output.append("  Script: ${item.bytes} bytes, sha256 ${item.sha256}").append(newline)
+        output.append("  Applied: ${item.applied}").append(newline)
+        if (!item.containsKey('output')) {
+            return
+        }
+        if (item.truncated) {
+            output.append('  Truncated: true').append(newline)
+        }
+        output.append('  Output:').append(newline)
+        String text = item.output?.toString() ?: ''
+        output.append(text)
+        if (text && !text.endsWith('\n')) {
+            output.append(newline)
+        }
     }
 
     private static String pythonItemString(Object value) {
@@ -220,7 +249,7 @@ class JenkinsOperatorReport {
         ['has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
          'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
          'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
-         'replaced'].each { key ->
+         'replaced', 'run_scripts'].each { key ->
             if (item.containsKey(key)) {
                 redacted[key] = item[key]
             }

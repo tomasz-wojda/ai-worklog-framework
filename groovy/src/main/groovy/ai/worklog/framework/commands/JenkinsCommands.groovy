@@ -13,6 +13,7 @@ import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsOperatorReport
+import ai.worklog.framework.jenkins.JenkinsScriptSource
 
 class JenkinsCommands {
     static int run(
@@ -25,7 +26,8 @@ class JenkinsCommands {
             System.console() != null &&
                 (System.getenv('TERM') ?: '') != 'dumb'
         },
-        JenkinsAdapter adapterOverride = null
+        JenkinsAdapter adapterOverride = null,
+        InputStream scriptInput = System.in
     ) {
         ExitCodes exitCodes = new ExitCodes(frameworkRoot)
         CommandContract contract = CommandContract.load(frameworkRoot)
@@ -86,7 +88,10 @@ class JenkinsCommands {
                 requestedJson,
                 interactiveTerminal
             )
-            payload = dispatch(dispatchAction, parsed, adapter, settings)
+            if (dispatchAction == 'run-script') {
+                validateRunScriptSource(parsed)
+            }
+            payload = dispatch(dispatchAction, parsed, adapter, settings, scriptInput)
         } catch (UsageError exception) {
             JenkinsOperatorReport report = errorReport(
                 dispatchAction,
@@ -129,7 +134,8 @@ class JenkinsCommands {
         String action,
         ParsedArguments parsed,
         JenkinsAdapter adapter,
-        Map settings
+        Map settings,
+        InputStream scriptInput
     ) {
         switch (action) {
             case 'controllers':
@@ -234,6 +240,17 @@ class JenkinsCommands {
                     parsed.flag('--apply'),
                     parsed.flag('--force')
                 )
+            case 'run-script':
+                return adapter.operatorRunScript(
+                    parsed.positional('controller'),
+                    JenkinsScriptSource.read(
+                        parsed.positional('script_file')?.toString(),
+                        parsed.value('--script')?.toString(),
+                        scriptInput,
+                        settings.script_max_bytes as long
+                    ),
+                    parsed.flag('--apply')
+                )
             case 'views':
                 return adapter.operatorViews(
                     parsed.positional('controller'),
@@ -272,7 +289,7 @@ class JenkinsCommands {
         }
         List<String> optionsWithValues = [
             '--builds', '--require', '--plugin', '--enrich', '--domain',
-            '--limit', '--folder', '--query', '--view', '--id'
+            '--limit', '--folder', '--query', '--view', '--id', '--script'
         ]
         int index = 0
         while (index < args.size()) {
@@ -287,6 +304,18 @@ class JenkinsCommands {
             index++
         }
         null
+    }
+
+    private static void validateRunScriptSource(ParsedArguments parsed) {
+        String scriptFile = parsed.positional('script_file')?.toString()
+        int sources = (scriptFile ? 1 : 0) + (parsed.value('--script') != null ? 1 : 0)
+        if (sources != 1) {
+            throw new UsageError(
+                'run-script requires exactly one of <script_file>, - (stdin), or --script',
+                'service jenkins',
+                'run-script'
+            )
+        }
     }
 
     private static void validateCredentialReveal(
