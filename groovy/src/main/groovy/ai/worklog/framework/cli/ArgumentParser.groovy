@@ -31,7 +31,7 @@ class ArgumentParser {
                 index++
                 continue
             }
-            if (optionsEnabled && token.startsWith('-')) {
+            if (optionsEnabled && token.startsWith('-') && token != '-') {
                 Map option = optionsByToken[token]
                 if (!option) {
                     throw error("Unknown option for ${command} ${action.name}: ${token}", command, action)

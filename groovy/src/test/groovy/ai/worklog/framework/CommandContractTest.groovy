@@ -292,6 +292,15 @@ commands:
         )
     }
 
+    void testBareDashIsPositional() {
+        Map action = jenkinsAction('run-script')
+        assertEquals('-', parser().parse('jenkins', action, ['primary', '-'], rules).positional('script_file'))
+        String message = shouldFail(UsageError) {
+            parser().parse('jenkins', action, ['primary', '--unknown'], rules)
+        }
+        assertTrue(message.contains('Unknown option'))
+    }
+
     void testPositionalOrderIsAuthoritative() {
         Map action = jenkinsAction('artifacts')
         String message = shouldFail(UsageError) {
