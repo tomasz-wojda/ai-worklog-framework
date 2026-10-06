@@ -2394,6 +2394,178 @@
                   "takes_value": false
                 }
               ]
+            },
+            {
+              "name": "assets-schemas",
+              "description": "List Jira Assets object schemas",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "assets-types",
+              "description": "List Jira Assets object types in one schema",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "schema_id",
+                  "description": "Jira Assets object schema id",
+                  "required": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "assets-attributes",
+              "description": "List attribute definitions of one Jira Assets object type",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "type_id",
+                  "description": "Jira Assets object type id",
+                  "required": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "assets-object",
+              "description": "Show one Jira Assets object with its attribute values",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "object_key",
+                  "description": "Jira Assets object key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "OBJECT-KEY"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "assets-search",
+              "description": "Search Jira Assets objects with a bounded IQL query",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "query",
+                  "description": "IQL query",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "IQL"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum objects to include",
+                  "takes_value": true,
+                  "default_from": "limits.assets_search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "get-ci",
+              "description": "Show one application CI with its CI field values",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "object_key",
+                  "description": "Application CI object key",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+                    "help_values": "OBJECT-KEY"
+                  }
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "get-cis",
+              "description": "List application CIs by key, id, and name",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {
+                  "name": "--json",
+                  "description": "Emit the machine-readable report",
+                  "takes_value": false
+                },
+                {
+                  "name": "--env",
+                  "description": "Limit to one environment",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9]*$",
+                    "help_values": "ENV"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum CIs to include",
+                  "takes_value": true,
+                  "default_from": "limits.ci_list_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 5000,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
             }
           ]
         },

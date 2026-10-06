@@ -2,6 +2,7 @@
   "allowed_github_owners": ["example-org", "tomasz-wojda"],
   "allowed_ticket_prefixes": [
     "APP",
+    "CI",
     "FLOW",
     "LICENSE",
     "OPS",

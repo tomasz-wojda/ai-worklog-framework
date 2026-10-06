@@ -144,16 +144,45 @@ commands:
         }
     }
 
-    void testJiraRenderingListsEightActions() {
+    void testJiraRenderingListsFifteenActions() {
         List<Map> actions = contract.children(['service', 'jira'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])
-        assertEquals(8, actions.size())
+        assertEquals(15, actions.size())
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
         assertTrue(
             new UsageRenderer(contract)
                 .renderPath(['service', 'jira', 'ticket'])
                 .contains('<ticket_key>')
         )
+    }
+
+    void testJiraAssetsArgumentsValidateAndDefault() {
+        Map jiraRules = (Map) JsonFiles.read(new File(repository, 'shared/jira-operator-rules.json'), [:])
+        Closure<ParsedArguments> parse = { String name, List<String> args ->
+            parser().parse('service jira', contract.node(['service', 'jira', name]), args, jiraRules)
+        }
+        assertEquals('CI-174110', parse('get-ci', ['CI-174110']).positional('object_key'))
+        assertEquals('3', parse('assets-types', ['3']).positional('schema_id'))
+        assertEquals(['Name', '=', '"A.A.PROD.SOF"'], parse('assets-search', ['Name', '=', '"A.A.PROD.SOF"']).variadic('query'))
+        assertEquals(50, parse('assets-search', ['x']).value('--limit'))
+        ParsedArguments cis = parse('get-cis', ['--env', 'PROD'])
+        assertEquals('PROD', cis.value('--env'))
+        assertEquals(1000, cis.value('--limit'))
+        assertEquals('5000', parse('get-cis', ['--limit', '5000']).value('--limit'))
+        [
+            ['get-ci', ['ci-1']],
+            ['assets-object', ['CI-0']],
+            ['assets-attributes', ['0']],
+            ['assets-types', ['abc']],
+            ['assets-search', []],
+            ['assets-search', ['x', '--limit', '501']],
+            ['get-cis', ['--env', 'prod']],
+            ['get-cis', ['--limit', '5001']]
+        ].each { List example ->
+            shouldFail(UsageError) {
+                parse(example[0].toString(), (List<String>) example[1])
+            }
+        }
     }
 
     void testAutomoxRenderingListsNineteenActions() {

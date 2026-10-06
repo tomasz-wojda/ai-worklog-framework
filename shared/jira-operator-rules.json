@@ -9,13 +9,29 @@
     "worklogs_max": 1000,
     "comments_max": 1000,
     "comment_max_characters": 4096,
-    "error_body_max_characters": 1024
+    "error_body_max_characters": 1024,
+    "assets_search_default": 50,
+    "assets_search_max": 500,
+    "assets_page_size": 50,
+    "assets_values_max": 50,
+    "ci_list_default": 1000,
+    "ci_list_max": 5000,
+    "ci_list_page_size": 200
   },
   "api_paths": {
     "issue": "/rest/api/2/issue",
     "search": "/rest/api/2/search",
     "myself": "/rest/api/2/myself",
-    "tempo_worklogs": "/rest/tempo-timesheets/3/worklogs"
+    "tempo_worklogs": "/rest/tempo-timesheets/3/worklogs",
+    "assets_base": "/rest/insight/1.0",
+    "assets_object_schemas": "/objectschema/list",
+    "assets_object_types": "/objectschema/{id}/objecttypes/flat",
+    "assets_type_attributes": "/objecttype/{id}/attributes",
+    "assets_object": "/object/{id}",
+    "assets_search": "/iql/objects"
+  },
+  "api_params": {
+    "assets_search_query": "iql"
   },
   "summary_jql": "assignee = currentUser() ORDER BY status ASC, updated DESC",
   "summary_fields": [
@@ -36,5 +52,17 @@
     "columns": ["Do zrobienia", "Zablokowane", "W trakcie", "Testy", "Gotowe", "Odrzucone", "Inne"],
     "rejected_column": "Odrzucone",
     "status_ids": {}
+  },
+  "ci": {
+    "search_iql": "Name LIKE \"A.A.\"",
+    "env_search_iql": "Name LIKE \"A.A.{env}.\"",
+    "label_pattern": "^A\\.A\\.([A-Z][A-Z0-9]*)\\.(.+)$",
+    "fields": {
+      "artifactory_path": "Ścieżka do Artifactory",
+      "automated": "Zautomatyzowane",
+      "pipeline_url": "URL do pipeline",
+      "status": "Status",
+      "unavailable_in_jira": "Niedostępny w zgłoszeniach Jira"
+    }
   }
 }

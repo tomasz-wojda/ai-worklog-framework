@@ -6,7 +6,11 @@
   "properties": {
     "operation": {
       "type": "string",
-      "enum": ["ticket", "summary", "rejected", "reporter", "tempo", "verify", "whoami", "log-time"]
+      "enum": [
+        "ticket", "summary", "rejected", "reporter", "tempo", "verify", "whoami", "log-time",
+        "assets-schemas", "assets-types", "assets-attributes", "assets-object", "assets-search",
+        "get-ci", "get-cis"
+      ]
     },
     "fetched_at": {"type": "string", "format": "date-time"},
     "status": {
@@ -17,6 +21,11 @@
     "ticket_key": {"type": "string"},
     "date": {"type": "string", "format": "date"},
     "reporter": {"type": "string"},
+    "object_key": {"type": "string"},
+    "query": {"type": "string"},
+    "env": {"type": "string"},
+    "schema_id": {"type": "integer"},
+    "type_id": {"type": "integer"},
     "dry_run": {"type": "boolean"},
     "applied": {"type": "boolean"},
     "truncated": {"type": "boolean"},

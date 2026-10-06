@@ -1,5 +1,6 @@
 package ai.worklog.framework.commands
 
+import ai.worklog.framework.adapters.JiraAssetsAdapter
 import ai.worklog.framework.adapters.JiraOperatorAdapter
 import ai.worklog.framework.adapters.JsonWriteHttp
 import ai.worklog.framework.adapters.ReadOnlyHttp
@@ -54,7 +55,8 @@ class JiraCommands {
             json = parsed.flag('--json')
             JiraOperatorAdapter jira = new JiraOperatorAdapter(paths, new ReadOnlyHttp(), rules)
             TempoOperatorAdapter tempo = new TempoOperatorAdapter(jira, new JsonWriteHttp(), rules)
-            Map payload = dispatch(action, parsed, jira, tempo, paths)
+            JiraAssetsAdapter assets = new JiraAssetsAdapter(jira, rules)
+            Map payload = dispatch(action, parsed, jira, tempo, assets, paths)
             JiraOperatorReport report = JiraOperatorReport.fromPayload(payload)
             print json ? report.renderJson(redaction) : report.renderHuman(redaction)
             return JiraOperatorReport.exitCodeFor(report, exitCodes)
@@ -100,6 +102,7 @@ class JiraCommands {
         ParsedArguments parsed,
         JiraOperatorAdapter jira,
         TempoOperatorAdapter tempo,
+        JiraAssetsAdapter assets,
         FrameworkPaths paths
     ) {
         switch (action) {
@@ -128,6 +131,26 @@ class JiraCommands {
                     parsed.positional('seconds') as long,
                     parsed.variadic('comment').join(' '),
                     parsed.flag('--apply')
+                )
+            case 'assets-schemas':
+                return assets.schemas()
+            case 'assets-types':
+                return assets.types(parsed.positional('schema_id') as int)
+            case 'assets-attributes':
+                return assets.attributes(parsed.positional('type_id') as int)
+            case 'assets-object':
+                return assets.object(parsed.positional('object_key'))
+            case 'assets-search':
+                return assets.search(
+                    parsed.variadic('query').join(' '),
+                    parsed.value('--limit').toString() as int
+                )
+            case 'get-ci':
+                return assets.ci(parsed.positional('object_key'))
+            case 'get-cis':
+                return assets.cis(
+                    parsed.value('--env')?.toString(),
+                    parsed.value('--limit').toString() as int
                 )
             default:
                 throw new UsageError(
