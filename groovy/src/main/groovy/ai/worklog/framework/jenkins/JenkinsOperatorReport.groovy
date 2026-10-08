@@ -1,16 +1,17 @@
 package ai.worklog.framework.jenkins
 
-import ai.worklog.framework.core.ExitCodes
+import ai.worklog.framework.core.OperatorReport
 import ai.worklog.framework.core.Redaction
-import ai.worklog.framework.core.Status
-import groovy.json.JsonOutput
 
-class JenkinsOperatorReport {
-    String operation
-    String fetchedAt
-    Status status
+class JenkinsOperatorReport extends OperatorReport {
+    static final List<String> KEPT_ITEM_KEYS = [
+        'has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
+        'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
+        'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
+        'replaced', 'run_scripts'
+    ]
+
     String controller
-    String message
     String domain
     String folder
     String query
@@ -23,237 +24,110 @@ class JenkinsOperatorReport {
     Map filter
     Map enrichment
     Map summary
-    List<Map> items = []
 
     static JenkinsOperatorReport fromPayload(Map payload) {
         new JenkinsOperatorReport(
-            operation: payload.operation?.toString(),
-            fetchedAt: payload.fetched_at?.toString(),
-            status: payload.status instanceof Status ? (Status) payload.status : Status.values().find {
-                it.value == payload.status?.toString()
-            } ?: Status.UNKNOWN,
             controller: payload.controller?.toString(),
-            message: payload.message?.toString() ?: '',
             domain: payload.domain?.toString(),
             folder: payload.folder?.toString(),
             query: payload.query?.toString(),
             view: payload.view?.toString(),
             job: payload.job?.toString(),
             buildSelector: payload.build_selector?.toString(),
-            required: payload.required instanceof Map ? (Map) payload.required : null,
+            required: mapOrNull(payload.required),
             coreVersion: payload.core_version?.toString(),
-            updateCenter: payload.update_center instanceof Map ? (Map) payload.update_center : null,
-            filter: payload.filter instanceof Map ? (Map) payload.filter : null,
-            enrichment: payload.enrichment instanceof Map ? (Map) payload.enrichment : null,
-            summary: payload.summary instanceof Map ? (Map) payload.summary : null,
-            items: (payload.items ?: []).collect { it instanceof Map ? new LinkedHashMap(it) : [:] }
-        )
+            updateCenter: mapOrNull(payload.update_center),
+            filter: mapOrNull(payload.filter),
+            enrichment: mapOrNull(payload.enrichment),
+            summary: mapOrNull(payload.summary)
+        ).readCommon(payload)
+    }
+
+    protected List<String> userErrorMarkers() {
+        ['not found', 'invalid', 'no files', 'missing']
     }
 
     Map toMap(Redaction redaction) {
-        Map payload = [
-            operation: operation,
-            fetched_at: fetchedAt,
-            status: status.value,
-            items: items.collect { item -> redactItem(item, redaction) }
-        ]
-        if (controller) {
-            payload.controller = controller
-        }
-        if (message) {
-            payload.message = message
-        }
-        if (domain) {
-            payload.domain = domain
-        }
-        if (folder) {
-            payload.folder = folder
-        }
-        if (query) {
-            payload.query = query
-        }
-        if (view) {
-            payload.view = view
-        }
-        if (job) {
-            payload.job = job
-        }
-        if (buildSelector) {
-            payload.build_selector = buildSelector
-        }
-        if (required) {
-            payload.required = required
-        }
-        if (coreVersion) {
-            payload.core_version = coreVersion
-        }
-        if (updateCenter) {
-            payload.update_center = updateCenter
-        }
-        if (filter) {
-            payload.filter = filter
-        }
-        if (enrichment) {
-            payload.enrichment = enrichment
-        }
-        if (summary) {
-            payload.summary = summary
-        }
+        Map payload = commonMap { redactItem(it, redaction) }
+        if (controller) payload.controller = controller
+        if (message) payload.message = message
+        if (domain) payload.domain = domain
+        if (folder) payload.folder = folder
+        if (query) payload.query = query
+        if (view) payload.view = view
+        if (job) payload.job = job
+        if (buildSelector) payload.build_selector = buildSelector
+        if (required) payload.required = required
+        if (coreVersion) payload.core_version = coreVersion
+        if (updateCenter) payload.update_center = updateCenter
+        if (filter) payload.filter = filter
+        if (enrichment) payload.enrichment = enrichment
+        if (summary) payload.summary = summary
         payload
-    }
-
-    String renderJson(Redaction redaction) {
-        JsonOutput.prettyPrint(JsonOutput.toJson(toMap(redaction))) + System.lineSeparator()
     }
 
     String renderHuman(Redaction redaction) {
         StringBuilder output = new StringBuilder()
-        output.append("Jenkins ${operation}").append(System.lineSeparator())
-        if (controller) {
-            output.append("  Controller: ${controller}").append(System.lineSeparator())
-        }
-        if (folder) {
-            output.append("  Folder: ${folder}").append(System.lineSeparator())
-        }
-        if (query) {
-            output.append("  Query: ${query}").append(System.lineSeparator())
-        }
-        if (view) {
-            output.append("  View: ${view}").append(System.lineSeparator())
-        }
-        if (job) {
-            output.append("  Job: ${job}").append(System.lineSeparator())
-        }
-        if (buildSelector) {
-            output.append("  Build selector: ${buildSelector}").append(System.lineSeparator())
-        }
-        output.append("  Fetched: ${fetchedAt}").append(System.lineSeparator())
-        output.append("  Status: ${status.value}").append(System.lineSeparator())
-        if (message) {
-            output.append("  Message: ${redaction.redact(message)}").append(System.lineSeparator())
-        }
+        line(output, "Jenkins ${operation}")
+        if (controller) line(output, "  Controller: ${controller}")
+        if (folder) line(output, "  Folder: ${folder}")
+        if (query) line(output, "  Query: ${query}")
+        if (view) line(output, "  View: ${view}")
+        if (job) line(output, "  Job: ${job}")
+        if (buildSelector) line(output, "  Build selector: ${buildSelector}")
+        line(output, "  Fetched: ${fetchedAt}")
+        line(output, "  Status: ${status.value}")
+        if (message) line(output, "  Message: ${redaction.redact(message)}")
         if (required?.requested) {
             Set verified = (required.requested as Set) -
                 ((required.missing ?: []) as Set) -
                 ((required.inactive ?: []) as Set)
             if (verified) {
-                output.append("  Verified required: ${verified.toList().sort().join(', ')}")
-                    .append(System.lineSeparator())
+                line(output, "  Verified required: ${verified.toList().sort().join(', ')}")
             }
         }
         if (operation == 'plugin-vulnerabilities') {
-            if (coreVersion) {
-                output.append("  Jenkins core: ${coreVersion}").append(System.lineSeparator())
-            }
-            Map totals = summary ?: [:]
-            output.append('  Summary: ')
-                .append("scanned=${totals.scanned ?: 0}, ")
-                .append("affected=${totals.affected ?: 0}, ")
-                .append("remediable=${totals.REMEDIABLE ?: 0}, ")
-                .append("unfixable=${totals.UNFIXABLE ?: 0}, ")
-                .append("blocked=${totals.BLOCKED ?: 0}")
-                .append(System.lineSeparator())
-            items.each { item ->
-                output.append("  - ${item.short_name} ${item.installed_version}: ")
-                    .append(item.remediation_status)
-                if (item.candidate_version) {
-                    output.append(" -> ${item.candidate_version}")
-                }
-                output.append(System.lineSeparator())
-            }
-            return output.toString()
-        }
-        if (operation == 'run-script') {
-            items.each { Map item ->
-                renderRunScriptItem(output, (Map) redactItem(item, redaction))
-            }
-            return output.toString()
-        }
-        items.each { item ->
-            output.append("  - ${pythonItemString(redactItem(item, redaction))}").append(System.lineSeparator())
+            renderVulnerabilities(output)
+        } else if (operation == 'run-script') {
+            items.each { renderRunScriptItem(output, redactItem(it, redaction)) }
+        } else {
+            items.each { line(output, "  - ${pythonItemString(redactItem(it, redaction))}") }
         }
         output.toString()
     }
 
-    private static void renderRunScriptItem(StringBuilder output, Map item) {
-        String newline = System.lineSeparator()
-        output.append("  Source: ${item.source}")
-        if (item.path) {
-            output.append(" ${item.path}")
+    private void renderVulnerabilities(StringBuilder output) {
+        if (coreVersion) line(output, "  Jenkins core: ${coreVersion}")
+        Map totals = summary ?: [:]
+        line(output, '  Summary: ' +
+            "scanned=${totals.scanned ?: 0}, " +
+            "affected=${totals.affected ?: 0}, " +
+            "remediable=${totals.REMEDIABLE ?: 0}, " +
+            "unfixable=${totals.UNFIXABLE ?: 0}, " +
+            "blocked=${totals.BLOCKED ?: 0}")
+        items.each { Map item ->
+            String candidate = item.candidate_version ? " -> ${item.candidate_version}" : ''
+            line(output, "  - ${item.short_name} ${item.installed_version}: ${item.remediation_status}${candidate}")
         }
-        output.append(newline)
-        output.append("  Script: ${item.bytes} bytes, sha256 ${item.sha256}").append(newline)
-        output.append("  Applied: ${item.applied}").append(newline)
+    }
+
+    private static void renderRunScriptItem(StringBuilder output, Map item) {
+        line(output, "  Source: ${item.source}" + (item.path ? " ${item.path}" : ''))
+        line(output, "  Script: ${item.bytes} bytes, sha256 ${item.sha256}")
+        line(output, "  Applied: ${item.applied}")
         if (!item.containsKey('output')) {
             return
         }
-        if (item.truncated) {
-            output.append('  Truncated: true').append(newline)
-        }
-        output.append('  Output:').append(newline)
+        if (item.truncated) line(output, '  Truncated: true')
+        line(output, '  Output:')
         String text = item.output?.toString() ?: ''
         output.append(text)
         if (text && !text.endsWith('\n')) {
-            output.append(newline)
+            output.append(System.lineSeparator())
         }
-    }
-
-    private static String pythonItemString(Object value) {
-        if (value instanceof Map) {
-            '{' + ((Map) value).collect { key, entry ->
-                "'${key}': ${pythonValueString(entry)}"
-            }.join(', ') + '}'
-        } else if (value instanceof List) {
-            '[' + ((List) value).collect { pythonValueString(it) }.join(', ') + ']'
-        } else {
-            pythonValueString(value)
-        }
-    }
-
-    private static String pythonValueString(Object value) {
-        if (value == null) {
-            return 'None'
-        }
-        if (value instanceof Boolean) {
-            return value ? 'True' : 'False'
-        }
-        if (value instanceof Number) {
-            return value.toString()
-        }
-        if (value instanceof Map) {
-            return pythonItemString(value)
-        }
-        if (value instanceof List) {
-            return '[' + value.collect { pythonValueString(it) }.join(', ') + ']'
-        }
-        return "'${value}'"
-    }
-
-    static int exitCodeFor(JenkinsOperatorReport report, ExitCodes exitCodes) {
-        if (report.status == Status.BLOCKED) {
-            return exitCodes.blocked
-        }
-        if (report.status == Status.ERROR) {
-            String lower = report.message?.toLowerCase() ?: ''
-            if (lower.contains('not found') || lower.contains('invalid') ||
-                lower.contains('no files') || lower.contains('missing')) {
-                return exitCodes.userError
-            }
-            return exitCodes.systemError
-        }
-        exitCodes.success
     }
 
     private static Map redactItem(Map item, Redaction redaction) {
-        Map redacted = (Map) redaction.redact(item)
-        ['has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
-         'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
-         'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
-         'replaced', 'run_scripts'].each { key ->
-            if (item.containsKey(key)) {
-                redacted[key] = item[key]
-            }
-        }
-        redacted
+        redactKeeping(item, redaction, KEPT_ITEM_KEYS)
     }
 }

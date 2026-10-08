@@ -3,11 +3,13 @@
   "allowed_ticket_prefixes": [
     "APP",
     "CI",
+    "CVE",
     "FLOW",
     "LICENSE",
     "OPS",
     "OTHER",
     "PROJ",
+    "SECURITY",
     "SHA",
     "TEST",
     "UTF"

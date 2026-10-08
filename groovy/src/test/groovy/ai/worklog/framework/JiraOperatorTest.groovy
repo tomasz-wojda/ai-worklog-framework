@@ -5,6 +5,7 @@ import ai.worklog.framework.adapters.JsonWriteHttp
 import ai.worklog.framework.adapters.ReadOnlyHttp
 import ai.worklog.framework.adapters.TempoOperatorAdapter
 import ai.worklog.framework.commands.JiraCommands
+import ai.worklog.framework.core.ExitCodes
 import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
@@ -80,7 +81,7 @@ class JiraOperatorTest extends GroovyTestCase {
             }
             response(issuePayload())
         }
-        Map report = adapter.ticket('KD-1')
+        Map report = adapter.ticket('PROJ-1')
         assertEquals(Status.READY, report.status)
         Map item = report.items[0]
         assertEquals('Parent ticket', item.parent_summary)
@@ -99,11 +100,11 @@ class JiraOperatorTest extends GroovyTestCase {
             response([
                 total: 1,
                 issues: [[
-                    key: 'KD-1',
+                    key: 'PROJ-1',
                     fields: [
                         summary: 'Work',
                         status: [id: '3', name: 'Doing', statusCategory: [name: 'W toku']],
-                        project: [key: 'KD'],
+                        project: [key: 'PROJ'],
                         timespent: 120
                     ]
                 ]]
@@ -141,7 +142,7 @@ class JiraOperatorTest extends GroovyTestCase {
                     return response([name: 'user', displayName: 'Test User'])
                 }
                 response([[
-                    issue: [key: 'KD-1', summary: 'Work'],
+                    issue: [key: 'PROJ-1', summary: 'Work'],
                     timeSpentSeconds: 1800,
                     comment: 'Done',
                     dateStarted: '2026-09-09'
@@ -152,30 +153,30 @@ class JiraOperatorTest extends GroovyTestCase {
         Map report = tempo.daily('2026-09-09')
         assertEquals(Status.READY, report.status)
         assertEquals(1800L, report.totals.time_spent_seconds)
-        assertEquals('KD-1', report.items[0].issue_key)
+        assertEquals('PROJ-1', report.items[0].issue_key)
     }
 
     void testVerifyUsesWorkspaceWorklogAndExcludesCompanionFiles() {
-        new File(workspace, 'worklog/2026-09-09_KD-1.log').text = 'work'
-        new File(workspace, 'worklog/2026-09-09_KD-2_jira.log').text = 'snapshot'
-        new File(workspace, 'worklog/done/2026-09-09_KD-3.log').text = 'done'
+        new File(workspace, 'worklog/2026-09-09_PROJ-1.log').text = 'work'
+        new File(workspace, 'worklog/2026-09-09_PROJ-2_jira.log').text = 'snapshot'
+        new File(workspace, 'worklog/done/2026-09-09_PROJ-3.log').text = 'done'
         Map tempo = JiraOperatorAdapter.report(
             'tempo',
             Status.READY,
-            [[issue_key: 'KD-1', issue_summary: 'Work', time_spent_seconds: 60]],
+            [[issue_key: 'PROJ-1', issue_summary: 'Work', time_spent_seconds: 60]],
             [date: '2026-09-09', totals: [time_spent_seconds: 60]]
         )
         Map report = new JiraWorklogVerifier(paths).verify('2026-09-09', tempo)
         assertEquals(Status.READY, report.status)
-        assertEquals(['KD-1'], report.items*.issue_key)
+        assertEquals(['PROJ-1'], report.items*.issue_key)
     }
 
     void testVerifyBlocksOnMismatch() {
-        new File(workspace, 'worklog/2026-09-09_KD-1.log').text = 'work'
+        new File(workspace, 'worklog/2026-09-09_PROJ-1.log').text = 'work'
         Map tempo = JiraOperatorAdapter.report(
             'tempo',
             Status.READY,
-            [[issue_key: 'KD-2', issue_summary: 'Other', time_spent_seconds: 60]],
+            [[issue_key: 'PROJ-2', issue_summary: 'Other', time_spent_seconds: 60]],
             [date: '2026-09-09', totals: [time_spent_seconds: 60]]
         )
         Map report = new JiraWorklogVerifier(paths).verify('2026-09-09', tempo)
@@ -190,7 +191,7 @@ class JiraOperatorTest extends GroovyTestCase {
             null,
             { url, headers, payload, timeout -> writes++; [code: 201, body: '', error: ''] }
         )
-        Map report = tempo.logTime('KD-1', '2026-09-09', 3600, 'Work', false)
+        Map report = tempo.logTime('PROJ-1', '2026-09-09', 3600, 'Work', false)
         assertEquals(0, writes)
         assertTrue(report.dry_run)
         assertFalse(report.applied)
@@ -207,11 +208,34 @@ class JiraOperatorTest extends GroovyTestCase {
                 [code: 201, body: '{}', error: '']
             }
         )
-        Map report = tempo.logTime('KD-1', '2026-09-09', 3600, 'Work', true)
+        Map report = tempo.logTime('PROJ-1', '2026-09-09', 3600, 'Work', true)
         assertEquals(1, writes)
-        assertEquals('KD-1', posted.issueKey)
+        assertEquals('PROJ-1', posted.issueKey)
         assertEquals(Status.READY, report.status)
         assertTrue(report.applied)
+    }
+
+    void testErrorKindDrivesExitCodes() {
+        ExitCodes exitCodes = new ExitCodes(repository)
+        Map notFound = adapter { method, url, headers, timeout -> [code: 404, body: '', error: ''] }.ticket('PROJ-404')
+        assertEquals('user', notFound.error_kind)
+        assertEquals(exitCodes.userError, exitCode(notFound, exitCodes))
+        Map serverError = adapter { method, url, headers, timeout -> [code: 500, body: '', error: ''] }.ticket('PROJ-500')
+        assertNull(serverError.error_kind)
+        assertEquals(exitCodes.systemError, exitCode(serverError, exitCodes))
+        Map comment = tempoAdapter(null, null).logTime('PROJ-1', '2026-09-09', 60, '', false)
+        assertEquals('user', comment.error_kind)
+        assertEquals(exitCodes.userError, exitCode(comment, exitCodes))
+        Map keywordOnly = JiraOperatorAdapter.report('ticket', Status.ERROR, [], [message: 'Thing not found'])
+        assertEquals(exitCodes.systemError, exitCode(keywordOnly, exitCodes))
+        assertTrue(
+            JiraOperatorReport.fromPayload(notFound).renderJson(new Redaction(repository))
+                .contains('"error_kind": "user"')
+        )
+    }
+
+    private static int exitCode(Map payload, ExitCodes exitCodes) {
+        JiraOperatorReport.exitCodeFor(JiraOperatorReport.fromPayload(payload), exitCodes)
     }
 
     void testAuthenticationFailureIsBlocked() {
@@ -232,7 +256,7 @@ class JiraOperatorTest extends GroovyTestCase {
                     author: 'Visible Author',
                     comment: 'Bearer top-secret-token'
                 ]],
-                [ticket_key: 'KD-1']
+                [ticket_key: 'PROJ-1']
             )
         )
         String output = report.renderJson(new Redaction(repository))
@@ -258,7 +282,7 @@ class JiraOperatorTest extends GroovyTestCase {
 
     private static Map issuePayload() {
         [
-            key: 'KD-1',
+            key: 'PROJ-1',
             fields: [
                 summary: 'Ticket',
                 status: [name: 'Doing', statusCategory: [name: 'W toku']],
@@ -267,8 +291,8 @@ class JiraOperatorTest extends GroovyTestCase {
                 assignee: [displayName: 'Assignee'],
                 reporter: [displayName: 'Reporter'],
                 creator: [displayName: 'Creator'],
-                project: [key: 'KD', name: 'Project'],
-                parent: [key: 'KD-0', fields: [summary: 'Parent ticket']],
+                project: [key: 'PROJ', name: 'Project'],
+                parent: [key: 'PROJ-0', fields: [summary: 'Parent ticket']],
                 components: [[name: 'DevOps']],
                 labels: ['label'],
                 description: 'Description',
@@ -280,7 +304,7 @@ class JiraOperatorTest extends GroovyTestCase {
                 timespent: 3600,
                 issuelinks: [[
                     type: [outward: 'relates to'],
-                    outwardIssue: [key: 'KD-2', fields: [summary: 'Related ticket']]
+                    outwardIssue: [key: 'PROJ-2', fields: [summary: 'Related ticket']]
                 ]],
                 comment: [comments: [[
                     author: [displayName: 'Commenter'],

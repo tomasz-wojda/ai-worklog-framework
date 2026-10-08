@@ -9,7 +9,15 @@ import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.ResultSet
 import ai.worklog.framework.core.Status
 
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+
 class PreflightCommands {
+    static final int MAX_PARALLEL_CHECKS = 8
+
     static int run(
         File frameworkRoot,
         FrameworkPaths paths,
@@ -22,35 +30,40 @@ class PreflightCommands {
         PreflightScope scope = PreflightScope.resolve(
             frameworkRoot, paths, ticket, services
         )
-        ResultSet results = new ResultSet()
-        if (selected(scope, 'workspace')) checkWorkspace(results, paths, frameworkRoot)
-        if (scope.checks == null) checkBinaries(results, config)
-        if (selected(scope, 'jira')) checkJira(results, paths)
+        List<Closure> checks = []
+        if (selected(scope, 'workspace')) checks << { ResultSet r -> checkWorkspace(r, paths, frameworkRoot) }
+        if (scope.checks == null) checks << { ResultSet r -> checkBinaries(r, config) }
+        if (selected(scope, 'jira')) checks << { ResultSet r -> checkJira(r, paths) }
         if (selected(scope, 'git')) {
-            checkCommand(results, 'git', ['git', 'config', 'user.email'], 'No user.email configured', false)
+            checks << { ResultSet r ->
+                checkCommand(r, 'git', ['git', 'config', 'user.email'], 'No user.email configured', false)
+            }
         }
         if (selected(scope, 'github')) {
-            checkCommand(results, 'github', ['gh', 'auth', 'status'], 'Not authenticated', false)
+            checks << { ResultSet r ->
+                checkCommand(r, 'github', ['gh', 'auth', 'status'], 'Not authenticated', false)
+            }
         }
-        if (selected(scope, 'aws')) checkAws(results)
-        if (selected(scope, 'kubectl')) checkKubectl(results)
-        if (selected(scope, 'servicenow')) checkServiceNow(results, paths)
+        if (selected(scope, 'aws')) checks << { ResultSet r -> checkAws(r) }
+        if (selected(scope, 'kubectl')) checks << { ResultSet r -> checkKubectl(r) }
+        if (selected(scope, 'servicenow')) checks << { ResultSet r -> checkServiceNow(r, paths) }
         if (selected(scope, 'jenkins')) {
-            checkServiceFile(results, paths, 'jenkins', 'jenkins.properties')
+            checks << { ResultSet r -> checkServiceFile(r, paths, 'jenkins', 'jenkins.properties') }
         }
         if (selected(scope, 'automox')) {
-            checkServiceFile(results, paths, 'automox', 'automox.properties')
+            checks << { ResultSet r -> checkServiceFile(r, paths, 'automox', 'automox.properties') }
         }
-        if (selected(scope, 'argocd')) checkBinary(results, 'argocd')
+        if (selected(scope, 'argocd')) checks << { ResultSet r -> checkBinary(r, 'argocd') }
         if (selected(scope, 'newrelic')) {
-            checkServiceFile(results, paths, 'newrelic', 'newrelic.properties')
+            checks << { ResultSet r -> checkServiceFile(r, paths, 'newrelic', 'newrelic.properties') }
         }
-        if (selected(scope, 'artifactory')) checkArtifactory(results, paths)
-        if (selected(scope, 'datadog')) checkServiceDirectory(results, paths, 'datadog')
-        if (selected(scope, 'repositories')) checkRepositories(results, paths, scope)
+        if (selected(scope, 'artifactory')) checks << { ResultSet r -> checkArtifactory(r, paths) }
+        if (selected(scope, 'datadog')) checks << { ResultSet r -> checkServiceDirectory(r, paths, 'datadog') }
+        if (selected(scope, 'repositories')) checks << { ResultSet r -> checkRepositories(r, paths, scope) }
         if (selected(scope, 'catalog_binaries')) {
-            checkCatalogBinaries(results, frameworkRoot, scope)
+            checks << { ResultSet r -> checkCatalogBinaries(r, frameworkRoot, scope) }
         }
+        ResultSet results = runChecks(checks)
 
         println results.summary()
         println()
@@ -61,6 +74,33 @@ class PreflightCommands {
         }
         println "Preflight: ${overall.value.toUpperCase()} (${results.actionable().size()} issue(s))"
         overall == Status.BLOCKED ? exitCodes.blocked : exitCodes.userError
+    }
+
+    static ResultSet runChecks(List<Closure> checks) {
+        ResultSet merged = new ResultSet()
+        if (!checks) {
+            return merged
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(checks.size(), MAX_PARALLEL_CHECKS))
+        try {
+            List<Future<ResultSet>> futures = checks.collect { Closure check ->
+                pool.submit({
+                    ResultSet own = new ResultSet()
+                    check(own)
+                    own
+                } as Callable<ResultSet>)
+            }
+            futures.each { Future<ResultSet> future ->
+                try {
+                    merged.results.addAll(future.get().results)
+                } catch (ExecutionException exception) {
+                    throw exception.cause ?: exception
+                }
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+        merged
     }
 
     static boolean selected(PreflightScope scope, String check) {

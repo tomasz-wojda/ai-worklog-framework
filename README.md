@@ -19,6 +19,9 @@ ai-worklog-framework/
 │   └── examples.json                 <- Fictional service and delivery examples
 ├── config/
 │   └── workspace-config.example.json <- Java/Groovy and workspace example
+├── docs/
+│   ├── operators/                    <- One guide per service operator
+│   └── upgrade-plan                  <- Roadmap and known limitations
 ├── schemas/
 │   ├── catalog-entry.schema.json
 │   ├── release-manifest.schema.json
@@ -440,189 +443,16 @@ Service operators connect the CLI to external systems. They are separate from
 catalog systems, which describe logical applications, platforms, and delivery
 relationships.
 
-### Jira Operator
+| Service | Commands | Guide |
+| --- | --- | --- |
+| Jira, Tempo, and Jira Assets | `ai-worklog service jira` | [docs/operators/jira.md](docs/operators/jira.md) |
+| Jenkins | `ai-worklog service jenkins` | [docs/operators/jenkins.md](docs/operators/jenkins.md) |
+| Automox | `ai-worklog service automox` | [docs/operators/automox.md](docs/operators/automox.md) |
+| New Relic | `ai-worklog service newrelic` | [docs/operators/newrelic.md](docs/operators/newrelic.md) |
+| Artifactory | `ai-worklog service artifactory` | [docs/operators/artifactory.md](docs/operators/artifactory.md) |
 
-```bash
-ai-worklog service jira ticket PROJ-1234
-ai-worklog service jira summary --limit 50
-ai-worklog service jira rejected
-ai-worklog service jira reporter "Display Name"
-ai-worklog service jira tempo 2026-09-09
-ai-worklog service jira verify 2026-09-09
-ai-worklog service jira whoami
-ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary"
-ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary" --apply
-```
-
-Jira and Tempo use `integrations/jira/jira.properties`. Ticket reads include
-description, people, linked issues, assignment history, and paginated comments
-and worklogs. Summary, rejected, and reporter searches are bounded and support
-JSON output. Board-specific status IDs belong in
-`integrations/jira/jira-operator.json`.
-
-Tempo logging is a dry-run unless `--apply` is supplied. Verification compares
-Tempo entries with primary files directly under `worklog/`; archived files and
-`_jira.log` or `_raw.log` companions are excluded.
-
-```bash
-ai-worklog service jira assets-schemas
-ai-worklog service jira assets-types 3
-ai-worklog service jira assets-attributes 12
-ai-worklog service jira assets-object CI-1234
-ai-worklog service jira assets-search 'Name = "A.A.PROD.App"' --limit 20
-ai-worklog service jira get-ci CI-1234
-ai-worklog service jira get-cis
-ai-worklog service jira get-cis --env PROD --json
-```
-
-Jira Assets (Insight) reads are GET-only and use the same credentials. Object
-output maps attribute names to their display values. `get-ci` shows one
-application CI, labelled `A.A.<ENV>.<App>`, with the attributes named in
-`ci.fields`; `get-cis` lists application CI keys, ids, and names sorted by name.
-Searches use IQL at `/rest/insight/1.0/iql/objects`; an instance that only
-serves AQL sets `api_paths.assets_search` to `/aql/objects` and
-`api_params.assets_search_query` to `qlQuery` in
-`integrations/jira/jira-operator.json`, which can also override `ci.fields`,
-`ci.search_iql`, and `ci.env_search_iql`.
-
-### Jenkins Operator
-
-```bash
-ai-worklog service jenkins controllers
-ai-worklog service jenkins health primary
-ai-worklog service jenkins job primary folder/job --builds 5 --parameters
-ai-worklog service jenkins plugins primary --require workflow-job
-ai-worklog service jenkins credentials primary --domain _
-ai-worklog service jenkins seed primary seed-job
-ai-worklog service jenkins syntax-check Jenkinsfile
-ai-worklog service jenkins artifacts primary folder/job last-successful
-ai-worklog service jenkins artifacts primary folder/job last-completed
-ai-worklog service jenkins artifacts primary folder/job 42
-ai-worklog service jenkins download-artifact primary folder/job last-successful dist/app.jar
-ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply
-ai-worklog service jenkins download-artifact primary folder/job 42 dist/app.jar --apply --force
-ai-worklog service jenkins job-export primary folder/job
-ai-worklog service jenkins job-export primary folder/job --apply
-ai-worklog service jenkins job-export primary folder/job --apply --force --cwd
-ai-worklog service jenkins run-script primary list-jobs.groovy
-ai-worklog service jenkins run-script primary list-jobs.groovy --apply
-cat list-jobs.groovy | ai-worklog service jenkins run-script primary - --apply
-ai-worklog service jenkins run-script primary --script 'println Jenkins.instance.numExecutors' --apply
-```
-
-Jenkins operations do not mutate the controller, except `run-script --apply`,
-which runs Groovy with full controller privileges in the Script Console.
-Credential output is limited
-to identifiers and descriptive metadata, build parameters omit values, and
-syntax validation delegates to the configured `ai-vault` validator. An artifact
-build selector is `last-successful`, `last-completed`, or a positive build
-number.
-
-`artifacts` lists metadata. `download-artifact` selects one exact,
-case-sensitive artifact relative path and plans a local download. Add `--apply`
-to write it. Existing files are refused unless `--force` is also supplied.
-Nested job and artifact paths are preserved under
-`tmp/services/jenkins/<controller>/<job>/<resolved-build-number>/`. Downloads
-stream through a temporary file, default to a five-minute timeout, and are
-limited to 1 GiB. Run `ai-worklog service jenkins download-artifact --help` for complete
-usage.
-
-`job-export` checks that the job exists and plans an export of its `config.xml`.
-Add `--apply` to write it to
-`tmp/services/jenkins/<controller>/<job>/config.xml`, or add `--cwd` to write
-`<folder>_<job>_config.xml` to the current directory instead. Existing files
-are refused unless `--force` is also supplied. The export is raw and keeps
-Jenkins-encrypted values, so do not commit it. Reading `config.xml` requires
-the Job/ExtendedRead or Configure permission.
-
-`run-script` takes its Groovy from exactly one source: a UTF-8 file path, `-`
-for standard input, or `--script '<code>'`. Scripts run only on controllers
-whose `jenkins.properties` entry includes `<id>.run_scripts=true`; add that key
-when adding a controller that may run scripts. A missing key, or any other
-value, means false, and `controllers` shows the effective `run_scripts` value.
-Without `--apply` the command reports the source, size and SHA-256 of the
-script without contacting Jenkins. With `--apply` it posts the script to
-`/scriptText` and captures up to 1 MiB of output; longer output is truncated
-and the report is degraded. Jenkins returns HTTP 200 even when the script
-throws, so a failing script reports success with the stack trace as output.
-
-The former `ai-worklog jenkins ...` path was removed in version 0.10.0.
-Existing scripts must use `ai-worklog service jenkins ...`.
-
-### Automox Operator
-
-```bash
-ai-worklog service automox profiles
-ai-worklog service automox auth-test
-ai-worklog service automox orgs
-ai-worklog service automox groups
-ai-worklog service automox group 601134
-ai-worklog service automox devices --query hostname
-ai-worklog service automox device hostname
-ai-worklog service automox device-packages hostname --state pending
-ai-worklog service automox activity --since 2026-09-01 --event system.patch.failed
-ai-worklog service automox patch-summary --since 2026-09-01 --csv
-ai-worklog service automox policies
-ai-worklog service automox policy 987483
-ai-worklog service automox policy-stats --policy 987483
-ai-worklog service automox device-queue hostname --wait 60
-ai-worklog service automox policy-run 987483 --device hostname
-ai-worklog service automox policy-run 987483 --all --confirm-all 987483 --apply
-ai-worklog service automox worklet-create NAME evaluation.sh remediation.sh --apply
-ai-worklog service automox policy-delete 987483 --confirm-name NAME --apply
-ai-worklog service automox device-move hostname 601134 --apply
-ai-worklog service automox policy-add-group 987483 601134 --apply
-```
-
-Automox uses profile-scoped keys in
-`integrations/automox/automox.properties`: `org`, `api_token`,
-`enrollment_key`, `api_base_url`, `domain`, and `ssh_user`. Environment
-overrides are `AUTOMOX_PROFILE`, `AUTOMOX_API_TOKEN`,
-`AUTOMOX_ENROLLMENT_KEY`, `AUTOMOX_ORG`, and `AUTOMOX_API_BASE_URL`. Legacy
-`token` and `server-id` files are read as non-executable fallbacks.
-
-`device-packages` and `patch-summary` support RFC 4180 CSV output. Every
-external mutation is a dry run unless `--apply` is supplied. Policy-wide runs
-also require `--confirm-all` to match the policy id, and deletion requires
-`--confirm-name` to match the current policy name. SSH agent operations, batch
-enrollment, and setup wrappers are outside this operator.
-
-### New Relic Operator
-
-```bash
-ai-worklog service newrelic profiles
-ai-worklog service newrelic auth-test
-ai-worklog service newrelic applications --query example
-ai-worklog service newrelic application 123456
-ai-worklog service newrelic violations
-ai-worklog service newrelic issues --state activated
-ai-worklog service newrelic nrql "SELECT count(*) FROM Transaction SINCE 1 hour ago"
-ai-worklog service newrelic dashboard-export DASHBOARD-GUID --format terraform --output tmp/nr/dashboard --apply
-ai-worklog service newrelic alert-condition-create POLICY_ID definition.json --confirm-policy POLICY_ID
-```
-
-New Relic uses profile-scoped keys in
-`integrations/newrelic/newrelic.properties`: `PROFILE.api_key`,
-`PROFILE.account_id`, optional `PROFILE.rest_url` and
-`PROFILE.graphql_url`, plus global `newrelic.url`. Environment overrides
-are `NEW_RELIC_PROFILE`/`NEWRELIC_PROFILE`, `NEW_RELIC_API_KEY`/`NEWRELIC_API_KEY`,
-`NEW_RELIC_ACCOUNT_ID`/`NEWRELIC_ACCOUNT_ID`, `NEW_RELIC_REST_URL`, and
-`NEW_RELIC_GRAPHQL_URL`. Existing `PROFILE.newrelic.*` and legacy unprefixed
-`newrelic.api_key` / `newrelic.account_id` keys remain
-compatible. Preflight checks for `newrelic.properties` without reading values;
-connectivity uses `auth-test`.
-
-The operator exposes 20 read actions (`profiles` through
-`alert-condition`) and 7 apply-gated create/update actions for static NRQL
-conditions and dashboard resources. All remote mutations and workspace export
-writes are dry runs unless `--apply` is supplied; applied actions require the
-matching confirmation flags. `dashboard-export` writes JSON to stdout or
-generates Terraform under a workspace-local path with `--format terraform`,
-`--output`, `--apply`, and optional `--force`. Delete operations, host-side
-`newrelic-infra` / nri-flex / license / restart actions, and the legacy
-`newrelic-cli` launcher are intentionally excluded. The former
-`./scripts/run-groovy-tool.sh newrelic-cli ...` path fails with migration
-guidance; use `ai-worklog service newrelic ...` instead.
+Run `ai-worklog help --json service <name> <action>` for the exact positionals,
+options, and validation of any action.
 
 ### Daily Routines
 

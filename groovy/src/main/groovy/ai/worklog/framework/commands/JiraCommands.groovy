@@ -70,7 +70,7 @@ class JiraCommands {
                         action,
                         Status.ERROR,
                         [],
-                        [message: exception.message]
+                        [message: exception.message, error_kind: 'user']
                     )
                 )
                 print report.renderJson(redaction)

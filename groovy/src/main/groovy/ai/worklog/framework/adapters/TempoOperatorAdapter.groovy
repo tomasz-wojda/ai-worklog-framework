@@ -113,7 +113,8 @@ class TempoOperatorAdapter {
                     date: date,
                     dry_run: !apply,
                     applied: false,
-                    message: "Comment must contain 1-${maximum} characters"
+                    message: "Comment must contain 1-${maximum} characters",
+                    error_kind: 'user'
                 ]
             )
         }

@@ -236,8 +236,9 @@ class JiraOperatorAdapter {
         Status status = (result.code in [401, 403]) ? Status.BLOCKED : Status.ERROR
         String message
         if (result.code == 404) {
-            message = 'Jira item not found'
-        } else if (result.code) {
+            return report(operation, status, [], [message: 'Jira item not found', error_kind: 'user'] + context)
+        }
+        if (result.code) {
             message = "Jira returned HTTP ${result.code}"
         } else {
             message = 'Jira request failed'

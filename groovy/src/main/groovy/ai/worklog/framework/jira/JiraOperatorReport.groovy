@@ -1,20 +1,15 @@
 package ai.worklog.framework.jira
 
-import ai.worklog.framework.core.ExitCodes
+import ai.worklog.framework.core.OperatorReport
 import ai.worklog.framework.core.Redaction
-import ai.worklog.framework.core.Status
 import groovy.json.JsonGenerator
 import groovy.json.JsonOutput
 
-class JiraOperatorReport {
+class JiraOperatorReport extends OperatorReport {
     private static final JsonGenerator HUMAN_JSON = new JsonGenerator.Options()
         .disableUnicodeEscaping()
         .build()
 
-    String operation
-    String fetchedAt
-    Status status
-    String message
     String ticketKey
     String date
     String reporter
@@ -27,16 +22,9 @@ class JiraOperatorReport {
     boolean applied
     boolean truncated
     Map totals
-    List<Map> items = []
 
     static JiraOperatorReport fromPayload(Map payload) {
         new JiraOperatorReport(
-            operation: payload.operation?.toString(),
-            fetchedAt: payload.fetched_at?.toString(),
-            status: payload.status instanceof Status ? (Status) payload.status : Status.values().find {
-                it.value == payload.status?.toString()
-            } ?: Status.UNKNOWN,
-            message: payload.message?.toString() ?: '',
             ticketKey: payload.ticket_key?.toString(),
             date: payload.date?.toString(),
             reporter: payload.reporter?.toString(),
@@ -48,22 +36,17 @@ class JiraOperatorReport {
             dryRun: payload.dry_run as boolean,
             applied: payload.applied as boolean,
             truncated: payload.truncated as boolean,
-            totals: payload.totals instanceof Map ? (Map) payload.totals : null,
-            items: ((List) (payload.items ?: [])).collect {
-                it instanceof Map ? new LinkedHashMap((Map) it) : [:]
-            }
-        )
+            totals: mapOrNull(payload.totals)
+        ).readCommon(payload)
     }
 
     Map toMap(Redaction redaction) {
-        Map result = [
-            operation: operation,
-            fetched_at: fetchedAt,
-            status: status.value,
-            items: redaction.redact(items)
-        ]
+        Map result = commonMap { redaction.redact(it) }
         if (message) {
             result.message = redaction.redact(message)
+        }
+        if (errorKind) {
+            result.error_kind = errorKind
         }
         if (ticketKey) {
             result.ticket_key = ticketKey
@@ -100,10 +83,6 @@ class JiraOperatorReport {
             result.totals = redaction.redact(totals)
         }
         result
-    }
-
-    String renderJson(Redaction redaction) {
-        JsonOutput.prettyPrint(JsonOutput.toJson(toMap(redaction))) + System.lineSeparator()
     }
 
     String renderHuman(Redaction redaction) {
@@ -177,20 +156,5 @@ class JiraOperatorReport {
         fields.each { field, value ->
             output.append("    ${attributes[field] ?: field}: ${value}").append(System.lineSeparator())
         }
-    }
-
-    static int exitCodeFor(JiraOperatorReport report, ExitCodes exitCodes) {
-        if (report.status == Status.BLOCKED) {
-            return exitCodes.blocked
-        }
-        if (report.status == Status.ERROR) {
-            String lower = report.message?.toLowerCase() ?: ''
-            if (lower.contains('not found') || lower.contains('invalid') ||
-                lower.contains('must contain') || lower.contains('not an application ci')) {
-                return exitCodes.userError
-            }
-            return exitCodes.systemError
-        }
-        exitCodes.success
     }
 }

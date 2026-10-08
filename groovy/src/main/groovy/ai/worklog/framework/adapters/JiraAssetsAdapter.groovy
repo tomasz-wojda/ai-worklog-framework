@@ -144,7 +144,11 @@ class JiraAssetsAdapter {
                 'get-ci',
                 Status.ERROR,
                 [],
-                [object_key: objectKey, message: "Object is not an application CI: ${object.label}"]
+                [
+                    object_key: objectKey,
+                    message: "Object is not an application CI: ${object.label}",
+                    error_kind: 'user'
+                ]
             )
         }
         Map fieldNames = (Map) ciRules().fields

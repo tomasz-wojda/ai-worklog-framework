@@ -18,6 +18,7 @@
       "enum": ["ready", "degraded", "blocked", "error", "unknown"]
     },
     "message": {"type": "string"},
+    "error_kind": {"type": "string", "enum": ["user", "system"]},
     "ticket_key": {"type": "string"},
     "date": {"type": "string", "format": "date"},
     "reporter": {"type": "string"},
