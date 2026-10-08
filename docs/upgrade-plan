@@ -415,6 +415,12 @@ Limitations:
   output, and adapter PATH resolution).
 - README requirements section still lists macOS or Linux only and needs update.
 - `prompt.log` remains an append-only audit trail, not structured ticket state.
+- `workspace apply --runtime` writes the machine-wide runtime, so choosing a
+  runtime while setting up one workspace changes every workspace. The runtime
+  cannot be set per workspace, because `bin/ai-worklog` selects it before any
+  workspace resolution runs.
+- A successful `workspace apply` still reports `Workspace init complete` in both
+  runtimes.
 - Service discovery, catalog, and Jenkins use the shared command contract for
   parsing. The remaining operational command groups retain their imperative
   argument handling.
