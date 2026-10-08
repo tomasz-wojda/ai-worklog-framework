@@ -155,16 +155,26 @@ class SetupChecks {
                 if (status == Status.UNKNOWN) {
                     status = Status.DEGRADED
                 }
-                String message = preflight.results ?
-                    preflight.summary().readLines()[0] :
-                    'No checks'
-                checks << check(status.value, 'preflight', message)
+                checks << check(status.value, 'preflight', preflightMessage(preflight))
             } catch (Exception exception) {
                 checks << check(Status.ERROR.value, 'preflight', exception.message ?: exception.class.simpleName)
             }
         }
 
         checks
+    }
+
+    static String preflightMessage(ResultSet preflight) {
+        if (!preflight.results) {
+            return 'No checks'
+        }
+        List<CheckResult> issues = preflight.results.findAll { it.status != Status.READY }
+        if (!issues) {
+            return "All ${preflight.results.size()} checks ready"
+        }
+        String listed = issues.take(3).collect { "${it.source}: ${it.message}" }.join('; ')
+        String more = issues.size() > 3 ? "; ${issues.size() - 3} more" : ''
+        "${issues.size()} issue(s): ${listed}${more} (run ai-worklog preflight)"
     }
 
     static Status aggregateCheckStatus(List<Map> checks) {
