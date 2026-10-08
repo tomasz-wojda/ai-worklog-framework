@@ -58,6 +58,31 @@
         "additionalProperties": false
       }
     },
+    "rules": {
+      "type": "object",
+      "required": ["status", "message", "actions"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ready", "degraded", "blocked", "unknown"]
+        },
+        "message": {"type": "string"},
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "target", "status"],
+            "properties": {
+              "kind": {"type": "string"},
+              "target": {"type": "string"},
+              "status": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "checks": {
       "type": "array",
       "items": {

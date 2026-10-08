@@ -157,11 +157,22 @@ you.
 
 `ai-worklog workspace apply` is the single entry point. It creates the runtime
 directories, seeds configuration, creates the service directories under
-`integrations/`, materializes AI Vault skills into the detected IDE profiles, and
-registers the workspace in the global configuration. It accepts either a
+`integrations/`, materializes AI Vault skills into the detected IDE profiles,
+installs the AI Vault workspace rules, and registers the workspace in the global
+configuration. It accepts either a
 registered workspace short name (`work`) or a directory path, and with no
 argument it targets the current directory exactly. It never reads credential
 contents and never overwrites existing targets.
+
+Workspace rules come from the vault's `scripts/install-cursor-harness.py
+--workspace-rules`, run with `python3` (override with `AI_WORKLOG_PYTHON`): the
+workspace `.rules` and `AGENTS.md` link to the vault `.rules`, the vault's
+always-apply Cursor rules are linked into `.cursor/rules/`, and a managed
+`CLAUDE.md` imports them for Claude Code. `--dry-run` reports pending rule files
+without writing them, and `workspace check` reports a `rules` layer. An existing
+unrelated `AGENTS.md`, `.rules`, or `CLAUDE.md` is never replaced; `apply` then
+reports `degraded` with the reason. Cursor hooks stay a separate, machine-wide
+installer step documented in AI Vault. The Python runtime does not install rules.
 
 `apply` converges: running it on a fresh directory creates the workspace, running
 it on an existing one fills in whatever is missing, and running it twice in a row

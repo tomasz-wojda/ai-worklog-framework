@@ -6,6 +6,7 @@ import ai.worklog.framework.setup.SetupChecks
 import ai.worklog.framework.setup.SetupPlanner
 import ai.worklog.framework.setup.SetupReport
 import ai.worklog.framework.setup.SetupResolver
+import ai.worklog.framework.setup.SetupRules
 import ai.worklog.framework.setup.SetupVault
 
 class WorkspaceCommands {
@@ -204,6 +205,10 @@ class WorkspaceCommands {
                 ides,
                 apply
             )
+            report.rules = SetupRules.run(vaultRoot, workspace, false)
+            if (!apply && report.rules.status != 'ready' && report.status == 'ready') {
+                report.status = 'degraded'
+            }
 
             if (apply) {
                 if (plan.conflicts) {
@@ -223,6 +228,7 @@ class WorkspaceCommands {
                         GlobalConfig.setRuntime(explicitRuntime)
                     }
                     GlobalConfig.setAiVaultRoot(vaultRoot.path)
+                    report.rules = SetupRules.run(vaultRoot, workspace, true)
                 } catch (IOException exception) {
                     if (jsonOutput) {
                         SetupReport.renderReport(report + [status: 'error', message: exception.message], true)
@@ -234,6 +240,10 @@ class WorkspaceCommands {
                 report.status = 'ready'
                 report.message = 'Workspace init complete'
                 SetupReport.finalizeAppliedActionReport(report)
+                if (report.rules.status != 'ready') {
+                    report.status = 'degraded'
+                    report.message = "Workspace init complete; ${report.rules.message}".toString()
+                }
             }
 
             if (!jsonOutput) {

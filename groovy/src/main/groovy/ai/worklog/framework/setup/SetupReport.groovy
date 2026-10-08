@@ -121,7 +121,6 @@ class SetupReport {
             workspaceName,
             true
         )
-        Status status = SetupChecks.aggregateCheckStatus(checks)
         List runtimeSelection = SetupResolver.resolveRuntimeSelection()
         List vaultResolution = SetupResolver.resolveAiVaultRoot(workspace)
         File vaultRoot = vaultResolution[0] as File
@@ -130,6 +129,10 @@ class SetupReport {
         if (vaultRoot) {
             vaultValid = SetupVault.validateVaultRoot(vaultRoot)[0]
         }
+        if (vaultValid && workspace.isDirectory()) {
+            checks << SetupRules.check(vaultRoot, workspace)
+        }
+        Status status = SetupChecks.aggregateCheckStatus(checks)
 
         Map manifest = SetupManifest.loadManifest(workspace)
         List<String> ides = []
@@ -309,6 +312,10 @@ class SetupReport {
         Map vault = report.ai_vault instanceof Map ? (Map) report.ai_vault : [:]
         if (vault.path) {
             println "  AI vault: ${vault.path} (${vault.source})"
+        }
+        Map rules = report.rules instanceof Map ? (Map) report.rules : [:]
+        if (rules) {
+            println "  Rules: [${rules.status.toString().toUpperCase()}] ${rules.message}"
         }
         ((List) (report.checks ?: [])).each { checkValue ->
             Map check = (Map) checkValue
