@@ -12,15 +12,16 @@ class SetupRules {
     static Closure<Map> runner = { List<String> command ->
         Process process = new ProcessBuilder(command).start()
         StringBuilder output = new StringBuilder()
+        StringBuilder errors = new StringBuilder()
         Thread reader = Thread.start { output.append(process.inputStream.getText('UTF-8')) }
-        Thread drain = Thread.start { process.errorStream.getText('UTF-8') }
+        Thread drain = Thread.start { errors.append(process.errorStream.getText('UTF-8')) }
         if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly()
-            return [code: -1, out: '']
+            return [code: -1, out: '', err: "timed out after ${TIMEOUT_SECONDS} seconds"]
         }
         reader.join()
         drain.join()
-        [code: process.exitValue(), out: output.toString()]
+        [code: process.exitValue(), out: output.toString(), err: errors.toString()]
     }
 
     static Map run(File vaultRoot, File workspace, boolean apply) {
@@ -47,7 +48,12 @@ class SetupRules {
         try {
             payload = (Map) new JsonSlurper().parseText(response.out?.toString() ?: '')
         } catch (Exception ignored) {
-            return result(Status.UNKNOWN, 'Workspace rules installer returned no report')
+            String detail = response.err?.toString()?.readLines()?.findAll { it.trim() }?.with { it ? it.last().trim() : '' }
+            return result(
+                Status.UNKNOWN,
+                "Workspace rules installer failed (exit ${response.code}, ${command[0]})" +
+                    (detail ? ": ${detail}" : '')
+            )
         }
         if (payload.error) {
             return result(Status.BLOCKED, "Workspace rules not installed: ${payload.error}")

@@ -60,8 +60,13 @@ class SetupRulesTest extends GroovyTestCase {
         assertEquals('unknown', SetupRules.run(vault, workspace, false).status)
         assertEquals('degraded', SetupRules.check(vault, workspace).status)
         new File(vault, SetupRules.INSTALLER).text = ''
-        SetupRules.runner = { List<String> command -> [code: 1, out: 'Traceback'] }
-        assertEquals('unknown', SetupRules.run(vault, workspace, false).status)
+        SetupRules.runner = { List<String> command ->
+            [code: 1, out: '', err: 'Traceback (most recent call last):\n  File "x"\nTypeError: bad operand\n']
+        }
+        Map failed = SetupRules.run(vault, workspace, false)
+        assertEquals('unknown', failed.status)
+        assertTrue(failed.message.contains('exit 1'))
+        assertTrue(failed.message.endsWith('TypeError: bad operand'))
         SetupRules.runner = { List<String> command -> throw new IOException('python3 not found') }
         assertTrue(SetupRules.run(vault, workspace, false).message.contains('python3 not found'))
     }
