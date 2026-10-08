@@ -22,10 +22,55 @@ class CommandContract {
                 commands: []
             ]
             CACHE[key] = new CommandContract(
-                (Map) JsonFiles.read(new File(frameworkRoot, 'shared/command-contract.json'), fallback)
+                expand((Map) JsonFiles.read(new File(frameworkRoot, 'shared/command-contract.json'), fallback))
             )
         }
         CACHE[key]
+    }
+
+    static Map expand(Map raw) {
+        Map shared = (Map) (raw.shared ?: [:])
+        Map expanded = new LinkedHashMap(raw)
+        expanded.remove('shared')
+        expanded.commands = expandNodes((List) (raw.commands ?: []), shared)
+        expanded
+    }
+
+    private static List expandNodes(List nodes, Map shared) {
+        nodes.collect { Object item ->
+            Map node = new LinkedHashMap((Map) item)
+            ['options', 'positionals'].each { String kind ->
+                if (node[kind] instanceof List) {
+                    node[kind] = ((List) node[kind]).collect { resolve(kind, it, shared) }
+                }
+            }
+            if (node.subcommands instanceof List) {
+                node.subcommands = expandNodes((List) node.subcommands, shared)
+            }
+            node
+        }
+    }
+
+    private static Object resolve(String kind, Object entry, Map shared) {
+        if (!(entry instanceof Map) || !((Map) entry).containsKey('use')) {
+            return entry
+        }
+        Map reference = (Map) entry
+        Object definition = ((Map) (shared[kind] ?: [:]))[reference.use]
+        if (reference.size() != 1 || !(definition instanceof Map)) {
+            throw new IllegalStateException("Unknown shared ${kind} entry in command contract: ${reference.use}")
+        }
+        copy(definition)
+    }
+
+    private static Object copy(Object value) {
+        if (value instanceof Map) {
+            return ((Map) value).collectEntries { key, item -> [(key): copy(item)] }
+        }
+        if (value instanceof List) {
+            return ((List) value).collect { copy(it) }
+        }
+        value
     }
 
     Map command(String name) {

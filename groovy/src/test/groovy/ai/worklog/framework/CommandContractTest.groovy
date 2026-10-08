@@ -26,6 +26,67 @@ class CommandContractTest extends GroovyTestCase {
         assertEquals([], validate(contract.data, schema, schema, '$'))
     }
 
+    void testRawContractAndSharedBlocksValidateAgainstSchema() {
+        Map schema = (Map) JsonFiles.read(new File(repository, 'schemas/command-contract.schema.json'), [:])
+        Map raw = rawContract()
+        assertEquals([], validate(raw, schema, schema, '$'))
+        Map definitions = (Map) schema.definitions
+        ['options': 'option', 'positionals': 'positional'].each { String kind, String definition ->
+            ((Map) raw.shared[kind]).each { name, block ->
+                assertEquals(
+                    [],
+                    validate(block, (Map) definitions[definition], schema, "\$.shared.${kind}.${name}")
+                )
+            }
+        }
+    }
+
+    void testExpandedContractHasNoSharedReferences() {
+        assertFalse(contract.data.containsKey('shared'))
+        assertFalse(groovy.json.JsonOutput.toJson(contract.data).contains('"use"'))
+        Map json = contract.node(['service', 'jira', 'get-cis']).options.find { it.name == '--json' }
+        assertEquals('Emit the machine-readable report', json.description)
+        assertEquals('controller', contract.node(['service', 'jenkins', 'health']).positionals[0].name)
+    }
+
+    void testUnknownSharedReferenceFails() {
+        String message = shouldFail(IllegalStateException) {
+            CommandContract.expand([
+                shared: [options: [:]],
+                commands: [[name: 'x', positionals: [], options: [[use: 'missing']]]]
+            ])
+        }
+        assertTrue(message.contains('missing'))
+    }
+
+    void testSharedBlocksAreUsedAndInlineBlocksDoNotRepeat() {
+        Map raw = rawContract()
+        Map<String, Integer> inline = [:]
+        Set<String> used = [] as Set
+        Closure walk
+        walk = { List nodes ->
+            nodes.each { Map node ->
+                ['options', 'positionals'].each { String kind ->
+                    ((List) (node[kind] ?: [])).each { Map entry ->
+                        if (entry.use) {
+                            used << "${kind}.${entry.use}".toString()
+                        } else {
+                            String key = "${kind}:${groovy.json.JsonOutput.toJson(new TreeMap(entry))}"
+                            inline[key] = (inline[key] ?: 0) + 1
+                        }
+                    }
+                }
+                walk((List) (node.subcommands ?: []))
+            }
+        }
+        walk((List) raw.commands)
+        Set<String> defined = raw.shared.collectMany { kind, blocks ->
+            ((Map) blocks).keySet().collect { "${kind}.${it}".toString() }
+        } as Set
+        assertEquals(defined, used)
+        assertEquals([], inline.findAll { it.value >= 3 }.keySet().toList())
+    }
+
     void testMainCommandsAndContractCommandsAgree() {
         Set expected = [
             'workspace', 'config', 'catalog', 'ticket', 'state', 'preflight', 'reconcile',
@@ -450,6 +511,10 @@ commands:
             [],
             validate(renderer.describePath(['service', 'jenkins', 'artifacts']), schema, schema, '$')
         )
+    }
+
+    private Map rawContract() {
+        (Map) JsonFiles.read(new File(repository, 'shared/command-contract.json'), [:])
     }
 
     private ArgumentParser parser() {

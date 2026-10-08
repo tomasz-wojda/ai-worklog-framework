@@ -3,9 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="$ROOT/groovy/src/main/groovy"
-COMPILED_DIR="$ROOT/groovy/build/classes/groovy/main"
-MAIN_CLASS_FILE="$COMPILED_DIR/ai/worklog/framework/Main.class"
-STAMP_FILE="$ROOT/groovy/build/ai-worklog-stamp"
+BUILD_DIR="$ROOT/groovy/build"
+CLASSPATH_FILE="$BUILD_DIR/ai-worklog.classpath"
+AOT_CACHE="$BUILD_DIR/ai-worklog.aot"
+STAMP_FILE="$BUILD_DIR/ai-worklog-stamp"
 
 export AI_WORKLOG_FRAMEWORK_ROOT="$ROOT"
 
@@ -17,14 +18,25 @@ else
   JAVA_EXECUTABLE=""
 fi
 
-if [ -n "$JAVA_EXECUTABLE" ] \
-  && [ -n "${GROOVY_HOME:-}" ] \
-  && [ -d "${GROOVY_HOME:-}/lib" ] \
-  && [ -f "$MAIN_CLASS_FILE" ] \
-  && [ -f "$STAMP_FILE" ] \
-  && [ -z "$(find "$SRC_DIR" -name '*.groovy' -newer "$STAMP_FILE" -print -quit)" ]; then
-  exec "$JAVA_EXECUTABLE" \
-    -cp "$COMPILED_DIR:$GROOVY_HOME/lib/*" \
+compiled_classpath() {
+  local classpath entry
+  [ -f "$CLASSPATH_FILE" ] && [ -f "$STAMP_FILE" ] || return 1
+  [ -z "$(find "$SRC_DIR" -name '*.groovy' -newer "$STAMP_FILE" -print -quit)" ] || return 1
+  IFS= read -r classpath < "$CLASSPATH_FILE" || return 1
+  IFS=: read -r -a entries <<< "$classpath"
+  for entry in "${entries[@]}"; do
+    [ -f "$entry" ] || return 1
+  done
+  printf '%s' "$classpath"
+}
+
+if [ -n "$JAVA_EXECUTABLE" ] && CLASSPATH="$(compiled_classpath)"; then
+  JVM_OPTIONS=(-XX:TieredStopAtLevel=1 -XX:+UseSerialGC --enable-native-access=ALL-UNNAMED)
+  if [ -f "$AOT_CACHE" ]; then
+    JVM_OPTIONS+=(-XX:+IgnoreUnrecognizedVMOptions -XX:AOTCache="$AOT_CACHE" -Xlog:aot=off -Xlog:cds=off)
+  fi
+  exec "$JAVA_EXECUTABLE" "${JVM_OPTIONS[@]}" \
+    -cp "$CLASSPATH" \
     ai.worklog.framework.Main \
     "$@"
 fi

@@ -38,6 +38,147 @@
       "takes_value": false
     }
   ],
+  "shared": {
+    "options": {
+      "json": {
+        "name": "--json",
+        "description": "Emit the machine-readable report",
+        "takes_value": false
+      },
+      "artifactory_profile": {
+        "name": "--profile",
+        "description": "Artifactory profile id",
+        "takes_value": true,
+        "value": {
+          "help_values": "PROFILE"
+        }
+      },
+      "artifactory_timeout": {
+        "name": "--timeout",
+        "description": "HTTP timeout in seconds",
+        "takes_value": true,
+        "default_from": "timeouts.default_seconds",
+        "value": {
+          "integer_min": 1,
+          "integer_max": 120,
+          "help_values": "SECONDS"
+        }
+      },
+      "automox_profile": {
+        "name": "--profile",
+        "description": "Automox profile id from automox.properties",
+        "takes_value": true,
+        "value": {
+          "help_values": "PROFILE"
+        }
+      },
+      "automox_org": {
+        "name": "--org",
+        "description": "Override the active Automox organization id",
+        "takes_value": true,
+        "value": {
+          "pattern": "^[0-9]+$",
+          "help_values": "ID"
+        }
+      },
+      "automox_policy": {
+        "name": "--policy",
+        "description": "Filter by policy id",
+        "takes_value": true,
+        "value": {
+          "pattern": "^[0-9]+$",
+          "help_values": "ID"
+        }
+      },
+      "jira_limit": {
+        "name": "--limit",
+        "description": "Maximum tickets to include",
+        "takes_value": true,
+        "default_from": "limits.search_default",
+        "value": {
+          "integer_min": 1,
+          "integer_max": 500,
+          "help_values": "COUNT"
+        }
+      },
+      "newrelic_profile": {
+        "name": "--profile",
+        "description": "New Relic profile id from newrelic.properties",
+        "takes_value": true,
+        "value": {
+          "help_values": "PROFILE"
+        }
+      },
+      "newrelic_entity": {
+        "name": "--entity",
+        "description": "Filter by entity name",
+        "takes_value": true,
+        "value": {
+          "help_values": "TEXT"
+        }
+      }
+    },
+    "positionals": {
+      "artifactory_repository": {
+        "name": "repository",
+        "description": "Repository key",
+        "required": true,
+        "value": {
+          "help_values": "REPOSITORY"
+        }
+      },
+      "automox_device": {
+        "name": "device",
+        "description": "Device id or hostname",
+        "required": true,
+        "value": {
+          "help_values": "ID-OR-HOSTNAME"
+        }
+      },
+      "automox_policy_id": {
+        "name": "policy_id",
+        "description": "Policy id",
+        "required": true,
+        "value": {
+          "pattern": "^[0-9]+$",
+          "help_values": "ID"
+        }
+      },
+      "jenkins_controller": {
+        "name": "controller",
+        "description": "Controller id from jenkins.properties",
+        "required": true,
+        "value": {
+          "help_values": "CONTROLLER"
+        }
+      },
+      "jenkins_job": {
+        "name": "job",
+        "description": "Job path including any folder prefix",
+        "required": true,
+        "value": {
+          "help_values": "JOB"
+        }
+      },
+      "newrelic_app_id": {
+        "name": "app_id",
+        "description": "Application id",
+        "required": true,
+        "value": {
+          "pattern": "^[0-9]+$",
+          "help_values": "APP_ID"
+        }
+      },
+      "newrelic_dashboard_guid": {
+        "name": "dashboard_guid",
+        "description": "Dashboard entity guid",
+        "required": true,
+        "value": {
+          "help_values": "DASHBOARD-GUID"
+        }
+      }
+    }
+  },
   "commands": [
     {
       "name": "config",
@@ -62,11 +203,7 @@
           "kind": "action",
           "positionals": [],
           "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
+            {"use": "json"}
           ]
         },
         {
@@ -151,11 +288,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -164,30 +297,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "json"},
+                {"use": "artifactory_profile"},
+                {"use": "artifactory_timeout"}
               ]
             },
             {
@@ -195,14 +307,7 @@
               "description": "Verify authenticated read access to a repository path",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "repository",
-                  "description": "Repository key",
-                  "required": true,
-                  "value": {
-                    "help_values": "REPOSITORY"
-                  }
-                },
+                {"use": "artifactory_repository"},
                 {
                   "name": "path",
                   "description": "Optional repository path",
@@ -213,30 +318,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "json"},
+                {"use": "artifactory_profile"},
+                {"use": "artifactory_timeout"}
               ]
             },
             {
@@ -245,19 +329,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "artifactory_profile"},
                 {
                   "name": "--query",
                   "description": "Filter repository keys by a case-insensitive query",
@@ -271,7 +344,13 @@
                   "description": "Filter repository type",
                   "takes_value": true,
                   "value": {
-                    "choices": ["all", "local", "remote", "virtual", "federated"],
+                    "choices": [
+                      "all",
+                      "local",
+                      "remote",
+                      "virtual",
+                      "federated"
+                    ],
                     "help_values": "all | local | remote | virtual | federated"
                   }
                 },
@@ -294,17 +373,7 @@
                     "help_values": "COUNT"
                   }
                 },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "artifactory_timeout"}
               ]
             },
             {
@@ -312,14 +381,7 @@
               "description": "List and filter artifacts under a repository path",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "repository",
-                  "description": "Repository key",
-                  "required": true,
-                  "value": {
-                    "help_values": "REPOSITORY"
-                  }
-                },
+                {"use": "artifactory_repository"},
                 {
                   "name": "path",
                   "description": "Optional folder path",
@@ -330,19 +392,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "artifactory_profile"},
                 {
                   "name": "--query",
                   "description": "Filter artifact URIs by a case-insensitive query",
@@ -383,17 +434,7 @@
                     "help_values": "COUNT"
                   }
                 },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "artifactory_timeout"}
               ]
             },
             {
@@ -401,14 +442,7 @@
               "description": "Show metadata for one artifact file",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "repository",
-                  "description": "Repository key",
-                  "required": true,
-                  "value": {
-                    "help_values": "REPOSITORY"
-                  }
-                },
+                {"use": "artifactory_repository"},
                 {
                   "name": "path",
                   "description": "Artifact file path",
@@ -419,30 +453,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "json"},
+                {"use": "artifactory_profile"},
+                {"use": "artifactory_timeout"}
               ]
             },
             {
@@ -450,14 +463,7 @@
               "description": "Read bounded text content from one artifact without writing it",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "repository",
-                  "description": "Repository key",
-                  "required": true,
-                  "value": {
-                    "help_values": "REPOSITORY"
-                  }
-                },
+                {"use": "artifactory_repository"},
                 {
                   "name": "path",
                   "description": "Text artifact path",
@@ -468,19 +474,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Artifactory profile id",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "artifactory_profile"},
                 {
                   "name": "--max-bytes",
                   "description": "Maximum UTF-8 content bytes to return",
@@ -492,17 +487,7 @@
                     "help_values": "BYTES"
                   }
                 },
-                {
-                  "name": "--timeout",
-                  "description": "HTTP timeout in seconds",
-                  "takes_value": true,
-                  "default_from": "timeouts.default_seconds",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 120,
-                    "help_values": "SECONDS"
-                  }
-                }
+                {"use": "artifactory_timeout"}
               ]
             }
           ]
@@ -518,11 +503,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -531,28 +512,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"}
               ]
             },
             {
@@ -561,28 +523,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"}
               ]
             },
             {
@@ -591,28 +534,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--query",
                   "description": "Filter group names by a case-insensitive query",
@@ -650,28 +574,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"}
               ]
             },
             {
@@ -680,28 +585,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--group",
                   "description": "Limit results to a server group id",
@@ -750,38 +636,12 @@
               "description": "Show one device by id or hostname",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "device",
-                  "description": "Device id or hostname",
-                  "required": true,
-                  "value": {
-                    "help_values": "ID-OR-HOSTNAME"
-                  }
-                }
+                {"use": "automox_device"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"}
               ]
             },
             {
@@ -789,38 +649,12 @@
               "description": "List packages for one device with optional state and name filters",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "device",
-                  "description": "Device id or hostname",
-                  "required": true,
-                  "value": {
-                    "help_values": "ID-OR-HOSTNAME"
-                  }
-                }
+                {"use": "automox_device"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--state",
                   "description": "Filter packages by installation state",
@@ -866,28 +700,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--since",
                   "description": "Include events on or after this date",
@@ -921,15 +736,7 @@
                     "help_values": "ID-OR-HOSTNAME"
                   }
                 },
-                {
-                  "name": "--policy",
-                  "description": "Filter by policy id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "automox_policy"},
                 {
                   "name": "--limit",
                   "description": "Maximum number of events",
@@ -949,28 +756,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--since",
                   "description": "Include events on or after this date",
@@ -995,15 +783,7 @@
                     "help_values": "ID-OR-HOSTNAME"
                   }
                 },
-                {
-                  "name": "--policy",
-                  "description": "Filter by policy id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "automox_policy"},
                 {
                   "name": "--limit",
                   "description": "Maximum number of events to analyze",
@@ -1028,28 +808,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--query",
                   "description": "Filter policy names by a case-insensitive query",
@@ -1089,39 +850,12 @@
               "description": "Show one policy including schedule details",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "policy_id",
-                  "description": "Policy id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "automox_policy_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"}
               ]
             },
             {
@@ -1130,28 +864,9 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--policy",
                   "description": "Limit results to one policy id",
@@ -1168,47 +883,13 @@
               "description": "Inspect command queue for one device with optional polling",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "device",
-                  "description": "Device id or hostname",
-                  "required": true,
-                  "value": {
-                    "help_values": "ID-OR-HOSTNAME"
-                  }
-                }
+                {"use": "automox_device"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
-                {
-                  "name": "--policy",
-                  "description": "Filter by policy id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
+                {"use": "automox_policy"},
                 {
                   "name": "--status",
                   "description": "Filter by queue command status",
@@ -1245,39 +926,12 @@
               "description": "Run a policy on one device or all devices; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "policy_id",
-                  "description": "Policy id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "automox_policy_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--device",
                   "description": "Run the policy on one device id or hostname",
@@ -1338,28 +992,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--notes",
                   "description": "Optional policy notes",
@@ -1380,39 +1015,12 @@
               "description": "Delete a policy; dry-run unless --apply is supplied and --confirm-name matches",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "policy_id",
-                  "description": "Policy id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                }
+                {"use": "automox_policy_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--confirm-name",
                   "description": "Confirm deletion with the exact policy name",
@@ -1433,14 +1041,7 @@
               "description": "Move a device to another server group; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "device",
-                  "description": "Device id or hostname",
-                  "required": true,
-                  "value": {
-                    "help_values": "ID-OR-HOSTNAME"
-                  }
-                },
+                {"use": "automox_device"},
                 {
                   "name": "group_id",
                   "description": "Target server group id",
@@ -1452,28 +1053,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--apply",
                   "description": "Move the device",
@@ -1486,15 +1068,7 @@
               "description": "Add a server group to a policy; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "policy_id",
-                  "description": "Policy id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "automox_policy_id"},
                 {
                   "name": "group_id",
                   "description": "Server group id to add",
@@ -1506,28 +1080,9 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "Automox profile id from automox.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
-                {
-                  "name": "--org",
-                  "description": "Override the active Automox organization id",
-                  "takes_value": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "ID"
-                  }
-                },
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
                   "name": "--apply",
                   "description": "Add the server group to the policy",
@@ -1548,11 +1103,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1560,21 +1111,10 @@
               "description": "Show controller health and operating mode",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1582,29 +1122,11 @@
               "description": "Show job status and recent builds",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
-                {
-                  "name": "job",
-                  "description": "Job path including any folder prefix",
-                  "required": true,
-                  "value": {
-                    "help_values": "JOB"
-                  }
-                }
+                {"use": "jenkins_controller"},
+                {"use": "jenkins_job"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--builds",
                   "description": "Number of recent builds to include",
@@ -1632,21 +1154,10 @@
                   "description": "List plugins and verify required plugin names",
                   "kind": "action",
                   "positionals": [
-                    {
-                      "name": "controller",
-                      "description": "Controller id from jenkins.properties",
-                      "required": true,
-                      "value": {
-                        "help_values": "CONTROLLER"
-                      }
-                    }
+                    {"use": "jenkins_controller"}
                   ],
                   "options": [
-                    {
-                      "name": "--json",
-                      "description": "Emit the machine-readable report",
-                      "takes_value": false
-                    },
+                    {"use": "json"},
                     {
                       "name": "--require",
                       "description": "Require the named plugin to be active",
@@ -1663,21 +1174,10 @@
                   "description": "Report vulnerable installed plugins",
                   "kind": "action",
                   "positionals": [
-                    {
-                      "name": "controller",
-                      "description": "Controller id from jenkins.properties",
-                      "required": true,
-                      "value": {
-                        "help_values": "CONTROLLER"
-                      }
-                    }
+                    {"use": "jenkins_controller"}
                   ],
                   "options": [
-                    {
-                      "name": "--json",
-                      "description": "Emit the machine-readable report",
-                      "takes_value": false
-                    },
+                    {"use": "json"},
                     {
                       "name": "--plugin",
                       "description": "Limit the scan to a named installed plugin",
@@ -1693,7 +1193,10 @@
                       "takes_value": true,
                       "repeatable": true,
                       "value": {
-                        "choices": ["advisory", "nvd"],
+                        "choices": [
+                          "advisory",
+                          "nvd"
+                        ],
                         "case_insensitive": true,
                         "help_values": "SOURCE"
                       }
@@ -1707,21 +1210,10 @@
               "description": "List credential metadata in a domain",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--domain",
                   "description": "Credential domain name",
@@ -1753,29 +1245,11 @@
               "description": "Inspect a seed job and its recent result",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
-                {
-                  "name": "job",
-                  "description": "Job path including any folder prefix",
-                  "required": true,
-                  "value": {
-                    "help_values": "JOB"
-                  }
-                }
+                {"use": "jenkins_controller"},
+                {"use": "jenkins_job"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1794,11 +1268,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1806,21 +1276,10 @@
               "description": "List controller nodes and executor state",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1828,21 +1287,10 @@
               "description": "List queued items",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--limit",
                   "description": "Maximum number of queue items",
@@ -1860,21 +1308,10 @@
               "description": "List and filter jobs",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--folder",
                   "description": "Limit results to a folder path",
@@ -1908,22 +1345,8 @@
               "description": "List artifacts from a selected build",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
-                {
-                  "name": "job",
-                  "description": "Job path including any folder prefix",
-                  "required": true,
-                  "value": {
-                    "help_values": "JOB"
-                  }
-                },
+                {"use": "jenkins_controller"},
+                {"use": "jenkins_job"},
                 {
                   "name": "build_selector",
                   "description": "Build to inspect: last successful, last completed, or a positive build number",
@@ -1939,11 +1362,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -1951,22 +1370,8 @@
               "description": "Download one artifact by exact relative path; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
-                {
-                  "name": "job",
-                  "description": "Job path including any folder prefix",
-                  "required": true,
-                  "value": {
-                    "help_values": "JOB"
-                  }
-                },
+                {"use": "jenkins_controller"},
+                {"use": "jenkins_job"},
                 {
                   "name": "build_selector",
                   "description": "Build to inspect: last successful, last completed, or a positive build number",
@@ -1990,11 +1395,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--apply",
                   "description": "Write the artifact to the workspace",
@@ -2012,29 +1413,11 @@
               "description": "Export one job config.xml; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
-                {
-                  "name": "job",
-                  "description": "Job path including any folder prefix",
-                  "required": true,
-                  "value": {
-                    "help_values": "JOB"
-                  }
-                }
+                {"use": "jenkins_controller"},
+                {"use": "jenkins_job"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--apply",
                   "description": "Write config.xml to the destination",
@@ -2057,14 +1440,7 @@
               "description": "Run Groovy in the Jenkins Script Console from exactly one file, stdin (-) or --script source; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                },
+                {"use": "jenkins_controller"},
                 {
                   "name": "script_file",
                   "description": "Path to a UTF-8 Groovy script, or - to read standard input",
@@ -2075,11 +1451,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--apply",
                   "description": "Execute the script on the controller",
@@ -2100,21 +1472,10 @@
               "description": "List views or inspect one view",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--view",
                   "description": "View name to inspect",
@@ -2130,21 +1491,10 @@
               "description": "Show the authenticated Jenkins identity",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2152,21 +1502,10 @@
               "description": "List Jenkins credential domains",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "controller",
-                  "description": "Controller id from jenkins.properties",
-                  "required": true,
-                  "value": {
-                    "help_values": "CONTROLLER"
-                  }
-                }
+                {"use": "jenkins_controller"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             }
           ]
@@ -2192,11 +1531,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2205,22 +1540,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
+                {"use": "json"},
+                {"use": "jira_limit"}
               ]
             },
             {
@@ -2229,22 +1550,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
+                {"use": "json"},
+                {"use": "jira_limit"}
               ]
             },
             {
@@ -2263,22 +1570,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--limit",
-                  "description": "Maximum tickets to include",
-                  "takes_value": true,
-                  "default_from": "limits.search_default",
-                  "value": {
-                    "integer_min": 1,
-                    "integer_max": 500,
-                    "help_values": "COUNT"
-                  }
-                }
+                {"use": "json"},
+                {"use": "jira_limit"}
               ]
             },
             {
@@ -2297,11 +1590,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2320,11 +1609,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2333,11 +1618,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2383,11 +1664,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--apply",
                   "description": "Create the Tempo worklog",
@@ -2401,11 +1678,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2424,11 +1697,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2447,11 +1716,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2470,11 +1735,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2493,11 +1754,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--limit",
                   "description": "Maximum objects to include",
@@ -2527,11 +1784,7 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2540,11 +1793,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
+                {"use": "json"},
                 {
                   "name": "--env",
                   "description": "Limit to one environment",
@@ -2575,11 +1824,7 @@
           "kind": "action",
           "positionals": [],
           "options": [
-            {
-              "name": "--json",
-              "description": "Emit the machine-readable report",
-              "takes_value": false
-            }
+            {"use": "json"}
           ]
         },
         {
@@ -2593,11 +1838,7 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                }
+                {"use": "json"}
               ]
             },
             {
@@ -2606,19 +1847,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -2627,19 +1857,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -2648,19 +1867,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--query",
                   "description": "Filter application names by a case-insensitive query",
@@ -2687,30 +1895,11 @@
               "description": "Show one REST v2 application",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "app_id",
-                  "description": "Application id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "APP_ID"
-                  }
-                }
+                {"use": "newrelic_app_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -2718,30 +1907,11 @@
               "description": "List application hosts with optional name filter",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "app_id",
-                  "description": "Application id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "APP_ID"
-                  }
-                }
+                {"use": "newrelic_app_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--query",
                   "description": "Filter host names by a case-insensitive query",
@@ -2768,30 +1938,11 @@
               "description": "List application deployments within an optional date range",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "app_id",
-                  "description": "Application id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "APP_ID"
-                  }
-                }
+                {"use": "newrelic_app_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--since",
                   "description": "Include deployments on or after this date",
@@ -2827,19 +1978,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--policy",
                   "description": "Filter by alert policy id",
@@ -2849,14 +1989,7 @@
                     "help_values": "ID"
                   }
                 },
-                {
-                  "name": "--entity",
-                  "description": "Filter by entity name",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "TEXT"
-                  }
-                },
+                {"use": "newrelic_entity"},
                 {
                   "name": "--priority",
                   "description": "Filter by violation priority",
@@ -2889,19 +2022,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--state",
                   "description": "Filter by issue state",
@@ -2928,14 +2050,7 @@
                     "help_values": "critical | warning | all"
                   }
                 },
-                {
-                  "name": "--entity",
-                  "description": "Filter by entity name",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "TEXT"
-                  }
-                },
+                {"use": "newrelic_entity"},
                 {
                   "name": "--since",
                   "description": "Include issues on or after this date",
@@ -2971,19 +2086,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--issue",
                   "description": "Filter by AI issue id",
@@ -3001,14 +2105,7 @@
                     "help_values": "ID"
                   }
                 },
-                {
-                  "name": "--entity",
-                  "description": "Filter by entity name",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "TEXT"
-                  }
-                },
+                {"use": "newrelic_entity"},
                 {
                   "name": "--since",
                   "description": "Include incidents on or after this date",
@@ -3043,30 +2140,11 @@
               "description": "Summarize TransactionError facets and timeline for one application",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "app_id",
-                  "description": "Application id",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[0-9]+$",
-                    "help_values": "APP_ID"
-                  }
-                }
+                {"use": "newrelic_app_id"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--hours",
                   "description": "Lookback window in hours",
@@ -3106,19 +2184,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--file",
                   "description": "Path to a UTF-8 NRQL file",
@@ -3146,19 +2213,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--query",
                   "description": "Entity search query",
@@ -3202,19 +2258,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--query",
                   "description": "Filter dashboard names by a case-insensitive query",
@@ -3249,29 +2294,11 @@
               "description": "Show dashboard metadata, pages, widgets, and configuration",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "dashboard_guid",
-                  "description": "Dashboard entity guid",
-                  "required": true,
-                  "value": {
-                    "help_values": "DASHBOARD-GUID"
-                  }
-                }
+                {"use": "newrelic_dashboard_guid"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -3279,29 +2306,11 @@
               "description": "Export one dashboard as JSON or Terraform; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "dashboard_guid",
-                  "description": "Dashboard entity guid",
-                  "required": true,
-                  "value": {
-                    "help_values": "DASHBOARD-GUID"
-                  }
-                }
+                {"use": "newrelic_dashboard_guid"}
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--format",
                   "description": "Export format",
@@ -3340,19 +2349,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--query",
                   "description": "Filter policy names by a case-insensitive query",
@@ -3390,19 +2388,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -3411,19 +2398,8 @@
               "kind": "action",
               "positionals": [],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--policy",
                   "description": "Filter by alert policy id",
@@ -3486,19 +2462,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                }
+                {"use": "json"},
+                {"use": "newrelic_profile"}
               ]
             },
             {
@@ -3525,19 +2490,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-policy",
                   "description": "Confirm creation with the exact policy id",
@@ -3578,19 +2532,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-name",
                   "description": "Confirm update with the exact current condition name",
@@ -3621,19 +2564,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-account",
                   "description": "Confirm creation with the exact account id",
@@ -3655,14 +2587,7 @@
               "description": "Create a dashboard page; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "dashboard_guid",
-                  "description": "Dashboard entity guid",
-                  "required": true,
-                  "value": {
-                    "help_values": "DASHBOARD-GUID"
-                  }
-                },
+                {"use": "newrelic_dashboard_guid"},
                 {
                   "name": "definition_file",
                   "description": "Path to a dashboard page definition file",
@@ -3673,19 +2598,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-dashboard",
                   "description": "Confirm creation with the exact dashboard guid",
@@ -3724,19 +2638,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-name",
                   "description": "Confirm update with the exact current page name",
@@ -3757,14 +2660,7 @@
               "description": "Create a dashboard widget; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "dashboard_guid",
-                  "description": "Dashboard entity guid",
-                  "required": true,
-                  "value": {
-                    "help_values": "DASHBOARD-GUID"
-                  }
-                },
+                {"use": "newrelic_dashboard_guid"},
                 {
                   "name": "page_guid",
                   "description": "Dashboard page entity guid",
@@ -3783,19 +2679,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-dashboard",
                   "description": "Confirm creation with the exact dashboard guid",
@@ -3834,19 +2719,8 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--json",
-                  "description": "Emit the machine-readable report",
-                  "takes_value": false
-                },
-                {
-                  "name": "--profile",
-                  "description": "New Relic profile id from newrelic.properties",
-                  "takes_value": true,
-                  "value": {
-                    "help_values": "PROFILE"
-                  }
-                },
+                {"use": "json"},
+                {"use": "newrelic_profile"},
                 {
                   "name": "--confirm-name",
                   "description": "Confirm update with the exact current widget title",

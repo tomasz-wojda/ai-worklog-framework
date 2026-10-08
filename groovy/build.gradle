@@ -11,10 +11,14 @@ def groovyLib = file("${System.getenv('GROOVY_HOME') ?: '/opt/groovy/current'}/l
 if (!groovyLib.isDirectory()) {
     throw new GradleException("Groovy library directory not found: ${groovyLib}. Set GROOVY_HOME.")
 }
+def groovyRuntimeJars = files(groovyLib.listFiles().findAll {
+    it.name ==~ /groovy-(\d.*|json-.*|nio-.*|datetime-.*|dateutil-.*)\.jar/
+})
 
 dependencies {
-    implementation fileTree(dir: groovyLib, include: ['groovy-*.jar'])
+    implementation groovyRuntimeJars
     implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
+    runtimeOnly 'org.slf4j:slf4j-nop:1.7.36'
     testImplementation fileTree(dir: groovyLib, include: ['groovy-*.jar', 'junit-4*.jar'])
 }
 
@@ -26,7 +30,61 @@ tasks.withType(Test).configureEach {
     useJUnit()
 }
 
+tasks.named('jar') {
+    archiveFileName = 'ai-worklog.jar'
+}
+
+def launcherJava = System.getenv('JAVA_HOME') ?
+    "${System.getenv('JAVA_HOME')}/bin/java" :
+    'java'
+def launcherJvmOptions = [
+    '-XX:TieredStopAtLevel=1',
+    '-XX:+UseSerialGC',
+    '--enable-native-access=ALL-UNNAMED'
+]
+
+tasks.register('launcherClasspath') {
+    def output = layout.buildDirectory.file('ai-worklog.classpath')
+    def jarFile = tasks.named('jar').flatMap { it.archiveFile }
+    def runtime = configurations.runtimeClasspath
+    inputs.files(runtime)
+    inputs.file(jarFile)
+    outputs.file(output)
+    doLast {
+        def entries = [jarFile.get().asFile] + runtime.files.toList()
+        output.get().asFile.text = entries*.absolutePath.join(File.pathSeparator) + '\n'
+    }
+}
+
+tasks.register('aotCache') {
+    dependsOn 'jar', 'launcherClasspath'
+    def cache = layout.buildDirectory.file('ai-worklog.aot')
+    def classpathFile = layout.buildDirectory.file('ai-worklog.classpath')
+    def frameworkRoot = rootDir.parentFile
+    outputs.upToDateWhen { false }
+    doLast {
+        def cacheFile = cache.get().asFile
+        cacheFile.delete()
+        def command = [launcherJava] + launcherJvmOptions + [
+            "-XX:AOTCacheOutput=${cacheFile.absolutePath}",
+            '-Xlog:aot=off',
+            '-Xlog:cds=off',
+            '-cp', classpathFile.get().asFile.text.trim(),
+            'ai.worklog.framework.AotTraining'
+        ]
+        def process = new ProcessBuilder(command.collect { it.toString() })
+            .redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+        process.environment().put('AI_WORKLOG_FRAMEWORK_ROOT', frameworkRoot.absolutePath)
+        if (process.start().waitFor() != 0 || !cacheFile.isFile()) {
+            cacheFile.delete()
+            logger.warn('AOT cache not created; the launcher runs without it.')
+        }
+    }
+}
+
 tasks.register('stampClasses') {
+    dependsOn 'aotCache'
     def stampFile = layout.buildDirectory.file('ai-worklog-stamp')
     outputs.upToDateWhen { false }
     doLast {

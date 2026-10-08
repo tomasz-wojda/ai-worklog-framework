@@ -314,6 +314,14 @@ The framework, workspace Groovy tools, and Gradle use the active system JVM.
 Runtime inventory is available as an explicit diagnostic and is not part of
 workspace preflight or setup readiness.
 
+`gradle -p groovy classes` (also run by `gradle -p groovy test`) builds
+`groovy/build/libs/ai-worklog.jar`, a launcher classpath limited to the Groovy
+modules the CLI uses, and a JDK AOT cache trained on common commands. The
+launcher uses them while they are newer than every source file and all
+classpath entries exist; otherwise it falls back to running the sources with
+`groovy`. A cache from another JDK or build is ignored silently. Rebuild after
+changing the JDK or Groovy installation.
+
 ```bash
 ai-worklog toolchain check
 ai-worklog toolchain list

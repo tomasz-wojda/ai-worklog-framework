@@ -20,6 +20,14 @@
       },
       "additionalProperties": false
     },
+    "reference": {
+      "type": "object",
+      "required": ["use"],
+      "properties": {
+        "use": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+      },
+      "additionalProperties": false
+    },
     "positional": {
       "type": "object",
       "required": ["name", "description", "required"],
@@ -63,11 +71,21 @@
         },
         "positionals": {
           "type": "array",
-          "items": {"$ref": "#/definitions/positional"}
+          "items": {
+            "anyOf": [
+              {"$ref": "#/definitions/positional"},
+              {"$ref": "#/definitions/reference"}
+            ]
+          }
         },
         "options": {
           "type": "array",
-          "items": {"$ref": "#/definitions/option"}
+          "items": {
+            "anyOf": [
+              {"$ref": "#/definitions/option"},
+              {"$ref": "#/definitions/reference"}
+            ]
+          }
         }
       },
       "oneOf": [
@@ -97,6 +115,14 @@
         "global_options": {
           "type": "array",
           "items": {"$ref": "#/definitions/option"}
+        },
+        "shared": {
+          "type": "object",
+          "properties": {
+            "options": {"type": "object"},
+            "positionals": {"type": "object"}
+          },
+          "additionalProperties": false
         },
         "commands": {
           "type": "array",

@@ -57,9 +57,21 @@ if [[ -z "$RUNTIME" && -n "${AI_WORKLOG_RUNTIME:-}" ]]; then
   RUNTIME="$AI_WORKLOG_RUNTIME"
 fi
 
+_read_config_runtime_line() {
+  local matches
+  [[ "$(grep -c '"runtime"' "$CONFIG_FILE")" == 1 ]] || return 1
+  matches="$(sed -n -E 's/^[[:space:]]*"runtime"[[:space:]]*:[[:space:]]*"(groovy|python)"[[:space:]]*,?[[:space:]]*$/\1/p' "$CONFIG_FILE")"
+  [[ "$matches" == groovy || "$matches" == python ]] || return 1
+  RUNTIME="$matches"
+}
+
 _read_config_runtime() {
   local runtime=""
   local python="${AI_WORKLOG_PYTHON:-python3}"
+
+  if _read_config_runtime_line; then
+    return 0
+  fi
 
   if [[ -x "$ROOT/.venv/bin/python" ]]; then
     python="$ROOT/.venv/bin/python"
