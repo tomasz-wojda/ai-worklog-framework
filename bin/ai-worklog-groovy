@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$SOURCE_DIR/$SOURCE" ;;
+  esac
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 SRC_DIR="$ROOT/groovy/src/main/groovy"
 BUILD_DIR="$ROOT/groovy/build"
 CLASSPATH_FILE="$BUILD_DIR/ai-worklog.classpath"

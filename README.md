@@ -79,8 +79,10 @@ Python remains a supported fallback and parity reference.
 
 - macOS or Linux
 - Groovy with a compatible system JVM
-- Python 3.10 or newer for the fallback runtime and parity tests
 - Git
+- Python 3.9 or newer for the AI Vault rules installer and hooks; Python 3.10
+  or newer for the Python fallback runtime and parity tests
+- Gradle, optional, to precompile the CLI for faster startup
 - Optional tools used by individual adapters:
   - GitHub CLI
   - AWS CLI
@@ -90,14 +92,66 @@ Python remains a supported fallback and parity reference.
 
 ## Installation
 
-Clone the repository and put its dispatcher on `PATH`:
+### Quick start
+
+The recommended layout keeps both repositories inside the workspace, where
+`ai-worklog` finds the AI vault without extra configuration:
+
+```
+~/workspace/
+└── repos/
+    ├── ai-vault/
+    └── ai-worklog-framework/
+```
 
 ```bash
-git clone https://github.com/tomasz-wojda/ai-worklog-framework.git
-cd ai-worklog-framework
-export PATH="$PWD/bin:$PATH"
+# 1. create the workspace folder
+mkdir ~/workspace
+
+# 2. create the repos folder inside it
+mkdir ~/workspace/repos
+
+# 3. clone AI Vault and the framework into repos/
+git clone https://github.com/tomasz-wojda/ai-vault.git ~/workspace/repos/ai-vault
+git clone https://github.com/tomasz-wojda/ai-worklog-framework.git ~/workspace/repos/ai-worklog-framework
+
+# 4. put the ai-worklog command on PATH with a symlink
+mkdir -p ~/.local/bin
+ln -s ~/workspace/repos/ai-worklog-framework/bin/ai-worklog ~/.local/bin/ai-worklog
 ai-worklog --version
+#    if the command is not found, add ~/.local/bin to PATH once:
+#    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# 5. optional: precompile for faster startup (about a quarter second instead of several)
+gradle -p ~/workspace/repos/ai-worklog-framework/groovy classes
+
+# 6. set up the workspace from inside it
+cd ~/workspace
+ai-worklog workspace apply --dry-run
+ai-worklog workspace apply
+
+# 7. confirm, then see which integrations still need credentials
+ai-worklog workspace check
+ai-worklog preflight
 ```
+
+Step 4 can use any directory already on `PATH`; the launcher follows the
+symlink back to the repository. Step 5 needs `GROOVY_HOME` or a Groovy
+installation at `/opt/groovy/current`, and must be repeated after pulling
+framework changes; without it the launcher runs the sources directly. Step 6
+materializes AI Vault skills for the detected IDEs, installs the AI Vault
+workspace rules (`.rules`, `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/`),
+creates `integrations/`, and registers the workspace with the vault it found in
+`repos/ai-vault`. A new workspace reports preflight issues until credentials are
+placed under `integrations/<service>/`.
+
+Cursor users also install the machine-wide Cursor hooks once, as described in
+AI Vault's README (`scripts/install-cursor-harness.py --scope user`).
+
+To update later, pull both repositories, repeat step 5, and rerun
+`ai-worklog workspace apply`; it only adds what is missing.
+
+### Runtimes
 
 Groovy is the default runtime. The launcher uses the active system JVM selected
 by the Groovy installation. Install the optional Python fallback and test
@@ -149,7 +203,8 @@ ai-worklog workspace check
 ai-worklog preflight
 ```
 
-Step 1 is required once per machine: without a vault root `apply` stops with
+Step 1 is needed only when the vault is not at `<workspace>/repos/ai-vault`, the
+location `apply` checks by default; without either, `apply` stops with
 `AI vault not found`. Pass `--ai-vault PATH` to `apply` instead to supply it per
 invocation. Step 4 lists every integration as not configured until credentials
 are placed under `integrations/<service>/`, which the framework never does for
