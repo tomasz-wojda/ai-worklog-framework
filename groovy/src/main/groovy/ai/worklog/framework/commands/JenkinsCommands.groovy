@@ -39,11 +39,11 @@ class JenkinsCommands {
         String dispatchAction = action
         List<String> actionPath = ['service', 'jenkins', action]
         if (action == 'plugins') {
-            String pluginAction = args && args[0] in ['list', 'vulnerabilities'] ?
+            String pluginAction = args && args[0] in ['list', 'vulnerabilities', 'install'] ?
                 args.remove(0) : 'list'
             actionPath << pluginAction
-            dispatchAction = pluginAction == 'vulnerabilities' ?
-                'plugin-vulnerabilities' : 'plugins'
+            dispatchAction = [vulnerabilities: 'plugin-vulnerabilities', install: 'plugin-install'][pluginAction] ?:
+                'plugins'
         }
         Map actionDefinition = contract.node(actionPath)
         if (!actionDefinition) {
@@ -169,6 +169,19 @@ class JenkinsCommands {
                         .collect { it.toLowerCase() }
                         .unique()
                         .sort(),
+                    settings.timeout_seconds as int
+                )
+            case 'plugin-install':
+                return adapter.operatorPluginInstall(
+                    parsed.positional('controller'),
+                    parsed.variadic('plugins'),
+                    parsed.flag('--apply'),
+                    settings.timeout_seconds as int
+                )
+            case 'safe-restart':
+                return adapter.operatorSafeRestart(
+                    parsed.positional('controller'),
+                    parsed.flag('--apply'),
                     settings.timeout_seconds as int
                 )
             case 'credentials':

@@ -427,24 +427,120 @@ class AutomoxOperatorTest extends GroovyTestCase {
         assertEquals('03:30', report.schedule.time)
         assertTrue(report.schedule.use_scheduled_timezone)
         assertFalse(report.schedule.next_remediation_reliable)
+        assertEquals(42, report.schedule.schedule_days)
+        assertEquals([], report.schedule.months)
+        assertNull(report.message)
         assertEquals([], validateReport(report))
     }
 
     void testScheduleWeekBitDecoding() {
         writeProperties(defaultProperties())
+        assertEquals([1, 3], schedulePolicy([schedule_weeks_of_month: 10]).schedule.weeks_of_month)
+        assertEquals([1, 2, 3, 4, 5], schedulePolicy([schedule_weeks_of_month: 62]).schedule.weeks_of_month)
+        assertEquals([2, 4], schedulePolicy([schedule_weeks_of_month: 20]).schedule.weeks_of_month)
+    }
+
+    void testScheduleSundayAndAllDays() {
+        writeProperties(defaultProperties())
+        assertEquals(['Sun'], schedulePolicy([schedule_days: 128]).schedule.days)
+        assertEquals(
+            ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+            schedulePolicy([schedule_days: 254]).schedule.days
+        )
+    }
+
+    void testScheduleMonthDecoding() {
+        writeProperties(defaultProperties())
+        assertEquals(
+            ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+            schedulePolicy([schedule_months: 8190]).schedule.months
+        )
+        Map report = schedulePolicy([schedule_months: 4680])
+        assertEquals(['Mar', 'Jun', 'Sep', 'Dec'], report.schedule.months)
+        assertEquals(4680, report.schedule.schedule_months)
+        String human = AutomoxOperatorReport.fromPayload(report).renderHuman(new Redaction(repository))
+        assertTrue(human.contains('  Schedule months: [Mar, Jun, Sep, Dec]'))
+        assertEquals([], validateReport(report))
+    }
+
+    void testScheduleUndefinedBitsReported() {
+        writeProperties(defaultProperties())
+        Map report = schedulePolicy([schedule_days: 1, schedule_weeks_of_month: 65, schedule_months: 8191])
+        assertEquals([], report.schedule.days)
+        assertEquals([], report.schedule.weeks_of_month)
+        assertEquals(12, report.schedule.months.size())
+        assertEquals(
+            'schedule_days=1 has undefined bits 1; ' +
+                'schedule_weeks_of_month=65 has undefined bits 65; ' +
+                'schedule_months=8191 has undefined bits 1',
+            report.message
+        )
+        assertEquals([], validateReport(report))
+    }
+
+    void testDeviceProjectsNextPatchTimeAndPolicies() {
+        writeProperties(defaultProperties())
+        Map scheduled = server(100, 'host.example.internal', true, [
+            next_patch_time: '2026-10-11T03:30:00+0000',
+            server_policies: [
+                [id: 900, name: 'Patch Policy', next_remediation: '2026-10-11T03:30:00Z', status: 'ok'],
+                'ignored'
+            ]
+        ])
+        Map report = automoxAdapter([:], serverRouter([scheduled])).operatorDevice('default', '100', 5)
+        Map item = report.items[0]
+        assertEquals('2026-10-11T03:30:00+0000', item.next_patch_time)
+        assertEquals(
+            [[id: 900, name: 'Patch Policy', next_remediation: '2026-10-11T03:30:00Z']],
+            item.policies
+        )
+        assertFalse(item.next_remediation_reliable)
+        assertEquals([], validateReport(report))
+
+        Map bare = automoxAdapter([:], serverRouter([server(101, 'bare.example.internal')]))
+            .operatorDevice('default', '101', 5)
+        assertNull(bare.items[0].next_patch_time)
+        assertEquals([], bare.items[0].policies)
+    }
+
+    void testDevicePackagesPaging() {
+        writeProperties(defaultProperties())
+        List packages = [
+            packageRow('alpha', '1.0', true),
+            packageRow('beta', '2.0', false),
+            packageRow('gamma', '3.0', false)
+        ]
+        AutomoxAdapter adapter = automoxAdapter([:], packageRouter(packages))
+        Map first = adapter.operatorDevicePackages('default', '100', 'all', null, 2, 5, 1)
+        assertEquals(['alpha', 'beta'], first.items*.package_name)
+        assertTrue(first.truncated)
+        assertEquals([packages: 3, returned: 2, page: 1, pages: 2], first.totals)
+        Map second = adapter.operatorDevicePackages('default', '100', 'all', null, 2, 5, 2)
+        assertEquals(['gamma'], second.items*.package_name)
+        assertFalse(second.truncated)
+        assertEquals(2, second.totals.page)
+        assertEquals(2, second.totals.pages)
+        assertEquals([], validateReport(second))
+        String message = shouldFail(IllegalArgumentException) {
+            adapter.operatorDevicePackages('default', '100', 'all', null, 2, 5, 3)
+        }
+        assertEquals('Invalid --page: 3 (last page 2)', message)
+    }
+
+    private Map schedulePolicy(Map overrides) {
         Map policy = [
             id: 900,
             name: 'Patch Policy',
             policy_type_name: 'patch',
             schedule_days: 0,
-            schedule_weeks_of_month: 10,
+            schedule_weeks_of_month: 0,
+            schedule_months: 0,
             schedule_time: '03:30',
             configuration: [:],
             server_groups: [1],
             notes: 'notes'
-        ]
-        Map report = automoxAdapter([:], policyRouter(policy)).operatorPolicy('default', '900', 5)
-        assertEquals([2, 4], report.schedule.weeks_of_month)
+        ] + overrides
+        automoxAdapter([:], policyRouter(policy)).operatorPolicy('default', '900', 5)
     }
 
     void testDeviceQueueFilteringTerminalAndTimeoutWithoutSleep() {

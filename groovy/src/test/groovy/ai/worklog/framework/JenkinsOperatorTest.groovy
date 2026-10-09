@@ -16,6 +16,7 @@ import ai.worklog.framework.core.Redaction
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsOperatorReport
 import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
+import ai.worklog.framework.jenkins.JenkinsScriptGuard
 import ai.worklog.framework.jenkins.JenkinsScriptSource
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.reconciliation.Observation
@@ -58,7 +59,7 @@ class JenkinsOperatorTest extends GroovyTestCase {
         Map controllers = PropertiesSupport.controllers(new File(workspace, 'integrations/jenkins/jenkins.properties'))
         List publicInfo = JenkinsAdapter.controllerPublicInfo(controllers)
         assertEquals(
-            [[id: 'primary', url: 'https://jenkins.example', has_user: true, has_token: true, run_scripts: false]],
+            [[id: 'primary', url: 'https://jenkins.example', has_user: true, has_token: true, run_scripts: false, admin_actions: false]],
             publicInfo
         )
         assertFalse JsonOutputWrapper.json(publicInfo).contains('secret-token')
@@ -90,6 +91,26 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals(Status.DEGRADED, report.status)
         assertTrue report.items[0].quieting_down
         assertEquals(0, exitCode(report))
+    }
+
+    void testOperatorHealthReportsCoreVersionFromHeader() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:])
+        String body = '{"mode":"NORMAL","quietingDown":false,"numExecutors":2,"nodeDescription":"controller"}'
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            [code: 200, body: body, error: '', headers: ['x-jenkins': '2.516.3']]
+        }
+        Map report = adapter.operatorHealth('primary', 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('2.516.3', report.core_version)
+        String human = JenkinsOperatorReport.fromPayload(report).renderHuman(new Redaction(repository))
+        assertTrue(human.contains('  Jenkins core: 2.516.3'))
+        assertTrue(JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('"core_version": "2.516.3"'))
+
+        adapter.http.requestHandler = { method, url, headers, timeout -> [code: 200, body: body, error: ''] }
+        Map bare = adapter.operatorHealth('primary', 5)
+        assertFalse(bare.containsKey('core_version'))
+        assertFalse(JenkinsOperatorReport.fromPayload(bare).renderHuman(new Redaction(repository)).contains('Jenkins core'))
     }
 
     void testOperatorHealthMissingController() {
@@ -1801,6 +1822,21 @@ class JenkinsOperatorTest extends GroovyTestCase {
         )
     }
 
+    void testControllerPublicInfoAdminActionsFlag() {
+        writeProperties(
+            'a.url=u\na.admin_actions=true\n' +
+            'b.url=u\nb.admin_actions= TRUE \n' +
+            'c.url=u\n' +
+            'd.url=u\nd.admin_actions=false\n' +
+            'e.url=u\ne.admin_actions=yes\n'
+        )
+        Map report = adapterWithMocks([:]).operatorControllers()
+        assertEquals(
+            [a: true, b: true, c: false, d: false, e: false],
+            report.items.collectEntries { [(it.id): it.admin_actions] }
+        )
+    }
+
     void testRunScriptDisabledControllerBlockedWithoutNetwork() {
         ['', 'primary.run_scripts=false\n', 'primary.run_scripts=yes\n'].each { String flag ->
             List<Map> calls = []
@@ -1840,18 +1876,56 @@ class JenkinsOperatorTest extends GroovyTestCase {
     void testRunScriptApplyPostsScriptAndReturnsOutput() {
         List<Map> calls = []
         writeProperties(runScriptProperties())
-        Map report = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: 'hello\n', error: '']))
-            .operatorRunScript('primary', inlineSource('println "hello"'), true)
+        JenkinsAdapter adapter = guardedAdapter(recordingScriptClient(calls, [code: 200, body: guardedBody('hello\n'), error: '']))
+        Map report = adapter.operatorRunScript('primary', inlineSource('println "hello"'), true)
         assertEquals(Status.READY, report.status)
         assertEquals('Script executed', report.message)
         assertEquals('hello\n', report.items[0].output)
         assertEquals(6, report.items[0].output_bytes)
+        assertEquals('ok', report.items[0].script_status)
+        assertFalse(report.items[0].containsKey('exception_class'))
         assertTrue(report.items[0].applied)
         assertFalse(report.items[0].dry_run)
         assertFalse(report.items[0].truncated)
         assertEquals(1, calls.size())
         assertTrue(calls[0].url.toString().endsWith('/scriptText'))
-        assertEquals('println "hello"', calls[0].form.script)
+        assertTrue(calls[0].form.script.contains(encodedSource('println "hello"')))
+        assertTrue(calls[0].form.script.contains("'__AIWL_TESTNONCE__'"))
+        assertTrue(calls[0].form.script.contains("addStarImports('jenkins', 'jenkins.model', 'hudson', 'hudson.model')"))
+    }
+
+    void testRunScriptDetectsScriptException() {
+        writeProperties(runScriptProperties())
+        String trace = 'before\ngroovy.lang.MissingPropertyException: No such property: x\n\tat Script1.run(Script1.groovy:1)\n'
+        JenkinsAdapter adapter = guardedAdapter(recordingScriptClient([], [
+            code: 200,
+            body: trace + '\n__AIWL_TESTNONCE__ status=error class=groovy.lang.MissingPropertyException\n',
+            error: ''
+        ]))
+        Map report = adapter.operatorRunScript('primary', inlineSource('println "before"; x'), true)
+        assertEquals(Status.ERROR, report.status)
+        assertEquals('Script raised groovy.lang.MissingPropertyException', report.message)
+        assertEquals(2, exitCode(report))
+        assertEquals('error', report.items[0].script_status)
+        assertEquals('groovy.lang.MissingPropertyException', report.items[0].exception_class)
+        assertEquals(trace, report.items[0].output)
+        assertTrue(report.items[0].applied)
+        String human = JenkinsOperatorReport.fromPayload(report).renderHuman(new Redaction(repository))
+        assertTrue(human.contains('  Script status: error'))
+        assertTrue(human.contains('  Exception: groovy.lang.MissingPropertyException'))
+        assertFalse(JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository)).contains('error_kind'))
+    }
+
+    void testRunScriptMissingTrailerDegraded() {
+        writeProperties(runScriptProperties())
+        JenkinsAdapter adapter = guardedAdapter(recordingScriptClient([], [code: 200, body: 'partial\n', error: '']))
+        Map report = adapter.operatorRunScript('primary', inlineSource('x'), true)
+        assertEquals(Status.DEGRADED, report.status)
+        assertEquals('Script executed; completion not confirmed', report.message)
+        assertEquals('unknown', report.items[0].script_status)
+        assertEquals('partial\n', report.items[0].output)
+        assertFalse(report.items[0].truncated)
+        assertEquals(0, exitCode(report))
     }
 
     void testRunScriptTruncatesOutput() {
@@ -1869,7 +1943,8 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals('abcd', report.items[0].output)
         assertEquals(4, report.items[0].output_bytes)
         assertTrue(report.items[0].truncated)
-        assertEquals(5, calls[0].max)
+        assertEquals('unknown', report.items[0].script_status)
+        assertEquals(4 + JenkinsScriptGuard.TRAILER_RESERVE_BYTES + 1, calls[0].max)
     }
 
     void testRunScriptMapsBlockedAndErrorStatuses() {
@@ -1930,7 +2005,7 @@ class JenkinsOperatorTest extends GroovyTestCase {
     void testCliRunScriptReadsStdin() {
         writeProperties(runScriptProperties())
         List<Map> calls = []
-        JenkinsAdapter adapter = adapterWithMocks([:], null, recordingScriptClient(calls, [code: 200, body: '42\n', error: '']))
+        JenkinsAdapter adapter = guardedAdapter(recordingScriptClient(calls, [code: 200, body: guardedBody('42\n'), error: '']))
         Map captured = captureStreams {
             JenkinsCommands.run(
                 'run-script',
@@ -1949,15 +2024,14 @@ class JenkinsOperatorTest extends GroovyTestCase {
         assertEquals('stdin', parsed.items[0].source)
         assertEquals('42\n', parsed.items[0].output)
         assertEquals(true, parsed.items[0].applied)
-        assertEquals('println 42', calls[0].form.script)
+        assertEquals('ok', parsed.items[0].script_status)
+        assertTrue(calls[0].form.script.contains(encodedSource('println 42')))
     }
 
     void testCliRunScriptHumanOutputPrintsOutputBlock() {
         writeProperties(runScriptProperties())
-        JenkinsAdapter adapter = adapterWithMocks(
-            [:],
-            null,
-            recordingScriptClient([], [code: 200, body: 'line one\nline two', error: ''])
+        JenkinsAdapter adapter = guardedAdapter(
+            recordingScriptClient([], [code: 200, body: guardedBody('line one\nline two'), error: ''])
         )
         File script = File.createTempFile('run-script-', '.groovy')
         script.text = 'println "line one"'
@@ -1977,10 +2051,364 @@ class JenkinsOperatorTest extends GroovyTestCase {
             assertEquals(0, captured.code)
             assertTrue(captured.out.contains("  Source: file ${script.path}"))
             assertTrue(captured.out.contains('  Applied: true'))
+            assertTrue(captured.out.contains('  Script status: ok'))
             assertTrue(captured.out.contains("  Output:${System.lineSeparator()}line one\nline two${System.lineSeparator()}"))
         } finally {
             script.delete()
         }
+    }
+
+    void testPluginInstallDisabledControllerBlockedWithoutNetwork() {
+        ['', 'primary.admin_actions=false\n', 'primary.admin_actions=yes\n'].each { String flag ->
+            writeProperties(defaultProperties() + flag)
+            List<Map> calls = []
+            List<String> gets = []
+            JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 200, body: '', error: ''] }, gets) { url ->
+                [code: 200, body: pluginsBody(), error: '']
+            }
+            [false, true].each { boolean apply ->
+                Map report = adapter.operatorPluginInstall('primary', ['git'], apply, 5)
+                assertEquals(Status.BLOCKED, report.status)
+                assertEquals(
+                    "Admin actions disabled for controller 'primary'; set primary.admin_actions=true",
+                    report.message
+                )
+                assertEquals(3, exitCode(report))
+            }
+            assertEquals([], calls)
+            assertEquals([], gets)
+        }
+    }
+
+    void testPluginInstallDryRunClassifiesPlugins() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        List<String> gets = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, gets) { url ->
+            [code: 200, body: pluginsBody(), error: '']
+        }
+        Map report = adapter.operatorPluginInstall('primary', ['git', 'bouncycastle-api', 'new-plugin', 'git'], false, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('Plugin install planned', report.message)
+        assertEquals(
+            [
+                [name: 'bouncycastle-api', installed_version: '2.30', has_update: true, action: 'upgrade', applied: false, dry_run: true],
+                [name: 'git', installed_version: '5.0', has_update: false, action: 'current', applied: false, dry_run: true],
+                [name: 'new-plugin', installed_version: null, has_update: false, action: 'install', applied: false, dry_run: true]
+            ],
+            report.items
+        )
+        assertEquals([], calls)
+        assertEquals(1, gets.size())
+        assertTrue(gets[0].contains('/pluginManager/api/json?depth=1&tree=plugins[shortName,version,hasUpdate]'))
+    }
+
+    void testPluginInstallApplyPostsOnlyChangedPlugins() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: pluginsBody(), error: '']
+        }
+        Map report = adapter.operatorPluginInstall('primary', ['git', 'bouncycastle-api', 'new-plugin'], true, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('Plugin install queued; run safe-restart to activate', report.message)
+        assertEquals(1, calls.size())
+        assertTrue(calls[0].url.toString().endsWith('/pluginManager/install'))
+        assertEquals(['plugin.bouncycastle-api.default': 'on', 'plugin.new-plugin.default': 'on'], calls[0].form)
+        assertEquals([true, false, true], report.items*.applied)
+        assertEquals([false, false, false], report.items*.dry_run)
+        assertEquals(0, exitCode(report))
+    }
+
+    void testPluginInstallAllCurrentSkipsPost() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: pluginsBody(), error: '']
+        }
+        Map report = adapter.operatorPluginInstall('primary', ['git'], true, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('All requested plugins are current', report.message)
+        assertEquals([], calls)
+    }
+
+    void testPluginInstallMapsBlockedAndErrorStatuses() {
+        writeProperties(adminProperties())
+        [
+            403: [Status.BLOCKED, 'Jenkins returned HTTP 403'],
+            500: [Status.ERROR, 'Jenkins returned HTTP 500'],
+            0: [Status.ERROR, 'Plugin install request failed']
+        ].each { int code, List expected ->
+            JenkinsAdapter adapter = adminAdapter([], { url -> [code: code, body: '', error: 'x'] }, []) { url ->
+                [code: 200, body: pluginsBody(), error: '']
+            }
+            Map report = adapter.operatorPluginInstall('primary', ['new-plugin'], true, 5)
+            assertEquals(expected[0], report.status)
+            assertEquals(expected[1], report.message)
+            assertFalse(report.items[0].applied)
+        }
+        JenkinsAdapter forbidden = adminAdapter([], { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 403, body: '', error: '']
+        }
+        assertEquals(Status.BLOCKED, forbidden.operatorPluginInstall('primary', ['git'], false, 5).status)
+    }
+
+    void testPluginInstallRejectsInvalidPluginName() {
+        writeProperties(adminProperties())
+        String message = shouldFail(IllegalArgumentException) {
+            adapterWithMocks([:]).operatorPluginInstall('primary', ['../x'], false, 5)
+        }
+        assertEquals('Invalid plugin name: ../x', message)
+    }
+
+    void testSafeRestartDryRunListsRunningBuilds() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        List<String> gets = []
+        JenkinsAdapter idle = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, gets) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map planned = idle.operatorSafeRestart('primary', false, 5)
+        assertEquals(Status.READY, planned.status)
+        assertEquals('Safe restart planned', planned.message)
+        assertEquals(0, planned.items[0].running_count)
+        assertTrue(gets[0].contains('/computer/api/json?depth=2&tree=computer[displayName,executors[currentExecutable[url,fullDisplayName]]'))
+
+        JenkinsAdapter busy = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: busyComputersBody(), error: '']
+        }
+        Map refused = busy.operatorSafeRestart('primary', false, 5)
+        assertEquals(Status.DEGRADED, refused.status)
+        assertEquals('Safe restart would be refused: 3 builds running', refused.message)
+        assertEquals(0, exitCode(refused))
+        assertEquals(3, refused.items[0].running_count)
+        assertEquals(
+            ['https://jenkins.example/job/a/1/', 'https://jenkins.example/job/p/7/', 'agent-1: PlaceholderExecutable'],
+            refused.items[0].running_builds
+        )
+        assertTrue(refused.items[0].dry_run)
+        assertEquals([], calls)
+    }
+
+    void testSafeRestartApplyRefusesWhileBuildsRun() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: computersBody(['https://jenkins.example/job/a/1/']), error: '']
+        }
+        Map report = adapter.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.BLOCKED, report.status)
+        assertEquals('Safe restart refused: 1 builds running', report.message)
+        assertEquals(3, exitCode(report))
+        assertFalse(report.items[0].applied)
+        assertFalse(report.items[0].quiet_down)
+        assertEquals([], calls)
+    }
+
+    void testSafeRestartApplyQuietsDownThenRestartsWhenIdle() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        List<String> gets = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, gets) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map report = adapter.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('Safe restart scheduled; no builds running', report.message)
+        assertEquals(2, calls.size())
+        assertTrue(calls[0].url.toString().endsWith('/quietDown'))
+        assertTrue(calls[1].url.toString().endsWith('/safeRestart'))
+        assertEquals(2, gets.size())
+        assertTrue(report.items[0].applied)
+        assertFalse(report.items[0].dry_run)
+        assertTrue(report.items[0].quiet_down)
+    }
+
+    void testSafeRestartApplyLeavesQuietDownWhenBuildStartsBetweenChecks() {
+        writeProperties(adminProperties())
+        List<Map> calls = []
+        List<String> gets = []
+        JenkinsAdapter adapter = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, gets) { url ->
+            [code: 200, body: computersBody(gets.size() == 1 ? [] : ['https://jenkins.example/job/late/3/']), error: '']
+        }
+        Map report = adapter.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.BLOCKED, report.status)
+        assertEquals('Safe restart refused: 1 builds started; controller left in quiet-down', report.message)
+        assertEquals(3, exitCode(report))
+        assertEquals(1, calls.size())
+        assertTrue(calls[0].url.toString().endsWith('/quietDown'))
+        assertTrue(report.items[0].quiet_down)
+        assertFalse(report.items[0].applied)
+        assertEquals(['https://jenkins.example/job/late/3/'], report.items[0].running_builds)
+    }
+
+    void testSafeRestartDisabledAndErrorStatuses() {
+        writeProperties(defaultProperties())
+        List<Map> calls = []
+        List<String> gets = []
+        JenkinsAdapter disabled = adminAdapter(calls, { url -> [code: 302, body: '', error: ''] }, gets) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map blocked = disabled.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.BLOCKED, blocked.status)
+        assertEquals("Admin actions disabled for controller 'primary'; set primary.admin_actions=true", blocked.message)
+        assertEquals([], calls)
+        assertEquals([], gets)
+
+        writeProperties(adminProperties())
+        JenkinsAdapter forbidden = adminAdapter([], { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 403, body: '', error: '']
+        }
+        assertEquals(Status.BLOCKED, forbidden.operatorSafeRestart('primary', false, 5).status)
+        JenkinsAdapter failing = adminAdapter([], { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 500, body: '', error: '']
+        }
+        Map degraded = failing.operatorSafeRestart('primary', false, 5)
+        assertEquals(Status.DEGRADED, degraded.status)
+        assertEquals('Jenkins returned HTTP 500', degraded.message)
+
+        List<Map> quietCalls = []
+        JenkinsAdapter quietFails = adminAdapter(quietCalls, { url -> [code: 500, body: '', error: ''] }, []) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map quietError = quietFails.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.ERROR, quietError.status)
+        assertEquals('Jenkins returned HTTP 500', quietError.message)
+        assertEquals(1, quietCalls.size())
+
+        JenkinsAdapter restartFails = adminAdapter([], { url ->
+            url.endsWith('/quietDown') ? [code: 302, body: '', error: ''] : [code: 500, body: '', error: '']
+        }, []) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map restartError = restartFails.operatorSafeRestart('primary', true, 5)
+        assertEquals(Status.ERROR, restartError.status)
+        assertEquals('Jenkins returned HTTP 500; controller left in quiet-down', restartError.message)
+        assertEquals(2, exitCode(restartError))
+        assertTrue(restartError.items[0].quiet_down)
+    }
+
+    void testCliPluginsInstallDryRunJson() {
+        writeProperties(adminProperties())
+        JenkinsAdapter adapter = adminAdapter([], { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: pluginsBody(), error: '']
+        }
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'plugins',
+                ['install', 'primary', 'git', 'new-plugin', '--json'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true },
+                adapter
+            )
+        }
+        assertEquals(0, captured.code)
+        Map parsed = (Map) new JsonSlurper().parseText(captured.out)
+        assertEquals('plugin-install', parsed.operation)
+        assertEquals(['current', 'install'], parsed.items*.action)
+        assertEquals([true, true], parsed.items*.dry_run)
+    }
+
+    void testCliSafeRestartDryRunJson() {
+        writeProperties(adminProperties())
+        JenkinsAdapter adapter = adminAdapter([], { url -> [code: 302, body: '', error: ''] }, []) { url ->
+            [code: 200, body: computersBody([]), error: '']
+        }
+        Map captured = captureStreams {
+            JenkinsCommands.run(
+                'safe-restart',
+                ['primary', '--json'],
+                repository,
+                new FrameworkPaths(workspace),
+                ConfigLoader.load(workspace),
+                { true },
+                adapter
+            )
+        }
+        assertEquals(0, captured.code)
+        Map parsed = (Map) new JsonSlurper().parseText(captured.out)
+        assertEquals('safe-restart', parsed.operation)
+        assertEquals(0, parsed.items[0].running_count)
+        assertEquals([], parsed.items[0].running_builds)
+        assertEquals(false, parsed.items[0].quiet_down)
+    }
+
+    private JenkinsAdapter adminAdapter(
+        List<Map> calls,
+        Closure<Map> postResponse,
+        List<String> gets,
+        Closure<Map> getResponse
+    ) {
+        ReadOnlyHttp crumbHttp = new ReadOnlyHttp()
+        crumbHttp.requestHandler = { method, url, headers, timeout -> [code: 404, body: '', error: ''] }
+        FormHttp formHttp = new FormHttp()
+        formHttp.requestHandler = { url, headers, form, timeout, maxCharacters ->
+            calls << [url: url, form: form, max: maxCharacters]
+            postResponse.call(url.toString())
+        }
+        JenkinsAdapter adapter = adapterWithMocks([:], null, new JenkinsScriptConsoleClient(crumbHttp, formHttp))
+        adapter.http.requestHandler = { method, url, headers, timeout ->
+            gets << url.toString()
+            getResponse.call(url.toString())
+        }
+        adapter
+    }
+
+    private static String pluginsBody() {
+        groovy.json.JsonOutput.toJson([plugins: [
+            [shortName: 'bouncycastle-api', version: '2.30', hasUpdate: true],
+            [shortName: 'git', version: '5.0', hasUpdate: false]
+        ]])
+    }
+
+    private static String computersBody(List<String> runningUrls) {
+        groovy.json.JsonOutput.toJson([computer: [[
+            displayName: 'Built-In Node',
+            executors: runningUrls.collect { [currentExecutable: [url: it, fullDisplayName: it]] } +
+                [[currentExecutable: null]],
+            oneOffExecutors: []
+        ]]])
+    }
+
+    private static String busyComputersBody() {
+        groovy.json.JsonOutput.toJson([computer: [
+            [
+                displayName: 'Built-In Node',
+                executors: [
+                    [currentExecutable: [url: 'https://jenkins.example/job/a/1/', fullDisplayName: 'a #1']],
+                    [currentExecutable: null]
+                ],
+                oneOffExecutors: [
+                    [currentExecutable: [url: 'https://jenkins.example/job/p/7/', fullDisplayName: 'p #7']],
+                    [currentExecutable: [url: 'https://jenkins.example/job/p/7/', fullDisplayName: 'p #7']]
+                ]
+            ],
+            [
+                displayName: 'agent-1',
+                executors: [[currentExecutable: [_class: 'PlaceholderExecutable']]],
+                oneOffExecutors: []
+            ]
+        ]])
+    }
+
+    private JenkinsAdapter guardedAdapter(JenkinsScriptConsoleClient client) {
+        JenkinsAdapter adapter = adapterWithMocks([:], null, client)
+        adapter.scriptNonce = { 'TESTNONCE' }
+        adapter
+    }
+
+    private static String guardedBody(String output) {
+        output + '\n__AIWL_TESTNONCE__ status=ok\n'
+    }
+
+    private static String encodedSource(String source) {
+        Base64.encoder.encodeToString(source.getBytes('UTF-8'))
+    }
+
+    private static String adminProperties() {
+        defaultProperties() + 'primary.admin_actions=true\n'
     }
 
     private static Map inlineSource(String script) {

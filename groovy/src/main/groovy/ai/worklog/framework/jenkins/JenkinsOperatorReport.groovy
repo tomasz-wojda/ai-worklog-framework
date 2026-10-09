@@ -8,7 +8,7 @@ class JenkinsOperatorReport extends OperatorReport {
         'has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
         'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
         'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
-        'replaced', 'run_scripts'
+        'replaced', 'run_scripts', 'admin_actions', 'has_update', 'quiet_down'
     ]
 
     String controller
@@ -78,6 +78,7 @@ class JenkinsOperatorReport extends OperatorReport {
         line(output, "  Fetched: ${fetchedAt}")
         line(output, "  Status: ${status.value}")
         if (message) line(output, "  Message: ${redaction.redact(message)}")
+        if (operation == 'health' && coreVersion) line(output, "  Jenkins core: ${coreVersion}")
         if (required?.requested) {
             Set verified = (required.requested as Set) -
                 ((required.missing ?: []) as Set) -
@@ -115,6 +116,8 @@ class JenkinsOperatorReport extends OperatorReport {
         line(output, "  Source: ${item.source}" + (item.path ? " ${item.path}" : ''))
         line(output, "  Script: ${item.bytes} bytes, sha256 ${item.sha256}")
         line(output, "  Applied: ${item.applied}")
+        if (item.script_status) line(output, "  Script status: ${item.script_status}")
+        if (item.exception_class) line(output, "  Exception: ${item.exception_class}")
         if (!item.containsKey('output')) {
             return
         }

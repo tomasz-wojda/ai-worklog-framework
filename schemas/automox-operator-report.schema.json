@@ -50,6 +50,10 @@
       "properties": {
         "days": {"type": "array", "items": {"type": "string"}},
         "weeks_of_month": {"type": "array", "items": {"type": "integer"}},
+        "months": {"type": "array", "items": {"type": "string"}},
+        "schedule_days": {"type": "integer"},
+        "schedule_weeks_of_month": {"type": "integer"},
+        "schedule_months": {"type": "integer"},
         "time": {"type": "string"},
         "use_scheduled_timezone": {"type": "boolean"},
         "next_remediation_reliable": {"type": "boolean"}

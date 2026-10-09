@@ -168,7 +168,8 @@ class AutomoxCommands {
                     parsed.value('--state')?.toString() ?: 'all',
                     parsed.value('--query')?.toString(),
                     parseLimit(parsed.value('--limit'), settings.packages_limit as int, adapter.operatorRules, 'packages'),
-                    timeout
+                    timeout,
+                    parsed.value('--page') ? parsed.value('--page').toString() as int : 1
                 )
             case 'activity':
                 return adapter.operatorActivity(

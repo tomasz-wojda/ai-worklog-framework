@@ -85,6 +85,7 @@ class AutomoxOperatorReport extends OperatorReport {
         if (schedule) {
             line(output, "  Schedule days: ${schedule.days}")
             line(output, "  Schedule weeks: ${schedule.weeks_of_month}")
+            line(output, "  Schedule months: ${schedule.months}")
             line(output, "  Schedule time: ${schedule.time}")
         }
         if (change) line(output, "  Change: ${redaction.redact(change)}")

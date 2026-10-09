@@ -23,7 +23,15 @@
   "script_console": {
     "timeout_seconds": 60,
     "script_max_bytes": 1048576,
-    "output_max_bytes": 1048576
+    "output_max_bytes": 1048576,
+    "default_star_imports": ["jenkins", "jenkins.model", "hudson", "hudson.model"]
+  },
+  "admin_actions": {
+    "update_site": "default",
+    "plugin_install_path": "/pluginManager/install",
+    "quiet_down_path": "/quietDown",
+    "safe_restart_path": "/safeRestart",
+    "success_codes": [200, 302, 303]
   },
   "vulnerabilities": {
     "update_center_url_template": "https://updates.jenkins.io/{core}/update-center.actual.json",
@@ -58,6 +66,8 @@
     "views": "views[name,url,description]",
     "view_detail": "name,url,description,jobs[name,url,color,buildable,inQueue]",
     "whoami": "name,authenticated",
-    "credential_domains": "domains[domainName,displayName,description,url]"
+    "credential_domains": "domains[domainName,displayName,description,url]",
+    "plugin_install": "plugins[shortName,version,hasUpdate]",
+    "running_builds": "computer[displayName,executors[currentExecutable[url,fullDisplayName]],oneOffExecutors[currentExecutable[url,fullDisplayName]]]"
   }
 }

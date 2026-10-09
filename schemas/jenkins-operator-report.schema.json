@@ -22,6 +22,8 @@
         "download-artifact",
         "job-export",
         "run-script",
+        "plugin-install",
+        "safe-restart",
         "views",
         "whoami",
         "credential-domains"

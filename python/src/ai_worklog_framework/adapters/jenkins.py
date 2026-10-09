@@ -361,12 +361,21 @@ def controller_public_info(
             "has_user": bool(info.get("user")),
             "has_token": bool(info.get("token")),
             "run_scripts": _run_scripts_enabled(info),
+            "admin_actions": _admin_actions_enabled(info),
         })
     return items
 
 
+def _controller_flag(info: Dict[str, str], key: str) -> bool:
+    return str(info.get(key, "")).strip().lower() == "true"
+
+
 def _run_scripts_enabled(info: Dict[str, str]) -> bool:
-    return str(info.get("run_scripts", "")).strip().lower() == "true"
+    return _controller_flag(info, "run_scripts")
+
+
+def _admin_actions_enabled(info: Dict[str, str]) -> bool:
+    return _controller_flag(info, "admin_actions")
 
 
 def _controller_auth(
@@ -2028,6 +2037,7 @@ def report_to_json(report: Dict[str, Any]) -> str:
             "stuck",
             "blocked",
             "run_scripts",
+            "admin_actions",
         ):
             if safe_key in item:
                 target[safe_key] = item[safe_key]

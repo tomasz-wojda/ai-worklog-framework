@@ -146,20 +146,33 @@ commands:
         )
     }
 
-    void testJenkinsRenderingListsSeventeenActions() {
+    void testJenkinsRenderingListsEighteenActions() {
         List<Map> actions = contract.children(['service', 'jenkins'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins'])
-        assertEquals(17, actions.size())
+        assertEquals(18, actions.size())
+        assertTrue(actions*.name.contains('safe-restart'))
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
     void testJenkinsPluginsNestedContract() {
         List<Map> actions = contract.children(['service', 'jenkins', 'plugins'])
-        assertEquals(['list', 'vulnerabilities'], actions*.name)
+        assertEquals(['list', 'vulnerabilities', 'install'], actions*.name)
         String groupHelp = new UsageRenderer(contract).renderPath(
             ['service', 'jenkins', 'plugins']
         )
-        assertTrue(groupHelp.contains('{list|vulnerabilities}'))
+        assertTrue(groupHelp.contains('{list|vulnerabilities|install}'))
+        Map install = contract.node(['service', 'jenkins', 'plugins', 'install'])
+        ParsedArguments installParsed = parser().parse(
+            'service jenkins plugins',
+            install,
+            ['primary', 'git', 'bouncycastle-api', '--apply'],
+            rules
+        )
+        assertEquals(['git', 'bouncycastle-api'], installParsed.variadic('plugins'))
+        assertTrue(installParsed.flag('--apply'))
+        shouldFail(UsageError) {
+            parser().parse('service jenkins plugins', install, ['primary', '../x'], rules)
+        }
         String scanHelp = new UsageRenderer(contract).renderPath(
             ['service', 'jenkins', 'plugins', 'vulnerabilities']
         )
@@ -261,6 +274,16 @@ commands:
                 .renderPath(['service', 'automox', 'device-packages'])
                 .contains('<device>')
         )
+    }
+
+    void testAutomoxDevicePackagesPageOption() {
+        Map action = contract.node(['service', 'automox', 'device-packages'])
+        Map automoxRules = (Map) JsonFiles.read(new File(repository, 'shared/automox-operator-rules.json'), [:])
+        ParsedArguments parsed = parser().parse('service automox', action, ['host', '--page', '2'], automoxRules)
+        assertEquals('2', parsed.value('--page').toString())
+        shouldFail(UsageError) {
+            parser().parse('service automox', action, ['host', '--page', '0'], automoxRules)
+        }
     }
 
     void testNewRelicRenderingListsTwentySevenActions() {

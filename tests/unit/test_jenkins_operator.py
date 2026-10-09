@@ -58,6 +58,7 @@ def test_controller_public_info_redacts_secrets(tmp_path):
         "has_user": True,
         "has_token": True,
         "run_scripts": False,
+        "admin_actions": False,
     }]
     assert "secret-token" not in json.dumps(public)
     assert "bot" not in json.dumps(public)
@@ -75,6 +76,26 @@ def test_controller_public_info_run_scripts_flag(tmp_path):
     controllers = jenkins._load_controller_credentials(WorkspacePaths(tmp_path))
     public = jenkins.controller_public_info(controllers)
     assert {item["id"]: item["run_scripts"] for item in public} == {
+        "a": True,
+        "b": True,
+        "c": False,
+        "d": False,
+        "e": False,
+    }
+
+
+def test_controller_public_info_admin_actions_flag(tmp_path):
+    _write_properties(
+        tmp_path,
+        "a.url=u\na.admin_actions=true\n"
+        "b.url=u\nb.admin_actions= TRUE \n"
+        "c.url=u\n"
+        "d.url=u\nd.admin_actions=false\n"
+        "e.url=u\ne.admin_actions=yes\n",
+    )
+    controllers = jenkins._load_controller_credentials(WorkspacePaths(tmp_path))
+    public = jenkins.controller_public_info(controllers)
+    assert {item["id"]: item["admin_actions"] for item in public} == {
         "a": True,
         "b": True,
         "c": False,

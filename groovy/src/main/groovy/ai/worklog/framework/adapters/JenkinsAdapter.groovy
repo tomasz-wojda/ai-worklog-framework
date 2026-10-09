@@ -5,6 +5,7 @@ import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
+import ai.worklog.framework.jenkins.JenkinsScriptGuard
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.setup.SetupResolver
 import ai.worklog.framework.reconciliation.Observation
@@ -35,6 +36,7 @@ class JenkinsAdapter {
     final JenkinsScriptConsoleClient scriptConsole
     final Map operatorRules
     Pattern sensitiveParameterPattern
+    Closure<String> scriptNonce = { JenkinsScriptGuard.newNonce() }
 
     JenkinsAdapter(
         FrameworkPaths paths,
@@ -74,6 +76,8 @@ class JenkinsAdapter {
             script_timeout_seconds: (operatorRules.script_console?.timeout_seconds ?: 60) as int,
             script_max_bytes: (operatorRules.script_console?.script_max_bytes ?: 1048576L) as long,
             script_output_max_bytes: (operatorRules.script_console?.output_max_bytes ?: 1048576) as int,
+            script_star_imports: (operatorRules.script_console?.default_star_imports ?:
+                ['jenkins', 'jenkins.model', 'hudson', 'hudson.model']) as List,
             vulnerabilities: jenkins.vulnerabilities instanceof Map ?
                 (Map) jenkins.vulnerabilities : [:],
             ai_vault_root: jenkins.ai_vault_root?.toString(),
@@ -145,7 +149,7 @@ class JenkinsAdapter {
         }
         Map body = (Map) payload
         boolean quieting = body.quietingDown == true
-        [
+        Map report = [
             operation: 'health',
             controller: controller,
             fetched_at: fetchedAt,
@@ -158,6 +162,12 @@ class JenkinsAdapter {
                 node_description: body.nodeDescription
             ]]
         ]
+        Map headers = response.size() > 2 && response[2] instanceof Map ? (Map) response[2] : [:]
+        String coreVersion = headers['x-jenkins']?.toString()
+        if (coreVersion) {
+            report.core_version = coreVersion
+        }
+        report
     }
 
     Map operatorJob(
@@ -1319,13 +1329,15 @@ class JenkinsAdapter {
             ]
         }
         int outputLimit = settings.script_output_max_bytes as int
+        int readLimit = outputLimit + JenkinsScriptGuard.TRAILER_RESERVE_BYTES + 1
+        String nonce = scriptNonce.call()
         Map response = scriptConsole.execute(
             info.url.toString(),
             info.user.toString(),
             info.token.toString(),
-            scriptSource.text.toString(),
+            JenkinsScriptGuard.wrap(scriptSource.text.toString(), nonce, (List<String>) settings.script_star_imports),
             settings.script_timeout_seconds as int,
-            outputLimit + 1
+            readLimit
         )
         int statusCode = (response.code ?: 0) as int
         if (accessBlocked(statusCode)) {
@@ -1339,19 +1351,313 @@ class JenkinsAdapter {
                 statusCode ? "Jenkins returned HTTP ${statusCode}" : 'Script execution failed'
             )
         }
-        Map output = limitUtf8(response.body?.toString() ?: '', outputLimit)
+        String body = response.body?.toString() ?: ''
+        Map parsed = JenkinsScriptGuard.parse(body, nonce)
+        Map output = limitUtf8(parsed.output.toString(), outputLimit)
+        boolean truncated = output.truncated ||
+            (parsed.script_status == 'unknown' &&
+                body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length >= readLimit)
         item.output = output.text
         item.output_bytes = output.bytes
-        item.truncated = output.truncated
+        item.truncated = truncated
         item.applied = true
         item.dry_run = false
+        item.script_status = parsed.script_status
+        if (parsed.exception_class) {
+            item.exception_class = parsed.exception_class
+        }
+        runScriptResult(operation, controller, fetchedAt, item)
+    }
+
+    private static Map runScriptResult(String operation, String controller, String fetchedAt, Map item) {
+        Map result = [
+            operation: operation,
+            controller: controller,
+            fetched_at: fetchedAt,
+            items: [item]
+        ]
+        if (item.script_status == 'error') {
+            result.status = Status.ERROR
+            result.error_kind = 'system'
+            result.message = "Script raised ${item.exception_class}".toString()
+        } else if (item.truncated) {
+            result.status = Status.DEGRADED
+            result.message = 'Script executed; output truncated'
+        } else if (item.script_status == 'unknown') {
+            result.status = Status.DEGRADED
+            result.message = 'Script executed; completion not confirmed'
+        } else {
+            result.status = Status.READY
+            result.message = 'Script executed'
+        }
+        result
+    }
+
+    Map operatorPluginInstall(String controller, List<String> plugins, boolean apply, int timeout) {
+        String operation = 'plugin-install'
+        String fetchedAt = utcNow()
+        List<String> names = (plugins ?: []).collect { it.toString() }.unique().sort()
+        if (!names) {
+            throw new IllegalArgumentException('Missing plugin name')
+        }
+        names.each { String name ->
+            if (!SAFE_COMPONENT.matcher(name).matches()) {
+                throw new IllegalArgumentException("Invalid plugin name: ${name}")
+            }
+        }
+        Map precheck = adminPrecheck(operation, controller, fetchedAt)
+        if (precheck) {
+            return precheck
+        }
+        String tree = operatorRules.api_trees?.plugin_install?.toString() ?: 'plugins[shortName,version,hasUpdate]'
+        List response = jenkinsGet(controller, "/pluginManager/api/json?depth=1&tree=${tree}", timeout)
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (statusCode != 200 || !(payload instanceof Map)) {
+            return operatorHttpError(operation, controller, fetchedAt, statusCode)
+        }
+        Map<String, Map> installed = [:]
+        ((List) (((Map) payload).plugins ?: [])).each { entry ->
+            if (entry instanceof Map && entry.shortName) {
+                installed[entry.shortName.toString()] = (Map) entry
+            }
+        }
+        List<Map> items = names.collect { String name ->
+            Map current = installed[name]
+            boolean hasUpdate = current?.hasUpdate == true
+            [
+                name: name,
+                installed_version: current?.version,
+                has_update: hasUpdate,
+                action: !current ? 'install' : (hasUpdate ? 'upgrade' : 'current'),
+                applied: false,
+                dry_run: !apply
+            ]
+        }
+        List<Map> targets = items.findAll { it.action != 'current' }
+        if (!targets) {
+            return adminReport(operation, controller, fetchedAt, Status.READY, 'All requested plugins are current', items)
+        }
+        if (!apply) {
+            return adminReport(operation, controller, fetchedAt, Status.READY, 'Plugin install planned', items)
+        }
+        Map rules = adminRules()
+        String site = rules.update_site?.toString() ?: 'default'
+        Map form = targets.collectEntries { [("plugin.${it.name}.${site}".toString()): 'on'] }
+        Map failure = adminPost(
+            operation,
+            controller,
+            fetchedAt,
+            rules.plugin_install_path?.toString() ?: '/pluginManager/install',
+            form,
+            timeout,
+            'Plugin install request failed',
+            items
+        )
+        if (failure) {
+            return failure
+        }
+        targets.each {
+            it.applied = true
+            it.dry_run = false
+        }
+        adminReport(
+            operation,
+            controller,
+            fetchedAt,
+            Status.READY,
+            'Plugin install queued; run safe-restart to activate',
+            items
+        )
+    }
+
+    Map operatorSafeRestart(String controller, boolean apply, int timeout) {
+        String operation = 'safe-restart'
+        String fetchedAt = utcNow()
+        Map precheck = adminPrecheck(operation, controller, fetchedAt)
+        if (precheck) {
+            return precheck
+        }
+        Map running = fetchRunningBuilds(operation, controller, fetchedAt, timeout)
+        if (running.error) {
+            return (Map) running.error
+        }
+        Map item = [
+            running_count: running.builds.size(),
+            running_builds: running.builds,
+            quiet_down: false,
+            applied: false,
+            dry_run: !apply
+        ]
+        int count = item.running_count as int
+        if (!apply) {
+            return count ?
+                adminReport(operation, controller, fetchedAt, Status.DEGRADED,
+                    "Safe restart would be refused: ${count} builds running", [item]) :
+                adminReport(operation, controller, fetchedAt, Status.READY, 'Safe restart planned', [item])
+        }
+        if (count) {
+            return adminReport(operation, controller, fetchedAt, Status.BLOCKED,
+                "Safe restart refused: ${count} builds running", [item])
+        }
+        Map rules = adminRules()
+        String quietSuffix = '; controller left in quiet-down'
+        Map failure = adminPost(
+            operation,
+            controller,
+            fetchedAt,
+            rules.quiet_down_path?.toString() ?: '/quietDown',
+            [:],
+            timeout,
+            'Quiet-down request failed',
+            [item]
+        )
+        if (failure) {
+            return failure
+        }
+        item.quiet_down = true
+        Map recheck = fetchRunningBuilds(operation, controller, fetchedAt, timeout)
+        if (recheck.error) {
+            Map report = (Map) recheck.error
+            report.message = "${report.message}${quietSuffix}".toString()
+            report.items = [item]
+            return report
+        }
+        item.running_builds = recheck.builds
+        item.running_count = recheck.builds.size()
+        if (item.running_count) {
+            return adminReport(operation, controller, fetchedAt, Status.BLOCKED,
+                "Safe restart refused: ${item.running_count} builds started${quietSuffix}", [item])
+        }
+        failure = adminPost(
+            operation,
+            controller,
+            fetchedAt,
+            rules.safe_restart_path?.toString() ?: '/safeRestart',
+            [:],
+            timeout,
+            'Safe restart request failed',
+            [item],
+            quietSuffix
+        )
+        if (failure) {
+            return failure
+        }
+        item.applied = true
+        item.dry_run = false
+        adminReport(operation, controller, fetchedAt, Status.READY, 'Safe restart scheduled; no builds running', [item])
+    }
+
+    private Map adminPrecheck(String operation, String controller, String fetchedAt) {
+        validateControllerId(controller)
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(operation, controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport(operation, controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        if (!adminActionsEnabled(info)) {
+            return blockedReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Admin actions disabled for controller '${controller}'; set ${controller}.admin_actions=true"
+            )
+        }
+        null
+    }
+
+    private Map adminRules() {
+        operatorRules.admin_actions instanceof Map ? (Map) operatorRules.admin_actions : [:]
+    }
+
+    private Map adminPost(
+        String operation,
+        String controller,
+        String fetchedAt,
+        String path,
+        Map form,
+        int timeout,
+        String failedMessage,
+        List<Map> items,
+        String suffix = ''
+    ) {
+        Map info = (Map) loadControllers()[controller]
+        Map response = scriptConsole.post(
+            info.url.toString(),
+            info.user.toString(),
+            info.token.toString(),
+            path,
+            form,
+            timeout,
+            (operatorRules.limits?.error_body_max_characters ?: 4096) as int
+        )
+        int statusCode = (response.code ?: 0) as int
+        List<Integer> codes = ((List) (adminRules().success_codes ?: [200, 302, 303])).collect { it as int }
+        if (codes.contains(statusCode)) {
+            return null
+        }
+        String message = statusCode ? "Jenkins returned HTTP ${statusCode}" : failedMessage
+        adminReport(
+            operation,
+            controller,
+            fetchedAt,
+            accessBlocked(statusCode) ? Status.BLOCKED : Status.ERROR,
+            message + suffix,
+            items
+        )
+    }
+
+    private Map fetchRunningBuilds(String operation, String controller, String fetchedAt, int timeout) {
+        String tree = operatorRules.api_trees?.running_builds?.toString() ?:
+            'computer[displayName,executors[currentExecutable[url,fullDisplayName]],oneOffExecutors[currentExecutable[url,fullDisplayName]]]'
+        List response = jenkinsGet(controller, "/computer/api/json?depth=2&tree=${tree}", timeout)
+        int statusCode = response[0] as int
+        Object payload = response[1]
+        if (statusCode != 200 || !(payload instanceof Map)) {
+            return [error: operatorHttpError(operation, controller, fetchedAt, statusCode)]
+        }
+        Set<String> urls = new TreeSet<>()
+        List<String> unnamed = []
+        ((List) (((Map) payload).computer ?: [])).each { computer ->
+            if (!(computer instanceof Map)) {
+                return
+            }
+            String computerName = computer.displayName?.toString() ?: 'unknown'
+            List executors = ((List) (computer.executors ?: [])) + ((List) (computer.oneOffExecutors ?: []))
+            executors.each { executor ->
+                Object executable = executor instanceof Map ? executor.currentExecutable : null
+                if (!(executable instanceof Map)) {
+                    return
+                }
+                Map run = (Map) executable
+                if (run.url) {
+                    urls << run.url.toString()
+                } else {
+                    unnamed << "${computerName}: ${run._class ?: 'unknown'}".toString()
+                }
+            }
+        }
+        [builds: urls.toList() + unnamed.sort()]
+    }
+
+    private static Map adminReport(
+        String operation,
+        String controller,
+        String fetchedAt,
+        Status status,
+        String message,
+        List<Map> items
+    ) {
         [
             operation: operation,
             controller: controller,
             fetched_at: fetchedAt,
-            status: output.truncated ? Status.DEGRADED : Status.READY,
-            message: output.truncated ? 'Script executed; output truncated' : 'Script executed',
-            items: [item]
+            status: status,
+            message: message,
+            items: items
         ]
     }
 
@@ -1886,12 +2192,23 @@ class JenkinsAdapter {
     static List<Map> controllerPublicInfo(Map controllers) {
         controllers.keySet().sort().collect { id ->
             Map info = (Map) controllers[id]
-            PropertiesSupport.publicController(id.toString(), info) + [run_scripts: runScriptsEnabled(info)]
+            PropertiesSupport.publicController(id.toString(), info) + [
+                run_scripts: runScriptsEnabled(info),
+                admin_actions: adminActionsEnabled(info)
+            ]
         }
     }
 
+    static boolean controllerFlag(Map info, String key) {
+        info?.get(key)?.toString()?.trim()?.equalsIgnoreCase('true') ?: false
+    }
+
     static boolean runScriptsEnabled(Map info) {
-        info?.run_scripts?.toString()?.trim()?.equalsIgnoreCase('true') ?: false
+        controllerFlag(info, 'run_scripts')
+    }
+
+    static boolean adminActionsEnabled(Map info) {
+        controllerFlag(info, 'admin_actions')
     }
 
     static Map loadOperatorRules(File frameworkRoot) {

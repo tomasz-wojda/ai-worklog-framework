@@ -688,6 +688,15 @@
                   }
                 },
                 {
+                  "name": "--page",
+                  "description": "1-based page of --limit packages",
+                  "takes_value": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "PAGE"
+                  }
+                },
+                {
                   "name": "--csv",
                   "description": "Emit RFC 4180 CSV to stdout",
                   "takes_value": false
@@ -1146,7 +1155,7 @@
             },
             {
               "name": "plugins",
-              "description": "Inspect installed plugins and security vulnerabilities",
+              "description": "Inspect, scan, and install plugins",
               "kind": "action",
               "subcommands": [
                 {
@@ -1200,6 +1209,32 @@
                         "case_insensitive": true,
                         "help_values": "SOURCE"
                       }
+                    }
+                  ]
+                },
+                {
+                  "name": "install",
+                  "description": "Install or upgrade plugins from the update center; dry-run unless --apply is supplied",
+                  "kind": "action",
+                  "positionals": [
+                    {"use": "jenkins_controller"},
+                    {
+                      "name": "plugins",
+                      "description": "Plugin short name; provide one or more",
+                      "required": true,
+                      "variadic": true,
+                      "value": {
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+                        "help_values": "PLUGIN"
+                      }
+                    }
+                  ],
+                  "options": [
+                    {"use": "json"},
+                    {
+                      "name": "--apply",
+                      "description": "Queue the install on the controller",
+                      "takes_value": false
                     }
                   ]
                 }
@@ -1464,6 +1499,22 @@
                   "value": {
                     "help_values": "CODE"
                   }
+                }
+              ]
+            },
+            {
+              "name": "safe-restart",
+              "description": "Restart the controller only when no builds are running; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {"use": "jenkins_controller"}
+              ],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--apply",
+                  "description": "Schedule the safe restart",
+                  "takes_value": false
                 }
               ]
             },

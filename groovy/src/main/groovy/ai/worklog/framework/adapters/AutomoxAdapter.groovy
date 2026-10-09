@@ -262,7 +262,8 @@ class AutomoxAdapter {
         String state,
         String query,
         int limit,
-        int timeout
+        int timeout,
+        int page = 1
     ) {
         String fetchedAt = utcNow()
         AutomoxCredentials.Resolved credentials = requireCredentials(profile)
@@ -301,15 +302,18 @@ class AutomoxAdapter {
             (a.package_name ?: '').toString().toLowerCase() <=> (b.package_name ?: '').toString().toLowerCase()
         }
         int totalPackages = packages.size()
-        boolean truncated = packages.size() > limit
-        if (truncated) {
-            packages = packages.take(limit)
+        int pages = Math.max(1, (int) Math.ceil(totalPackages / (double) limit))
+        if (page > pages) {
+            throw new IllegalArgumentException("Invalid --page: ${page} (last page ${pages})")
         }
+        int offset = (page - 1) * limit
+        packages = new ArrayList<>(packages.subList(Math.min(offset, totalPackages), Math.min(offset + limit, totalPackages)))
+        boolean truncated = offset + packages.size() < totalPackages
         report('device-packages', Status.READY, packages, [
             fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
             device: reference, query: query, truncated: truncated,
             filters: [state: state ?: 'all'],
-            totals: [packages: totalPackages, returned: packages.size()]
+            totals: [packages: totalPackages, returned: packages.size(), page: page, pages: pages]
         ])
     }
 
@@ -1125,39 +1129,54 @@ class AutomoxAdapter {
 
     private Map decodeSchedule(Map policy) {
         Map scheduleRules = operatorRules.schedule instanceof Map ? (Map) operatorRules.schedule : [:]
-        Map dayBits = scheduleRules.day_bits instanceof Map ? (Map) scheduleRules.day_bits : [:]
-        Map weekBits = scheduleRules.week_bits instanceof Map ? (Map) scheduleRules.week_bits : [:]
-        int scheduleDays = (policy.schedule_days ?: 0) as int
-        int scheduleWeeks = (policy.schedule_weeks_of_month ?: 0) as int
-        List<String> days = []
-        dayBits.each { bit, label ->
-            if ((scheduleDays & (bit as int)) != 0) {
-                days << label.toString()
-            }
-        }
-        List<Integer> weeks = []
-        weekBits.each { bit, week ->
-            if ((scheduleWeeks & (bit as int)) != 0) {
-                weeks << (week as int)
+        Map fields = [
+            schedule_days: scheduleRules.day_bits,
+            schedule_weeks_of_month: scheduleRules.week_bits,
+            schedule_months: scheduleRules.month_bits
+        ]
+        Map<String, Integer> raw = [:]
+        Map<String, Map> decoded = [:]
+        List<String> messages = []
+        fields.each { String field, Object bits ->
+            int value = (policy[field] ?: 0) as int
+            Map result = decodeBits(value, bits instanceof Map ? (Map) bits : [:])
+            raw[field] = value
+            decoded[field] = result
+            if (result.undefined != 0) {
+                messages << "${field}=${value} has undefined bits ${result.undefined}".toString()
             }
         }
         Map configuration = policy.configuration instanceof Map ? (Map) policy.configuration : [:]
-        List unreliable = operatorRules.unreliable_fields instanceof List ? (List) operatorRules.unreliable_fields : []
         Map schedule = [
-            days: days,
-            weeks_of_month: weeks,
+            days: decoded.schedule_days.labels*.toString(),
+            weeks_of_month: decoded.schedule_weeks_of_month.labels.collect { it as int },
+            months: decoded.schedule_months.labels*.toString(),
+            schedule_days: raw.schedule_days,
+            schedule_weeks_of_month: raw.schedule_weeks_of_month,
+            schedule_months: raw.schedule_months,
             time: policy.schedule_time,
             use_scheduled_timezone: configuration.use_scheduled_timezone == true,
-            next_remediation_reliable: !unreliable.contains('next_remediation')
+            next_remediation_reliable: nextRemediationReliable()
         ]
-        List<String> messages = []
-        if (scheduleDays != 0 && !days) {
-            messages << "schedule_days=${scheduleDays}"
-        }
-        if (scheduleWeeks != 0 && !weeks) {
-            messages << "schedule_weeks_of_month=${scheduleWeeks}"
-        }
         [schedule: schedule, message: messages ? messages.join('; ') : null]
+    }
+
+    private static Map decodeBits(int value, Map bits) {
+        List labels = []
+        int known = 0
+        bits.each { bit, label ->
+            int mask = bit as int
+            known |= mask
+            if ((value & mask) != 0) {
+                labels << label
+            }
+        }
+        [labels: labels, undefined: value & ~known]
+    }
+
+    private boolean nextRemediationReliable() {
+        List unreliable = operatorRules.unreliable_fields instanceof List ? (List) operatorRules.unreliable_fields : []
+        !unreliable.contains('next_remediation')
     }
 
     private Map buildPolicyUpdatePayload(Map policy, String name, List serverGroups) {
@@ -1362,6 +1381,12 @@ class AutomoxAdapter {
         summary.ip_addrs = device.ip_addrs
         summary.detail = device.detail
         summary.timezone = device.timezone
+        summary.next_patch_time = device.next_patch_time
+        List serverPolicies = device.server_policies instanceof List ? (List) device.server_policies : []
+        summary.policies = serverPolicies.findAll { it instanceof Map }.collect { Map entry ->
+            [id: entry.id, name: entry.name, next_remediation: entry.next_remediation]
+        }
+        summary.next_remediation_reliable = nextRemediationReliable()
         summary
     }
 

@@ -25,6 +25,18 @@ class JenkinsScriptConsoleClient {
         int timeoutSeconds,
         int responseBodyMaxCharacters
     ) {
+        post(baseUrl, user, token, '/scriptText', [script: script], timeoutSeconds, responseBodyMaxCharacters)
+    }
+
+    Map post(
+        String baseUrl,
+        String user,
+        String token,
+        String path,
+        Map form,
+        int timeoutSeconds,
+        int responseBodyMaxCharacters
+    ) {
         String root = baseUrl.replaceAll(/\/+$/, '')
         Map headers = authorizationHeaders(user, token)
         Map crumbResponse = readHttp.get(
@@ -54,9 +66,9 @@ class JenkinsScriptConsoleClient {
             ]
         }
         formHttp.post(
-            "${root}/scriptText",
+            "${root}${path}",
             headers,
-            [script: script],
+            form,
             timeoutSeconds,
             responseBodyMaxCharacters
         )
