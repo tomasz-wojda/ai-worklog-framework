@@ -2095,10 +2095,12 @@
                   "value": {
                     "choices": [
                       "critical",
-                      "warning",
+                      "high",
+                      "medium",
+                      "low",
                       "all"
                     ],
-                    "help_values": "critical | warning | all"
+                    "help_values": "critical | high | medium | low | all"
                   }
                 },
                 {"use": "newrelic_entity"},

@@ -23,6 +23,10 @@ are `NEW_RELIC_PROFILE`/`NEWRELIC_PROFILE`, `NEW_RELIC_API_KEY`/`NEWRELIC_API_KE
 compatible. Preflight checks for `newrelic.properties` without reading values;
 connectivity uses `auth-test`.
 
+`issues` and `incidents` send `--since`/`--until` as the NerdGraph time
+window (default: today in UTC); `incidents --issue` resolves through the
+issue's `incidentIds` inside that window.
+
 The operator exposes 20 read actions (`profiles` through
 `alert-condition`) and 7 apply-gated create/update actions for static NRQL
 conditions and dashboard resources. All remote mutations and workspace export

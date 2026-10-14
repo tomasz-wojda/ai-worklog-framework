@@ -275,7 +275,7 @@ class NewRelicAdapter {
         NewRelicCredentials.Resolved credentials = requireCredentials(profile)
         Instant sinceInstant = parseDateBoundary(since, true)
         Instant untilInstant = parseDateBoundary(until, false)
-        List<Map> items = fetchAiIssues(credentials, timeout, state)
+        List<Map> items = fetchAiIssues(credentials, timeout, state, sinceInstant, untilInstant)
         if (priority && priority != 'all') {
             items = items.findAll { (it.priority ?: '').toString().equalsIgnoreCase(priority) }
         }
@@ -315,7 +315,7 @@ class NewRelicAdapter {
         NewRelicCredentials.Resolved credentials = requireCredentials(profile)
         Instant sinceInstant = parseDateBoundary(since, true)
         Instant untilInstant = parseDateBoundary(until, false)
-        List<Map> items = fetchAiIncidents(credentials, timeout, issueId, conditionId)
+        List<Map> items = fetchAiIncidents(credentials, timeout, issueId, conditionId, sinceInstant, untilInstant)
         if (entity) {
             String lower = entity.toLowerCase()
             items = items.findAll {
@@ -1252,52 +1252,63 @@ class NewRelicAdapter {
         collected
     }
 
-    private List<Map> fetchAiIssues(NewRelicCredentials.Resolved credentials, int timeout, String state) {
+    private List<Map> fetchAiIssues(
+        NewRelicCredentials.Resolved credentials,
+        int timeout,
+        String state,
+        Instant since,
+        Instant until
+    ) {
         List<Map> collected = []
         Set<String> seen = [] as Set
         String cursor = null
         int maxPages = settings().entity_cursor_max_pages as int
         String operation = '''
-            query AiIssues($accountId: Int!, $cursor: String, $states: [AiIssuesIssueState!]) {
+            query AiIssues($accountId: Int!, $cursor: String, $filter: AiIssuesFilterIssues, $timeWindow: TimeWindowInput) {
               actor {
                 account(id: $accountId) {
-                  aiIssues(filter: {states: $states}, cursor: $cursor) {
-                    issues {
-                      issueId
-                      title
-                      priority
-                      state
-                      createdAt
-                      updatedAt
-                      entities { name guid }
+                  aiIssues {
+                    issues(filter: $filter, cursor: $cursor, timeWindow: $timeWindow) {
+                      issues {
+                        issueId
+                        title
+                        priority
+                        state
+                        createdAt
+                        updatedAt
+                        entityNames
+                        entityGuids
+                      }
+                      nextCursor
                     }
-                    nextCursor
                   }
                 }
               }
             }
         '''.stripIndent().trim()
-        List states = null
-        if (state && state != 'all') {
-            states = [state.toUpperCase()]
-        }
+        Map filter = state && state != 'all' ? [states: [state.toUpperCase()]] : null
+        Map timeWindow = aiTimeWindow(since, until)
         for (int page = 0; page < maxPages; page++) {
-            Map variables = [accountId: credentials.accountId as int, states: states, cursor: cursor]
+            Map variables = [
+                accountId: credentials.accountId as int,
+                cursor: cursor,
+                filter: filter,
+                timeWindow: timeWindow
+            ]
             Map response = graphqlQuery(credentials, operation, variables, timeout)
-            Map aiIssues = dig(response.data, ['actor', 'account', 'aiIssues']) ?: [:]
-            List issues = aiIssues.issues instanceof List ? (List) aiIssues.issues :
-                aiIssues.results instanceof List ? (List) aiIssues.results : []
+            Map node = dig(response.data, ['actor', 'account', 'aiIssues', 'issues']) ?: [:]
+            List issues = node.issues instanceof List ? (List) node.issues : []
             issues.each { issue ->
                 if (!(issue instanceof Map)) {
                     return
                 }
-                String key = issue.issueId?.toString() ?: issue.id?.toString()
+                String key = issue.issueId?.toString()
                 if (key && !seen.contains(key)) {
                     seen << key
                     collected << normalizeAiIssue(issue)
                 }
             }
-            cursor = aiIssues.nextCursor?.toString()
+            cursor = node.nextCursor?.toString()
             if (!cursor || !issues) {
                 break
             }
@@ -1305,32 +1316,79 @@ class NewRelicAdapter {
         collected
     }
 
+    private List<String> fetchAiIssueIncidentIds(
+        NewRelicCredentials.Resolved credentials,
+        int timeout,
+        String issueId,
+        Map timeWindow
+    ) {
+        String operation = '''
+            query AiIssueIncidentIds($accountId: Int!, $filter: AiIssuesFilterIssues, $timeWindow: TimeWindowInput) {
+              actor {
+                account(id: $accountId) {
+                  aiIssues {
+                    issues(filter: $filter, timeWindow: $timeWindow) {
+                      issues {
+                        incidentIds
+                      }
+                    }
+                  }
+                }
+              }
+            }
+        '''.stripIndent().trim()
+        Map variables = [
+            accountId: credentials.accountId as int,
+            filter: [ids: [issueId]],
+            timeWindow: timeWindow
+        ]
+        Map response = graphqlQuery(credentials, operation, variables, timeout)
+        Object rows = dig(response.data, ['actor', 'account', 'aiIssues', 'issues', 'issues'])
+        List issues = rows instanceof List ? (List) rows : []
+        Map first = issues ? (issues[0] instanceof Map ? (Map) issues[0] : [:]) : [:]
+        List ids = first.incidentIds instanceof List ? (List) first.incidentIds : []
+        ids.findAll { it }.collect { it.toString() }
+    }
+
     private List<Map> fetchAiIncidents(
         NewRelicCredentials.Resolved credentials,
         int timeout,
         String issueId,
-        String conditionId
+        String conditionId,
+        Instant since,
+        Instant until
     ) {
         List<Map> collected = []
         Set<String> seen = [] as Set
         String cursor = null
         int maxPages = settings().entity_cursor_max_pages as int
+        Map timeWindow = aiTimeWindow(since, until)
+        Map filter = null
+        if (issueId) {
+            List<String> incidentIds = fetchAiIssueIncidentIds(credentials, timeout, issueId, timeWindow)
+            if (!incidentIds) {
+                return collected
+            }
+            filter = [ids: incidentIds]
+        }
         String operation = '''
-            query AiIncidents($accountId: Int!, $cursor: String, $issueId: ID, $conditionId: ID) {
+            query AiIncidents($accountId: Int!, $cursor: String, $filter: AiIssuesFilterIncidents, $timeWindow: TimeWindowInput) {
               actor {
                 account(id: $accountId) {
                   aiIssues {
-                    nrAiIncidents(filter: {issueId: $issueId, conditionId: $conditionId}, cursor: $cursor) {
+                    incidents(filter: $filter, cursor: $cursor, timeWindow: $timeWindow) {
                       incidents {
                         incidentId
                         title
-                        state
                         priority
+                        state
                         createdAt
                         updatedAt
-                        entity { name guid }
-                        conditionId
-                        issueId
+                        entityNames
+                        entityGuids
+                        ... on AiIssuesNewRelicIncident {
+                          conditionFamilyId
+                        }
                       }
                       nextCursor
                     }
@@ -1343,27 +1401,29 @@ class NewRelicAdapter {
             Map variables = [
                 accountId: credentials.accountId as int,
                 cursor: cursor,
-                issueId: issueId ?: null,
-                conditionId: conditionId ?: null
+                filter: filter,
+                timeWindow: timeWindow
             ]
             Map response = graphqlQuery(credentials, operation, variables, timeout)
-            Map node = dig(response.data, ['actor', 'account', 'aiIssues', 'nrAiIncidents']) ?: [:]
-            List incidents = node.incidents instanceof List ? (List) node.incidents :
-                node.results instanceof List ? (List) node.results : []
+            Map node = dig(response.data, ['actor', 'account', 'aiIssues', 'incidents']) ?: [:]
+            List incidents = node.incidents instanceof List ? (List) node.incidents : []
             incidents.each { incident ->
                 if (!(incident instanceof Map)) {
                     return
                 }
-                String key = incident.incidentId?.toString() ?: incident.id?.toString()
+                String key = incident.incidentId?.toString()
                 if (key && !seen.contains(key)) {
                     seen << key
-                    collected << normalizeAiIncident(incident)
+                    collected << normalizeAiIncident(incident, issueId)
                 }
             }
             cursor = node.nextCursor?.toString()
             if (!cursor || !incidents) {
                 break
             }
+        }
+        if (conditionId) {
+            collected = collected.findAll { it.condition_id?.toString() == conditionId }
         }
         collected
     }
@@ -1980,34 +2040,43 @@ class NewRelicAdapter {
     }
 
     private static Map normalizeAiIssue(Map issue) {
-        List entities = issue.entities instanceof List ? (List) issue.entities : []
-        Map entity = entities ? (entities[0] instanceof Map ? (Map) entities[0] : [:]) : [:]
         [
-            issue_id: issue.issueId ?: issue.id,
-            title: issue.title,
+            issue_id: issue.issueId,
+            title: joinValues(issue.title, '; '),
             priority: issue.priority,
             state: issue.state,
-            created_at: issue.createdAt,
-            updated_at: issue.updatedAt,
-            entity_name: entity.name,
-            entity_guid: entity.guid
+            created_at: formatEpoch(issue.createdAt),
+            updated_at: formatEpoch(issue.updatedAt),
+            entity_name: joinValues(issue.entityNames, ', '),
+            entity_guid: joinValues(issue.entityGuids, ', ')
         ]
     }
 
-    private static Map normalizeAiIncident(Map incident) {
-        Map entity = incident.entity instanceof Map ? (Map) incident.entity : [:]
+    private static Map normalizeAiIncident(Map incident, String issueId) {
         [
-            incident_id: incident.incidentId ?: incident.id,
-            issue_id: incident.issueId,
-            condition_id: incident.conditionId,
+            incident_id: incident.incidentId,
+            issue_id: issueId,
+            condition_id: incident.conditionFamilyId,
             title: incident.title,
             priority: incident.priority,
             state: incident.state,
-            created_at: incident.createdAt,
-            updated_at: incident.updatedAt,
-            entity_name: entity.name,
-            entity_guid: entity.guid
+            created_at: formatEpoch(incident.createdAt),
+            updated_at: formatEpoch(incident.updatedAt),
+            entity_name: joinValues(incident.entityNames, ', '),
+            entity_guid: joinValues(incident.entityGuids, ', ')
         ]
+    }
+
+    private static Map aiTimeWindow(Instant since, Instant until) {
+        [startTime: since.toEpochMilli(), endTime: until.toEpochMilli()]
+    }
+
+    private static String joinValues(Object value, String separator) {
+        if (value instanceof List) {
+            List parts = ((List) value).findAll { it != null && it.toString() }.collect { it.toString() }
+            return parts ? parts.join(separator) : null
+        }
+        value != null && value.toString() ? value.toString() : null
     }
 
     private static Map normalizeErrors(Map accountNode, String appId, int hours) {

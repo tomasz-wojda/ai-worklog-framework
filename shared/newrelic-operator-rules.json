@@ -73,11 +73,11 @@
     },
     "ai_issues": {
       "kind": "query",
-      "root": "actor.account.aiIssues"
+      "root": "actor.account.aiIssues.issues"
     },
     "ai_incidents": {
       "kind": "query",
-      "root": "actor.account.aiIssues.nrAiIncidents"
+      "root": "actor.account.aiIssues.incidents"
     },
     "nrql": {
       "kind": "query",

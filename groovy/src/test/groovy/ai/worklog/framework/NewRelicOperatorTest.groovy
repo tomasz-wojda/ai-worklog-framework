@@ -158,20 +158,31 @@ newrelic.url=https://api.eu.newrelic.com/v2
             id: 1, priority: 'critical', opened_at: '2026-09-01T10:00:00Z',
             entity_name: 'worker', policy_name: 'CPU', policy_id: 900
         ]]
+        long createdAt = Instant.parse('2026-09-01T10:00:00Z').toEpochMilli()
+        long updatedAt = Instant.parse('2026-09-01T11:00:00Z').toEpochMilli()
         state.issues = [[
-            issueId: 'issue-1', title: 'Issue', priority: 'CRITICAL', state: 'ACTIVATED',
-            createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T11:00:00Z',
-            entities: [[name: 'worker', guid: entityGuid('1')]]
+            issueId: 'issue-1', title: ['Issue'], priority: 'CRITICAL', state: 'ACTIVATED',
+            createdAt: createdAt, updatedAt: updatedAt,
+            entityNames: ['worker'], entityGuids: [entityGuid('1')], incidentIds: ['inc-1']
         ]]
         state.incidents = [[
-            incidentId: 'inc-1', title: 'Incident', priority: 'CRITICAL', state: 'OPEN',
-            createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T11:00:00Z',
-            entity: [name: 'worker', guid: entityGuid('1')], conditionId: '7001', issueId: 'issue-1'
+            incidentId: 'inc-1', title: 'Incident', priority: 'CRITICAL', state: 'CREATED',
+            createdAt: createdAt, updatedAt: updatedAt,
+            entityNames: 'worker', entityGuids: entityGuid('1'), conditionFamilyId: '7001'
         ]]
         NewRelicAdapter client = adapter([:], state)
         assertEquals('critical', client.operatorViolations('primary', '900', 'worker', 'critical', 50, 5).items[0].priority)
-        assertEquals('issue-1', client.operatorIssues('primary', 'activated', 'critical', 'worker', '2026-09-01', '2026-09-01', 50, 5).items[0].issue_id)
-        assertEquals('inc-1', client.operatorIncidents('primary', 'issue-1', '7001', 'worker', '2026-09-01', '2026-09-01', 50, 5).items[0].incident_id)
+        Map issue = client.operatorIssues('primary', 'activated', 'critical', 'worker', '2026-09-01', '2026-09-01', 50, 5).items[0]
+        assertEquals('issue-1', issue.issue_id)
+        assertEquals('Issue', issue.title)
+        assertEquals('2026-09-01T10:00:00Z', issue.created_at)
+        assertEquals(Instant.parse('2026-09-01T00:00:00Z').toEpochMilli(), state.lastGraphqlVariables.timeWindow.startTime)
+        Map incident = client.operatorIncidents('primary', 'issue-1', '7001', 'worker', '2026-09-01', '2026-09-01', 50, 5).items[0]
+        assertEquals('inc-1', incident.incident_id)
+        assertEquals('issue-1', incident.issue_id)
+        assertEquals('7001', incident.condition_id)
+        assertEquals(0, client.operatorIncidents('primary', null, '9999', null, '2026-09-01', '2026-09-01', 50, 5).items.size())
+        assertEquals(0, client.operatorIncidents('primary', 'issue-missing', null, null, '2026-09-01', '2026-09-01', 50, 5).items.size())
         Map errors = client.operatorErrors('primary', '100', 1, 50, 5)
         assertEquals(3, errors.items[0].total_errors)
         assertTrue(errors.items[0].by_class instanceof List)
@@ -969,24 +980,35 @@ newrelic.url=https://api.eu.newrelic.com/v2
                 }
                 return graphqlResponse([actor: [entity: dashboard + [pages: pages]]])
             }
-            if (query.contains('nrAiIncidents')) {
-                List incidents = (state.incidents ?: []).collect { Map item ->
+            if (query.contains('query AiIssueIncidentIds')) {
+                List ids = variables.filter instanceof Map ? (List) variables.filter.ids : []
+                List issues = (state.issues ?: []).findAll { Map item -> ids.contains(item.issueId) }.collect { Map item ->
+                    [incidentIds: item.incidentIds]
+                }
+                return graphqlResponse([actor: [account: [aiIssues: [issues: [issues: issues]]]]])
+            }
+            if (query.contains('query AiIncidents')) {
+                List ids = variables.filter instanceof Map ? (List) variables.filter.ids : null
+                List incidents = (state.incidents ?: []).findAll { Map item ->
+                    ids == null || ids.contains(item.incidentId)
+                }.collect { Map item ->
                     [
                         incidentId: item.incidentId, title: item.title, priority: item.priority, state: item.state,
-                        createdAt: item.createdAt, updatedAt: item.updatedAt, entity: item.entity,
-                        conditionId: item.conditionId, issueId: item.issueId
+                        createdAt: item.createdAt, updatedAt: item.updatedAt, entityNames: item.entityNames,
+                        entityGuids: item.entityGuids, conditionFamilyId: item.conditionFamilyId
                     ]
                 }
-                return graphqlResponse([actor: [account: [aiIssues: [nrAiIncidents: [incidents: incidents, nextCursor: null]]]]])
+                return graphqlResponse([actor: [account: [aiIssues: [incidents: [incidents: incidents, nextCursor: null]]]]])
             }
-            if (query.contains('AiIssues') && !query.contains('nrAiIncidents')) {
+            if (query.contains('query AiIssues')) {
                 List issues = (state.issues ?: []).collect { Map item ->
                     [
                         issueId: item.issueId, title: item.title, priority: item.priority, state: item.state,
-                        createdAt: item.createdAt, updatedAt: item.updatedAt, entities: item.entities
+                        createdAt: item.createdAt, updatedAt: item.updatedAt, entityNames: item.entityNames,
+                        entityGuids: item.entityGuids
                     ]
                 }
-                return graphqlResponse([actor: [account: [aiIssues: [issues: issues, nextCursor: null]]]])
+                return graphqlResponse([actor: [account: [aiIssues: [issues: [issues: issues, nextCursor: null]]]]])
             }
             if (query.contains('Errors(')) {
                 return graphqlResponse([actor: [account: [
