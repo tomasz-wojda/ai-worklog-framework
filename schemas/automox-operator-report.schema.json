@@ -25,7 +25,10 @@
         "worklet-create",
         "policy-delete",
         "device-move",
-        "policy-add-group"
+        "policy-add-group",
+        "group-create",
+        "policy-remove-group",
+        "policy-set-groups"
       ]
     },
     "fetched_at": {"type": "string", "format": "date-time"},

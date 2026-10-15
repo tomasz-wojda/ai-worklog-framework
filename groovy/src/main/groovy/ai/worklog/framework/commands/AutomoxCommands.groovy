@@ -17,7 +17,8 @@ import ai.worklog.framework.core.Status
 
 class AutomoxCommands {
     private static final List<String> MUTATIONS = [
-        'device-move', 'policy-add-group', 'policy-run', 'worklet-create', 'policy-delete'
+        'device-move', 'policy-add-group', 'policy-run', 'worklet-create', 'policy-delete',
+        'group-create', 'policy-remove-group', 'policy-set-groups'
     ]
     private static final List<String> CSV_ACTIONS = ['device-packages', 'patch-summary']
 
@@ -251,6 +252,32 @@ class AutomoxCommands {
                     profile,
                     parsed.positional('policy_id'),
                     parsed.positional('group_id'),
+                    timeout
+                )
+            case 'group-create':
+                return adapter.operatorGroupCreate(
+                    profile,
+                    parsed.positional('name'),
+                    parsed.value('--parent')?.toString(),
+                    parsed.value('--refresh-interval') ? parsed.value('--refresh-interval').toString() as Integer : null,
+                    parsed.value('--color')?.toString(),
+                    parsed.value('--notes')?.toString(),
+                    parsed.values('--policy'),
+                    timeout
+                )
+            case 'policy-remove-group':
+                return adapter.operatorPolicyRemoveGroup(
+                    profile,
+                    parsed.positional('policy_id'),
+                    parsed.positional('group_id'),
+                    parsed.flag('--allow-empty'),
+                    timeout
+                )
+            case 'policy-set-groups':
+                return adapter.operatorPolicySetGroups(
+                    profile,
+                    parsed.positional('policy_id'),
+                    parsed.variadic('group_ids'),
                     timeout
                 )
             default:

@@ -19,9 +19,9 @@
     "packages_max": 500,
     "packages_preview": 30,
     "activity_default": 500,
-    "activity_max": 500,
+    "activity_max": 20000,
     "patch_summary_default": 500,
-    "patch_summary_max": 500,
+    "patch_summary_max": 20000,
     "queue_default": 50,
     "queue_max": 200,
     "inventory_max": 500,
@@ -29,6 +29,7 @@
   },
   "pagination": {
     "page_size": 500,
+    "events_page_size": 100,
     "max_pages": 100
   },
   "polling": {
@@ -55,7 +56,8 @@
     "device_move": [200, 204],
     "policy_update": [200, 204],
     "policy_delete": [200, 204],
-    "policy_action": [200, 204]
+    "policy_action": [200, 204],
+    "group_create": [200, 201]
   },
   "queue_terminal_statuses": [
     "completed",
@@ -112,6 +114,40 @@
     ],
     "rename_suffix": "-TMP",
     "success_codes": [200, 204]
+  },
+  "policy_replace": {
+    "fields": [
+      "id",
+      "organization_id",
+      "name",
+      "policy_type_name",
+      "configuration",
+      "schedule_days",
+      "schedule_weeks_of_month",
+      "schedule_months",
+      "schedule_time",
+      "notes",
+      "server_groups"
+    ],
+    "volatile_fields": [
+      "server_groups",
+      "server_count"
+    ],
+    "success_codes": [200, 204]
+  },
+  "group_create": {
+    "default_refresh_interval": 1440,
+    "default_color": "#059F1D"
+  },
+  "event_filters": {
+    "since": "startDate",
+    "until": "endDate",
+    "event": "eventName",
+    "policy": "policyId",
+    "device": "serverId"
+  },
+  "server_filters": {
+    "group": "groupId"
   },
   "device_move": {
     "success_codes": [200, 204]

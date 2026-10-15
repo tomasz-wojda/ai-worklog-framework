@@ -22,6 +22,11 @@ ai-worklog service automox worklet-create NAME evaluation.sh remediation.sh --ap
 ai-worklog service automox policy-delete 987483 --confirm-name NAME --apply
 ai-worklog service automox device-move hostname 601134 --apply
 ai-worklog service automox policy-add-group 987483 601134 --apply
+ai-worklog service automox group-create NAME --notes TEXT
+ai-worklog service automox group-create NAME --policy 987483 --apply
+ai-worklog service automox policy-remove-group 987483 601134 --apply
+ai-worklog service automox policy-set-groups 987483 601134 601135 --apply
+ai-worklog service automox activity --since 2026-10-14 --event all --limit 5000
 ```
 
 Automox uses profile-scoped keys in
@@ -51,6 +56,17 @@ on their schedules.
 and `next_remediation`. `next_remediation_reliable` is false while the operator
 rules list `next_remediation` as unreliable, which is the shipped default;
 confirm the schedule with `policy` before acting on it.
+
+`policy-remove-group` and `policy-set-groups` send one full-object PUT built
+from a fresh GET, including `id` and `organization_id`, then re-read the
+policy and fail if anything other than `server_groups` and `server_count`
+changed. Leaving a policy with no server groups requires `--allow-empty`.
+`group-create` refuses an existing name regardless of case and defaults the
+parent to the organization default group.
+
+`activity` rows share `event_id` within one event, one row per package, so
+deduplicate rows on `event_id`, `hostname`, and `package_name`. `--event all`
+returns every event type.
 
 `device-packages` returns at most `--limit` packages per call. Use `--page`,
 starting at 1, to read later pages; `totals.page` and `totals.pages` show the

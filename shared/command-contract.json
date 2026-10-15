@@ -730,7 +730,7 @@
                 },
                 {
                   "name": "--event",
-                  "description": "Filter by event type",
+                  "description": "Filter by event type; repeat for several, or use all",
                   "takes_value": true,
                   "repeatable": true,
                   "value": {
@@ -753,7 +753,7 @@
                   "default_from": "limits.activity_default",
                   "value": {
                     "integer_min": 1,
-                    "integer_max": 500,
+                    "integer_max": 20000,
                     "help_values": "COUNT"
                   }
                 }
@@ -800,7 +800,7 @@
                   "default_from": "limits.patch_summary_default",
                   "value": {
                     "integer_min": 1,
-                    "integer_max": 500,
+                    "integer_max": 20000,
                     "help_values": "COUNT"
                   }
                 },
@@ -1095,6 +1095,136 @@
                 {
                   "name": "--apply",
                   "description": "Add the server group to the policy",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "group-create",
+              "description": "Create a server group; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "name",
+                  "description": "Server group name",
+                  "required": true,
+                  "value": {
+                    "help_values": "NAME"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
+                {
+                  "name": "--parent",
+                  "description": "Parent server group id; defaults to the organization default group",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--refresh-interval",
+                  "description": "Group refresh interval in minutes",
+                  "takes_value": true,
+                  "value": {
+                    "integer_min": 1,
+                    "help_values": "MINUTES"
+                  }
+                },
+                {
+                  "name": "--color",
+                  "description": "Group color as #RRGGBB",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^#[0-9A-Fa-f]{6}$",
+                    "help_values": "HEX"
+                  }
+                },
+                {
+                  "name": "--notes",
+                  "description": "Optional group notes",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--policy",
+                  "description": "Policy id to attach; repeat for several",
+                  "takes_value": true,
+                  "repeatable": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the server group",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "policy-remove-group",
+              "description": "Remove a server group from a policy; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {"use": "automox_policy_id"},
+                {
+                  "name": "group_id",
+                  "description": "Server group id to remove",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
+                {
+                  "name": "--allow-empty",
+                  "description": "Allow the policy to be left with no server groups",
+                  "takes_value": false
+                },
+                {
+                  "name": "--apply",
+                  "description": "Remove the server group from the policy",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "policy-set-groups",
+              "description": "Replace the server groups of a policy; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {"use": "automox_policy_id"},
+                {
+                  "name": "group_ids",
+                  "description": "Server group ids; provide one or more",
+                  "required": true,
+                  "variadic": true,
+                  "value": {
+                    "pattern": "^[0-9]+$",
+                    "help_values": "ID"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
+                {
+                  "name": "--apply",
+                  "description": "Replace the policy server groups",
                   "takes_value": false
                 }
               ]

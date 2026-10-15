@@ -192,8 +192,8 @@ class AutomoxAdapter {
                 group: groupId, message: 'Group not found'
             ])
         }
-        List servers = fetchArray('servers', credentials, timeout, [:], [o: credentials.org, g: groupId])
-        List<Map> devices = servers.collect { normalizeDeviceSummary(it) }
+        List<Map> devices = fetchGroupServers(credentials, groupId, timeout)
+            .collect { normalizeDeviceSummary(it) }
             .sort { a, b -> (a.name ?: '').toString().toLowerCase() <=> (b.name ?: '').toString().toLowerCase() }
         int deviceLimit = (operatorRules.limits?.devices_max ?: 500) as int
         boolean truncated = devices.size() > deviceLimit
@@ -223,11 +223,9 @@ class AutomoxAdapter {
     ) {
         String fetchedAt = utcNow()
         AutomoxCredentials.Resolved credentials = requireCredentials(profile)
-        Map queryParams = [o: credentials.org]
-        if (groupId) {
-            queryParams.g = groupId
-        }
-        List servers = fetchArray('servers', credentials, timeout, [:], queryParams)
+        List servers = groupId ?
+            fetchGroupServers(credentials, groupId, timeout) :
+            fetchArray('servers', credentials, timeout, [:], [o: credentials.org])
         List<Map> items = servers.collect { normalizeDeviceSummary(it) }
         items = filterDevicesByState(items, state)
         if (query) {
@@ -331,8 +329,10 @@ class AutomoxAdapter {
         AutomoxCredentials.Resolved credentials = requireCredentials(profile)
         Instant sinceInstant = parseDateBoundary(since, true)
         Instant untilInstant = parseDateBoundary(until, false)
-        Set<String> eventTypes = requestedEventTypes ?
-            requestedEventTypes.collect { it.toString() } as Set :
+        List<String> requested = (requestedEventTypes ?: []).collect { it.toString() }
+        boolean allEvents = requested.contains('all')
+        Set<String> eventTypes = requested ?
+            requested as Set :
             ([operatorRules.event_types?.patch_applied,
               operatorRules.event_types?.patch_failed,
               operatorRules.event_types?.policy_action] as Set)
@@ -340,11 +340,16 @@ class AutomoxAdapter {
         if (deviceRef) {
             deviceId = resolveDevice(credentials, deviceRef, timeout).id as Integer
         }
-        List<Map> events = fetchEvents(credentials, timeout, sinceInstant, untilInstant)
+        Map serverFilters = [
+            policy: policyId,
+            device: deviceId,
+            event: !allEvents && requested.size() == 1 ? requested[0] : null
+        ]
+        List<Map> events = fetchEvents(credentials, timeout, sinceInstant, untilInstant, serverFilters)
         List<Map> items = []
         Set<String> matchingEventIds = [] as Set
         events.each { Map event ->
-            if (!eventTypes.contains(event.name?.toString())) {
+            if (!allEvents && !eventTypes.contains(event.name?.toString())) {
                 return
             }
             if (policyId && event.policy_id?.toString() != policyId.toString()) {
@@ -387,7 +392,8 @@ class AutomoxAdapter {
         if (deviceRef) {
             deviceId = resolveDevice(credentials, deviceRef, timeout).id as Integer
         }
-        List<Map> events = fetchEvents(credentials, timeout, sinceInstant, untilInstant)
+        List<Map> events = fetchEvents(credentials, timeout, sinceInstant, untilInstant,
+            [policy: policyId, device: deviceId])
         List<String> patchTypes = [
             operatorRules.event_types?.patch_applied?.toString(),
             operatorRules.event_types?.patch_failed?.toString()
@@ -476,12 +482,20 @@ class AutomoxAdapter {
         List policies = fetchArray('policies', credentials, timeout, [:], [o: credentials.org])
         List<Map> items = policies.collect { Map policy ->
             Map configuration = policy.configuration instanceof Map ? (Map) policy.configuration : [:]
+            Map schedule = decodeSchedule(policy).schedule
             [
                 id: policy.id,
                 name: policy.name,
                 policy_type_name: policy.policy_type_name,
                 schedule_time: policy.schedule_time,
+                schedule_days: schedule.schedule_days,
+                schedule_weeks_of_month: schedule.schedule_weeks_of_month,
+                schedule_months: schedule.schedule_months,
+                days: schedule.days,
+                weeks_of_month: schedule.weeks_of_month,
+                months: schedule.months,
                 server_groups: policy.server_groups,
+                server_count: policy.server_count,
                 auto_patch: configuration.auto_patch,
                 auto_reboot: configuration.auto_reboot
             ]
@@ -524,6 +538,9 @@ class AutomoxAdapter {
             policy_type_name: policy.policy_type_name,
             schedule_time: policy.schedule_time,
             server_groups: policy.server_groups,
+            server_count: policy.server_count,
+            create_time: policy.create_time,
+            next_remediation: policy.next_remediation,
             notes: policy.notes,
             configuration: policy.configuration
         ]
@@ -872,6 +889,147 @@ class AutomoxAdapter {
         ])
     }
 
+    Map operatorGroupCreate(
+        String profile,
+        String name,
+        String parentId,
+        Integer refreshInterval,
+        String color,
+        String notes,
+        List<String> policyIds,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        String trimmedName = name?.trim()
+        if (!trimmedName) {
+            throw new IllegalArgumentException('Invalid group name')
+        }
+        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        List groups = fetchArray('groups', credentials, timeout, [:], [o: credentials.org])
+        Map existing = groups.find { (it.name ?: '').toString().trim().equalsIgnoreCase(trimmedName) }
+        if (existing) {
+            throw new IllegalArgumentException("Group already exists: ${trimmedName} (${existing.id})")
+        }
+        Map parent = resolveParentGroup(groups, parentId)
+        List<Long> policies = (policyIds ?: []).collect { it.toString() }.unique().collect { String policyId ->
+            if (!fetchObject('policy', credentials, timeout, [id: policyId], [o: credentials.org])) {
+                throw new IllegalArgumentException("Policy not found: ${policyId}")
+            }
+            policyId as long
+        }
+        Map groupRules = operatorRules.group_create instanceof Map ? (Map) operatorRules.group_create : [:]
+        Map body = [
+            name: trimmedName,
+            refresh_interval: refreshInterval ?: (groupRules.default_refresh_interval ?: 1440) as int,
+            parent_server_group_id: parent.id as long,
+            ui_color: color ?: groupRules.default_color ?: '#059F1D',
+            notes: notes ?: '',
+            policies: policies
+        ]
+        Map change = [
+            dry_run: !apply,
+            applied: false,
+            from: '',
+            to: trimmedName,
+            steps: [[action: 'create_server_group', payload: body]]
+        ]
+        String createdId = null
+        Map created = null
+        if (apply) {
+            Set<String> knownIds = groups.collect { it.id?.toString() }.findAll { it } as Set
+            String url = buildUrl('groups', credentials, [:], [o: credentials.org])
+            Map response = writeClient.post(url, AutomoxCredentials.authorizationHeaders(credentials),
+                body, settings().mutation_timeout_seconds as int, settings().error_body_max as int)
+            validateSuccess(response, operatorRules.success_codes?.group_create ?: [200, 201])
+            Object parsed = response.body ? parseJson(response.body) : null
+            if (parsed instanceof Map && parsed.id) {
+                createdId = parsed.id.toString()
+            }
+            if (!createdId) {
+                createdId = fetchArray('groups', credentials, timeout, [:], [o: credentials.org]).find {
+                    (it.name ?: '').toString().trim().equalsIgnoreCase(trimmedName) &&
+                        !knownIds.contains(it.id?.toString())
+                }?.id?.toString()
+            }
+            created = createdId ?
+                fetchObject('group', credentials, timeout, [id: createdId], [o: credentials.org]) : null
+            if (!created || created.name?.toString() != trimmedName ||
+                created.parent_server_group_id?.toString() != parent.id.toString()) {
+                return report('group-create', Status.ERROR, [], [
+                    fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+                    group: createdId, message: 'Group create confirmation failed',
+                    dry_run: false, applied: true, change: change
+                ])
+            }
+            change.applied = true
+        }
+        Map source = created ?: body
+        List<Map> items = [[
+            id: created?.id,
+            name: source.name,
+            parent_server_group_id: source.parent_server_group_id,
+            refresh_interval: source.refresh_interval,
+            ui_color: source.ui_color,
+            notes: source.notes,
+            policies: source.policies
+        ]]
+        report('group-create', Status.READY, items, [
+            fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+            group: createdId, dry_run: !apply, applied: change.applied, change: change
+        ])
+    }
+
+    Map operatorPolicyRemoveGroup(String profile, String policyId, String groupId, boolean allowEmpty, int timeout) {
+        String fetchedAt = utcNow()
+        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        Map policy = fetchObject('policy', credentials, timeout, [id: policyId], [o: credentials.org])
+        if (!policy) {
+            return report('policy-remove-group', Status.ERROR, [], [
+                fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+                policy: policyId, message: 'Policy not found'
+            ])
+        }
+        List<Long> current = policyGroups(policy)
+        if (!current.contains(groupId as long)) {
+            throw new IllegalArgumentException("Group ${groupId} is not assigned to policy ${policyId}")
+        }
+        List<Long> target = current.findAll { it != (groupId as long) }
+        if (!target && !allowEmpty) {
+            throw new IllegalArgumentException(
+                "Removing group ${groupId} leaves policy ${policyId} with no server groups; pass --allow-empty"
+            )
+        }
+        replacePolicyGroups('policy-remove-group', credentials, policy, target, groupId, timeout)
+    }
+
+    Map operatorPolicySetGroups(String profile, String policyId, List<String> groupIds, int timeout) {
+        String fetchedAt = utcNow()
+        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        Map policy = fetchObject('policy', credentials, timeout, [id: policyId], [o: credentials.org])
+        if (!policy) {
+            return report('policy-set-groups', Status.ERROR, [], [
+                fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+                policy: policyId, message: 'Policy not found'
+            ])
+        }
+        Set<String> knownGroups = fetchArray('groups', credentials, timeout, [:], [o: credentials.org])
+            .collect { it.id?.toString() }.findAll { it } as Set
+        List<Long> target = (groupIds ?: []).collect { it.toString() }.unique().collect { String id ->
+            if (!knownGroups.contains(id)) {
+                throw new IllegalArgumentException("Group not found: ${id}")
+            }
+            id as long
+        }
+        List<Long> current = policyGroups(policy)
+        if (current.sort(false) == target.sort(false)) {
+            return report('policy-set-groups', Status.READY, [[policy_id: policyId, server_groups: current]], [
+                fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+                policy: policyId, message: 'Server groups unchanged', dry_run: !apply, applied: false
+            ])
+        }
+        replacePolicyGroups('policy-set-groups', credentials, policy, target, null, timeout)
+    }
+
     static Map loadOperatorRules(File frameworkRoot) {
         Map defaults = [
             api_base_url: 'https://console.automox.com/api',
@@ -884,14 +1042,14 @@ class AutomoxAdapter {
                 groups_default: 500, groups_max: 500,
                 policies_default: 500, policies_max: 500,
                 packages_default: 500, packages_max: 500,
-                activity_default: 500, activity_max: 500,
-                patch_summary_default: 500, patch_summary_max: 500,
+                activity_default: 500, activity_max: 20000,
+                patch_summary_default: 500, patch_summary_max: 20000,
                 queue_default: 50, queue_max: 200,
                 inventory_max: 500, history_max: 50000
             ],
-            pagination: [page_size: 500, max_pages: 100],
+            pagination: [page_size: 500, events_page_size: 100, max_pages: 100],
             polling: [default_interval_seconds: 5, max_wait_seconds: 900],
-            success_codes: [read: [200], mutation: [200, 201, 204]],
+            success_codes: [read: [200], mutation: [200, 201, 204], group_create: [200, 201]],
             queue_terminal_statuses: ['completed', 'failed', 'cancelled', 'error', 'timed_out'],
             policy_update: [
                 required_fields: ['name', 'organization_id', 'policy_type_name', 'configuration',
@@ -900,6 +1058,19 @@ class AutomoxAdapter {
                 rename_suffix: '-TMP',
                 success_codes: [200, 204]
             ],
+            policy_replace: [
+                fields: ['id', 'organization_id', 'name', 'policy_type_name', 'configuration',
+                         'schedule_days', 'schedule_weeks_of_month', 'schedule_months',
+                         'schedule_time', 'notes', 'server_groups'],
+                volatile_fields: ['server_groups', 'server_count'],
+                success_codes: [200, 204]
+            ],
+            group_create: [default_refresh_interval: 1440, default_color: '#059F1D'],
+            event_filters: [
+                since: 'startDate', until: 'endDate', event: 'eventName',
+                policy: 'policyId', device: 'serverId'
+            ],
+            server_filters: [group: 'groupId'],
             device_move: [success_codes: [200, 204]],
             worklet: [max_file_bytes: 65536, policy_type_name: 'custom', os_family: 'Linux'],
             event_types: [
@@ -963,6 +1134,7 @@ class AutomoxAdapter {
             if (response.code != 200) {
                 throw new IllegalStateException(response.error ?: "Automox returned HTTP ${response.code}")
             }
+            requireCompleteResponse(response)
             Object parsed = parseJson(response.body)
             List pageItems = normalizeList(parsed)
             if (!pageItems) {
@@ -992,8 +1164,25 @@ class AutomoxAdapter {
         if (response.code != 200) {
             throw new IllegalStateException(response.error ?: "Automox returned HTTP ${response.code}")
         }
+        requireCompleteResponse(response)
         Object parsed = parseJson(response.body)
         parsed instanceof Map ? (Map) parsed : null
+    }
+
+    private List fetchGroupServers(AutomoxCredentials.Resolved credentials, String groupId, int timeout) {
+        Map serverFilters = operatorRules.server_filters instanceof Map ? (Map) operatorRules.server_filters : [:]
+        Map query = [o: credentials.org]
+        query[(serverFilters.group ?: 'groupId').toString()] = groupId
+        fetchArray('servers', credentials, timeout, [:], query)
+            .findAll { it.server_group_id?.toString() == groupId.toString() }
+    }
+
+    private void requireCompleteResponse(Map response) {
+        if (response.truncated == true) {
+            throw new IllegalStateException(
+                "Automox response exceeded ${settings().response_body_max} characters; narrow --since/--until or filters"
+            )
+        }
     }
 
     private List<Map> fetchDevicePackages(AutomoxCredentials.Resolved credentials, String deviceId, int timeout) {
@@ -1008,6 +1197,7 @@ class AutomoxAdapter {
             if (response.code != 200) {
                 throw new IllegalStateException(response.error ?: "Automox returned HTTP ${response.code}")
             }
+            requireCompleteResponse(response)
             Object parsed = parseJson(response.body)
             List pageItems = []
             if (parsed instanceof List) {
@@ -1036,21 +1226,36 @@ class AutomoxAdapter {
         AutomoxCredentials.Resolved credentials,
         int timeout,
         Instant since,
-        Instant until
+        Instant until,
+        Map serverFilters = [:]
     ) {
         Set seen = [] as Set
         List<Map> collected = []
-        int pageSize = (operatorRules.pagination?.page_size ?: 500) as int
+        int pageSize = (operatorRules.pagination?.events_page_size ?: operatorRules.pagination?.page_size ?: 100) as int
         int maxPages = (operatorRules.pagination?.max_pages ?: 100) as int
         int historyMax = settings().history_max as int
+        Map eventFilters = operatorRules.event_filters instanceof Map ? (Map) operatorRules.event_filters : [:]
+        Map baseQuery = [o: credentials.org]
+        baseQuery[(eventFilters.since ?: 'startDate').toString()] =
+            LocalDate.ofInstant(since, ZoneOffset.UTC).minusDays(1).toString()
+        baseQuery[(eventFilters.until ?: 'endDate').toString()] =
+            LocalDate.ofInstant(until, ZoneOffset.UTC).plusDays(1).toString()
+        (serverFilters ?: [:]).each { key, value ->
+            if (value != null && eventFilters[key]) {
+                baseQuery[eventFilters[key].toString()] = value.toString()
+            }
+        }
         for (int page = 0; page < maxPages; page++) {
-            Map query = [o: credentials.org, limit: pageSize, page: page]
+            Map query = new LinkedHashMap(baseQuery)
+            query.limit = pageSize
+            query.page = page
             String url = buildUrl('events', credentials, [:], query)
             Map response = http.get(url, AutomoxCredentials.authorizationHeaders(credentials),
                 timeout, settings().response_body_max as int)
             if (response.code != 200) {
                 throw new IllegalStateException(response.error ?: "Automox returned HTTP ${response.code}")
             }
+            requireCompleteResponse(response)
             List pageItems = normalizeList(parseJson(response.body))
             if (!pageItems) {
                 break
@@ -1200,6 +1405,106 @@ class AutomoxAdapter {
         payload
     }
 
+    private Map replacePolicyGroups(
+        String operation,
+        AutomoxCredentials.Resolved credentials,
+        Map policy,
+        List<Long> target,
+        String groupId,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        String policyId = policy.id?.toString()
+        List<Long> current = policyGroups(policy)
+        Map replaceRules = operatorRules.policy_replace instanceof Map ? (Map) operatorRules.policy_replace : [:]
+        Map change = [
+            dry_run: !apply,
+            applied: false,
+            from: current.join(','),
+            to: target.join(','),
+            steps: [[
+                action: 'replace_server_groups',
+                policy_id: policy.id,
+                server_groups_before: current,
+                server_groups_after: target,
+                server_count: policy.server_count
+            ]]
+        ]
+        Map extras = [
+            fetched_at: fetchedAt, profile: credentials.id, org: credentials.org,
+            policy: policyId, group: groupId, dry_run: !apply, applied: false, change: change
+        ]
+        if (!apply) {
+            return report(operation, Status.READY, [[
+                policy_id: policy.id, name: policy.name, server_groups: target, server_count: policy.server_count
+            ]], extras)
+        }
+        Map payload = buildPolicyReplacePayload(policy, target)
+        String url = buildUrl('policy', credentials, [id: policyId], [o: credentials.org])
+        Map response = writeClient.put(url, AutomoxCredentials.authorizationHeaders(credentials),
+            payload, settings().mutation_timeout_seconds as int, settings().error_body_max as int)
+        validateSuccess(response, replaceRules.success_codes ?: [200, 204])
+        change.applied = true
+        extras.applied = true
+        Map confirmed = fetchObject('policy', credentials, timeout, [id: policyId], [o: credentials.org]) ?: [:]
+        List volatileFields = (replaceRules.volatile_fields ?: ['server_groups', 'server_count'])*.toString()
+        List<String> changed = ((policy.keySet() + confirmed.keySet()) as Set).collect { it.toString() }
+            .findAll { !volatileFields.contains(it) && policy[it] != confirmed[it] }
+            .sort()
+        if (policyGroups(confirmed).sort(false) != target.sort(false)) {
+            changed << 'server_groups'
+        }
+        if (changed) {
+            extras.message = "Policy verification failed: ${changed.join(', ')}".toString()
+            return report(operation, Status.ERROR, [[policy_id: policy.id, name: policy.name]], extras)
+        }
+        report(operation, Status.READY, [[
+            policy_id: policy.id,
+            name: confirmed.name,
+            server_groups: policyGroups(confirmed),
+            server_count: confirmed.server_count
+        ]], extras)
+    }
+
+    private Map buildPolicyReplacePayload(Map policy, List<Long> serverGroups) {
+        if (policy.id == null || policy.organization_id == null) {
+            throw new IllegalStateException('Policy payload missing id or organization_id')
+        }
+        List fields = operatorRules.policy_replace?.fields instanceof List ?
+            (List) operatorRules.policy_replace.fields :
+            ['id', 'organization_id', 'name', 'policy_type_name', 'configuration', 'schedule_days',
+             'schedule_weeks_of_month', 'schedule_months', 'schedule_time', 'notes', 'server_groups']
+        Map payload = [:]
+        fields.each { field ->
+            String key = field.toString()
+            payload[key] = key == 'server_groups' ? serverGroups : policy[key]
+        }
+        payload.id = policy.id
+        payload.organization_id = policy.organization_id
+        payload
+    }
+
+    private static List<Long> policyGroups(Map policy) {
+        (policy?.server_groups instanceof List ? (List) policy.server_groups : []).collect { it as long }
+    }
+
+    private static Map resolveParentGroup(List groups, String parentId) {
+        if (parentId) {
+            Map parent = groups.find { it.id?.toString() == parentId.toString() }
+            if (!parent) {
+                throw new IllegalArgumentException("Parent group not found: ${parentId}")
+            }
+            return parent
+        }
+        List defaults = groups.findAll {
+            it.id != null && it.parent_server_group_id?.toString() == it.id.toString()
+        }
+        if (defaults.size() != 1) {
+            throw new IllegalStateException('Default server group could not be resolved')
+        }
+        (Map) defaults[0]
+    }
+
     private Map validateWorkletFile(File file) {
         Path workspace = paths.root.toPath().toRealPath(LinkOption.NOFOLLOW_LINKS)
         Path supplied = file.toPath().toAbsolutePath().normalize()
@@ -1265,6 +1570,19 @@ class AutomoxAdapter {
             ]]
         }
         boolean failedEvent = eventName == operatorRules.event_types?.patch_failed?.toString()
+        if (!failedEvent && eventName != operatorRules.event_types?.patch_applied?.toString()) {
+            return [[
+                event_id: event.id,
+                event_type: eventName,
+                event_time: eventTimeText,
+                hostname: hostname,
+                host_short_name: hostShort,
+                host_ip: data.ip,
+                os_name: data.os,
+                outcome: null,
+                message: data.text
+            ]]
+        }
         String patchSource = data.patches?.toString() ?: data.failure?.toString()
         List<Map> patchRows = parsePatchList(patchSource)
         Set<String> failedPackageNames = failedEvent ?

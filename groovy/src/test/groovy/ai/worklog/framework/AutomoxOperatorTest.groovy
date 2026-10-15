@@ -612,6 +612,7 @@ class AutomoxOperatorTest extends GroovyTestCase {
         adapter.operatorPolicyDelete('default', '900', 'Patch Policy', 5)
         adapter.operatorDeviceMove('default', '100', '200', 5)
         adapter.operatorPolicyAddGroup('default', '900', '300', 5)
+        adapter.operatorPolicyRemoveGroup('default', '900', '100', true, 5)
         assertEquals(0, writes)
     }
 
@@ -792,6 +793,254 @@ class AutomoxOperatorTest extends GroovyTestCase {
         assertEquals(['rename', 'restore'], report.change.steps*.action)
         assertEquals('100', report.change.from)
         assertEquals('100,200', report.change.to)
+    }
+
+    void testGroupAndDevicesFilterByGroupIdParameterAndMembership() {
+        writeProperties(defaultProperties())
+        List<String> urls = []
+        Closure router = { method, url, headers, timeout, max ->
+            urls << url
+            if (url.contains('/servergroups')) {
+                return response([[id: 639448, name: 'VAFPQ247', parent_server_group_id: 244242]])
+            }
+            response([
+                server(1, 'member.example.internal', true, [server_group_id: 639448]),
+                server(2, 'other.example.internal', true, [server_group_id: 244242])
+            ])
+        }
+        Map group = automoxAdapter([:], router).operatorGroup('default', '639448', 5)
+        assertEquals(['member.example.internal'], group.items[0].devices*.name)
+        Map devices = automoxAdapter([:], router).operatorDevices('default', '639448', null, 'all', 50, 5)
+        assertEquals(['member.example.internal'], devices.items*.name)
+        List<String> serverUrls = urls.findAll { it.contains('/servers?') }
+        assertTrue(serverUrls.every { it.contains('groupId=639448') && !it.contains('&g=') })
+    }
+
+    void testTruncatedResponseIsRejected() {
+        writeProperties(defaultProperties())
+        AutomoxAdapter adapter = automoxAdapter([:], { method, url, headers, timeout, max ->
+            [code: 200, body: '[{"id":1', error: '', truncated: true]
+        })
+        String message = shouldFail(IllegalStateException) {
+            adapter.operatorGroups('default', null, 50, 5)
+        }
+        assertTrue(message.contains('exceeded 1048576 characters'))
+    }
+
+    void testActivityPassesServerSideFiltersAndSupportsAllEvents() {
+        writeProperties(defaultProperties())
+        List<String> urls = []
+        List events = [
+            event(1, 'system.add', '2026-10-14T08:00:00Z', 100, 'host.example.internal', [text: 'added']),
+            event(2, 'system.policy.action', '2026-10-14T09:00:00Z', 100, 'host.example.internal',
+                [status: '0', text: 'ok'], 'Patch Policy')
+        ]
+        Closure router = { method, url, headers, timeout, max ->
+            urls << url
+            if (url.contains('/events')) {
+                return response(url.contains('page=0') ? events : [])
+            }
+            if (url.contains('/servers/')) {
+                return response(server(100, 'host.example.internal'))
+            }
+            response([server(100, 'host.example.internal')])
+        }
+        Map all = automoxAdapter([:], router).operatorActivity(
+            'default', '2026-10-14', '2026-10-14', ['all'], null, null, 500, 5)
+        Map added = all.items.find { it.event_type == 'system.add' }
+        assertNotNull(added)
+        assertNull(added.outcome)
+        assertEquals('added', added.message)
+        Map defaults = automoxAdapter([:], router).operatorActivity(
+            'default', '2026-10-14', '2026-10-14', [], null, null, 500, 5)
+        assertFalse(defaults.items.any { it.event_type == 'system.add' })
+        urls.clear()
+        automoxAdapter([:], router).operatorActivity(
+            'default', '2026-10-14', '2026-10-14', ['system.policy.action'], '100', '900', 500, 5)
+        String eventsUrl = urls.find { it.contains('/events') }
+        ['startDate=2026-10-13', 'endDate=2026-10-15', 'policyId=900', 'serverId=100',
+         'eventName=system.policy.action', 'limit=100'].each { assertTrue(it, eventsUrl.contains(it)) }
+        urls.clear()
+        automoxAdapter([:], router).operatorActivity(
+            'default', '2026-10-14', '2026-10-14', ['system.add', 'system.policy.action'], null, null, 500, 5)
+        assertFalse(urls.find { it.contains('/events') }.contains('eventName='))
+    }
+
+    void testPoliciesAndPolicyExposeScheduleAndTimingFields() {
+        writeProperties(defaultProperties())
+        Map policy = basePolicy() + [
+            schedule_days: 32, schedule_weeks_of_month: 62, schedule_months: 8190,
+            server_count: 1, create_time: '2026-07-03T13:19:58+0000', next_remediation: '2026-10-17T19:00:00+0000'
+        ]
+        Map list = automoxAdapter([:], policyRouter(policy)).operatorPolicies('default', null, 'all', 50, 5)
+        Map item = list.items[0]
+        assertEquals(32, item.schedule_days)
+        assertEquals(['Fri'], item.days)
+        assertEquals([1, 2, 3, 4, 5], item.weeks_of_month)
+        assertEquals(12, item.months.size())
+        assertEquals(1, item.server_count)
+        Map detail = automoxAdapter([:], policyRouter(policy)).operatorPolicy('default', '900', 5)
+        assertEquals('2026-07-03T13:19:58+0000', detail.items[0].create_time)
+        assertEquals(1, detail.items[0].server_count)
+        assertEquals('2026-10-17T19:00:00+0000', detail.items[0].next_remediation)
+    }
+
+    void testGroupCreateDryRunValidationAndApply() {
+        writeProperties(defaultProperties())
+        List groups = [
+            [id: 244242, name: '', parent_server_group_id: 244242],
+            [id: 639448, name: 'VAFPQ247', parent_server_group_id: 244242]
+        ]
+        List<Map> writes = []
+        Closure router = { method, url, headers, timeout, max ->
+            if (url =~ /\/servergroups\/\d+/) {
+                return response([id: 700001, name: 'NEWGROUP', parent_server_group_id: 244242,
+                                 refresh_interval: 1440, ui_color: '#059F1D', notes: '', policies: [900]])
+            }
+            if (url.contains('/servergroups')) {
+                return response(groups)
+            }
+            if (url.contains('/policies/900')) {
+                return response(basePolicy())
+            }
+            if (url.contains('/policies/')) {
+                return [code: 404, body: '', error: '']
+            }
+            response([])
+        }
+        Closure writer = { method, url, headers, payload, timeout, max ->
+            writes << [method: method, url: url, payload: payload]
+            [code: 201, body: JsonOutput.toJson([id: 700001]), error: '']
+        }
+        Map dry = automoxAdapter([:], router, writer).operatorGroupCreate(
+            'default', 'NEWGROUP', null, null, null, null, ['900', '900'], 5)
+        assertEquals(0, writes.size())
+        assertEquals(Status.READY, dry.status)
+        assertEquals([name: 'NEWGROUP', refresh_interval: 1440, parent_server_group_id: 244242L,
+                      ui_color: '#059F1D', notes: '', policies: [900L]], dry.change.steps[0].payload)
+        assertEquals([], validateReport(dry))
+        String duplicate = shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], router).operatorGroupCreate('default', 'vafpq247', null, null, null, null, [], 5)
+        }
+        assertTrue(duplicate.contains('Group already exists'))
+        shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], router).operatorGroupCreate('default', 'X1', '999', null, null, null, [], 5)
+        }
+        shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], router).operatorGroupCreate('default', 'X1', null, null, null, null, ['901'], 5)
+        }
+        Map applied = automoxAdapter([:], router, writer, true).operatorGroupCreate(
+            'default', 'NEWGROUP', null, null, null, null, ['900'], 5)
+        assertEquals(1, writes.size())
+        assertEquals('POST', writes[0].method)
+        assertEquals(Status.READY, applied.status)
+        assertTrue(applied.applied)
+        assertEquals(700001, applied.items[0].id)
+        assertEquals('700001', applied.group)
+        Map mismatch = automoxAdapter([:], router, writer, true).operatorGroupCreate(
+            'default', 'OTHERNAME', null, null, null, null, [], 5)
+        assertEquals(Status.ERROR, mismatch.status)
+        assertEquals('Group create confirmation failed', mismatch.message)
+    }
+
+    void testPolicyRemoveGroupGuardsAndSinglePutApply() {
+        writeProperties(defaultProperties())
+        Map policy = basePolicy() + [server_groups: [244242L, 639448L], server_count: 252]
+        List<Map> puts = []
+        Map dry = automoxAdapter([:], policyRouter(policy), { method, url, headers, payload, timeout, max ->
+            puts << payload; [code: 204, body: '', error: '']
+        }).operatorPolicyRemoveGroup('default', '900', '244242', false, 5)
+        assertEquals(0, puts.size())
+        assertEquals('244242,639448', dry.change.from)
+        assertEquals('639448', dry.change.to)
+        assertEquals(252, dry.change.steps[0].server_count)
+        assertEquals([], validateReport(dry))
+        shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], policyRouter(policy)).operatorPolicyRemoveGroup('default', '900', '1', false, 5)
+        }
+        Map single = basePolicy() + [server_groups: [639448L]]
+        String empty = shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], policyRouter(single)).operatorPolicyRemoveGroup('default', '900', '639448', false, 5)
+        }
+        assertTrue(empty.contains('--allow-empty'))
+        Map allowed = automoxAdapter([:], policyRouter(single)).operatorPolicyRemoveGroup('default', '900', '639448', true, 5)
+        assertEquals('', allowed.change.to)
+
+        Map current = new LinkedHashMap(policy)
+        AutomoxAdapter applier = automoxAdapter([:], { method, url, headers, timeout, max ->
+            response(current)
+        }, { method, url, headers, payload, timeout, max ->
+            puts << payload
+            current = new LinkedHashMap(policy) + [server_groups: payload.server_groups, server_count: 1]
+            [code: 204, body: '', error: '']
+        }, true)
+        Map applied = applier.operatorPolicyRemoveGroup('default', '900', '244242', false, 5)
+        assertEquals(Status.READY, applied.status)
+        assertEquals(1, puts.size())
+        assertEquals(900, puts[0].id)
+        assertEquals(121224, puts[0].organization_id)
+        assertEquals([639448L], puts[0].server_groups)
+        assertEquals('Patch Policy', puts[0].name)
+        assertEquals([639448L], applied.items[0].server_groups)
+        assertEquals(1, applied.items[0].server_count)
+    }
+
+    void testPolicyRemoveGroupVerificationAndPayloadGuards() {
+        writeProperties(defaultProperties())
+        Map policy = basePolicy() + [server_groups: [244242L, 639448L]]
+        Map current = new LinkedHashMap(policy)
+        Map report = automoxAdapter([:], { method, url, headers, timeout, max ->
+            response(current)
+        }, { method, url, headers, payload, timeout, max ->
+            current = new LinkedHashMap(policy) + [server_groups: payload.server_groups, configuration: [auto_patch: true]]
+            [code: 204, body: '', error: '']
+        }, true).operatorPolicyRemoveGroup('default', '900', '244242', false, 5)
+        assertEquals(Status.ERROR, report.status)
+        assertEquals('Policy verification failed: configuration', report.message)
+        assertTrue(report.applied)
+
+        Map noOrg = new LinkedHashMap(policy)
+        noOrg.remove('organization_id')
+        int writes = 0
+        String message = shouldFail(IllegalStateException) {
+            automoxAdapter([:], policyRouter(noOrg), { method, url, headers, payload, timeout, max ->
+                writes++; [code: 204, body: '', error: '']
+            }, true).operatorPolicyRemoveGroup('default', '900', '244242', false, 5)
+        }
+        assertEquals('Policy payload missing id or organization_id', message)
+        assertEquals(0, writes)
+    }
+
+    void testPolicySetGroupsValidationUnchangedAndApply() {
+        writeProperties(defaultProperties())
+        Map policy = basePolicy() + [server_groups: [639448L]]
+        Map current = new LinkedHashMap(policy)
+        List<Map> puts = []
+        Closure router = { method, url, headers, timeout, max ->
+            if (url.contains('/servergroups')) {
+                return response([[id: 244242, parent_server_group_id: 244242], [id: 639448, parent_server_group_id: 244242]])
+            }
+            response(current)
+        }
+        Closure writer = { method, url, headers, payload, timeout, max ->
+            puts << payload
+            current = new LinkedHashMap(policy) + [server_groups: payload.server_groups]
+            [code: 204, body: '', error: '']
+        }
+        shouldFail(IllegalArgumentException) {
+            automoxAdapter([:], router, writer, true).operatorPolicySetGroups('default', '900', ['555'], 5)
+        }
+        Map unchanged = automoxAdapter([:], router, writer, true).operatorPolicySetGroups('default', '900', ['639448'], 5)
+        assertEquals('Server groups unchanged', unchanged.message)
+        assertFalse(unchanged.applied)
+        Map dry = automoxAdapter([:], router, writer).operatorPolicySetGroups('default', '900', ['639448', '244242'], 5)
+        assertEquals(0, puts.size())
+        assertEquals([], validateReport(dry))
+        Map applied = automoxAdapter([:], router, writer, true).operatorPolicySetGroups('default', '900', ['639448', '244242'], 5)
+        assertEquals(1, puts.size())
+        assertEquals([639448L, 244242L], puts[0].server_groups)
+        assertEquals(Status.READY, applied.status)
+        assertEquals([], validateReport(applied))
     }
 
     void testReportSchemaShapeForOperations() {
@@ -1005,6 +1254,22 @@ class AutomoxOperatorTest extends GroovyTestCase {
             }
             response([])
         }
+    }
+
+    private static Map basePolicy() {
+        [
+            id: 900,
+            name: 'Patch Policy',
+            policy_type_name: 'patch',
+            organization_id: 121224,
+            configuration: [auto_patch: false],
+            schedule_days: 0,
+            schedule_weeks_of_month: 0,
+            schedule_months: 0,
+            schedule_time: '00:00',
+            notes: '',
+            server_groups: [100L]
+        ]
     }
 
     private static Map server(int id, String name, boolean connected = true, Map extra = [:]) {

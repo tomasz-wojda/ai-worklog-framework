@@ -263,10 +263,15 @@ commands:
         }
     }
 
-    void testAutomoxRenderingListsNineteenActions() {
+    void testAutomoxRenderingListsTwentyTwoActions() {
         List<Map> actions = contract.children(['service', 'automox'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'automox'])
-        assertEquals(19, actions.size())
+        assertEquals(22, actions.size())
+        assertTrue(
+            new UsageRenderer(contract)
+                .renderPath(['service', 'automox', 'policy-set-groups'])
+                .contains('<group_ids...>')
+        )
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
         assertTrue(
             new UsageRenderer(contract)

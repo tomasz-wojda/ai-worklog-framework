@@ -80,16 +80,22 @@ class ReadOnlyHttp {
             }
             InputStream stream = code >= 400 ? connection.errorStream : connection.inputStream
             String body
+            boolean truncated = false
             if (stream) {
                 if (responseBodyMaxCharacters > 0) {
                     body = new String(stream.readNBytes(responseBodyMaxCharacters), StandardCharsets.UTF_8)
+                    truncated = stream.read() != -1
                 } else {
                     body = new String(stream.bytes, StandardCharsets.UTF_8)
                 }
             } else {
                 body = ''
             }
-            [code: code, body: body, error: code >= 400 ? body : '', headers: responseHeaders]
+            Map result = [code: code, body: body, error: code >= 400 ? body : '', headers: responseHeaders]
+            if (truncated) {
+                result.truncated = true
+            }
+            result
         } catch (Exception exception) {
             [code: 0, body: '', error: exception.message ?: exception.class.simpleName, headers: [:]]
         } finally {
