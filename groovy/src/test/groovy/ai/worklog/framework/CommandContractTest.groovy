@@ -7,6 +7,9 @@ import ai.worklog.framework.cli.CommandContract
 import ai.worklog.framework.cli.ParsedArguments
 import ai.worklog.framework.cli.UsageError
 import ai.worklog.framework.cli.UsageRenderer
+import ai.worklog.framework.commands.JenkinsCommands
+import ai.worklog.framework.core.ExitCodes
+import ai.worklog.framework.core.FrameworkPaths
 import ai.worklog.framework.core.JsonFiles
 import groovy.test.GroovyTestCase
 
@@ -146,11 +149,12 @@ commands:
         )
     }
 
-    void testJenkinsRenderingListsEighteenActions() {
+    void testJenkinsRenderingListsNineteenActions() {
         List<Map> actions = contract.children(['service', 'jenkins'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jenkins'])
-        assertEquals(18, actions.size())
+        assertEquals(19, actions.size())
         assertTrue(actions*.name.contains('safe-restart'))
+        assertTrue(actions*.name.contains('ldap-search'))
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
     }
 
@@ -484,6 +488,33 @@ commands:
             parser().parse('jenkins', jenkinsAction('jobs'), ['c'], rules)
                 .value('--limit').toString()
         )
+        assertEquals(
+            '50',
+            parser().parse('jenkins', jenkinsAction('ldap-search'), ['c', '--query', 'daszew'], rules)
+                .value('--limit').toString()
+        )
+    }
+
+    void testJenkinsLdapSearchRequiresQuery() {
+        File workspace = File.createTempDir()
+        PrintStream originalErr = System.err
+        ByteArrayOutputStream err = new ByteArrayOutputStream()
+        int code
+        try {
+            System.setErr(new PrintStream(err))
+            code = JenkinsCommands.run(
+                'ldap-search',
+                ['primary'],
+                repository,
+                new FrameworkPaths(workspace),
+                [:]
+            )
+        } finally {
+            System.setErr(originalErr)
+            workspace.deleteDir()
+        }
+        assertEquals(new ExitCodes(repository).userError, code)
+        assertTrue(err.toString('UTF-8').contains('ldap-search requires --query'))
     }
 
     void testValueValidationUsesAnyDeclaredConstraint() {

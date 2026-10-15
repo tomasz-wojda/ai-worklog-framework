@@ -8,7 +8,7 @@ class JenkinsOperatorReport extends OperatorReport {
         'has_user', 'has_token', 'value_present', 'active', 'enabled', 'buildable', 'in_queue',
         'building', 'recent_failure', 'available', 'idle', 'offline', 'temporarily_offline',
         'stuck', 'blocked', 'truncated', 'authenticated', 'applied', 'dry_run', 'force',
-        'replaced', 'run_scripts', 'admin_actions', 'has_update', 'quiet_down'
+        'replaced', 'run_scripts', 'admin_actions', 'has_update', 'quiet_down', 'jenkins_user'
     ]
 
     String controller

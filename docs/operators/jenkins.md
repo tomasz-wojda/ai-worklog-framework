@@ -25,7 +25,14 @@ ai-worklog service jenkins plugins install primary bouncycastle-api git
 ai-worklog service jenkins plugins install primary bouncycastle-api git --apply
 ai-worklog service jenkins safe-restart primary
 ai-worklog service jenkins safe-restart primary --apply
+ai-worklog service jenkins ldap-search primary --query 'mkwiat*|pbakier*'
+ai-worklog service jenkins ldap-search primary --query daszew --limit 10
 ```
+
+`ldap-search` runs a built-in read-only Script Console query against the
+controller's LDAP security realm, without requiring `run_scripts`, and
+returns login, display name, mail, DN, and whether a Jenkins user record
+exists.
 
 Jenkins operations do not mutate the controller, except `run-script --apply`,
 which runs Groovy with full controller privileges in the Script Console, and

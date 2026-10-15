@@ -1558,6 +1558,36 @@
               "options": [
                 {"use": "json"}
               ]
+            },
+            {
+              "name": "ldap-search",
+              "description": "Search the controller's LDAP security realm for users",
+              "kind": "action",
+              "positionals": [
+                {"use": "jenkins_controller"}
+              ],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--query",
+                  "description": "Name, id or mail; * wildcard, | separates alternatives",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of LDAP users",
+                  "takes_value": true,
+                  "default_from": "limits.ldap_search_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
             }
           ]
         },

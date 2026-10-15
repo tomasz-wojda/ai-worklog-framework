@@ -2432,6 +2432,99 @@ class JenkinsOperatorTest extends GroovyTestCase {
         new JenkinsScriptConsoleClient(readHttp, formHttp)
     }
 
+    void testOperatorLdapSearchReturnsUsers() {
+        writeProperties(defaultProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adapterWithMocks([:], null, ldapClient(calls) {
+            [code: 200, body: JsonOutputWrapper.json([
+                status: 'ok',
+                realm: 'hudson.security.LDAPSecurityRealm',
+                truncated: false,
+                items: [
+                    [login: 'mkwiatkowski', display_name: 'Mariusz Kwiatkowski', mail: 'm@example.com',
+                     dn: 'CN=Mariusz Kwiatkowski,OU=Users,DC=example', server: 'ldaps://ldap.example', jenkins_user: false],
+                    [login: 'pbakiera', display_name: null, mail: null,
+                     dn: 'CN=Pawel Bakiera,OU=Users,DC=example', server: 'ldaps://ldap.example', jenkins_user: true]
+                ]
+            ]), error: '']
+        })
+        Map report = adapter.operatorLdapSearch('primary', 'mkwiat*|pbakier*', 50, 5)
+        assertEquals(Status.READY, report.status)
+        assertEquals('mkwiat*|pbakier*', report.query)
+        assertEquals('2 LDAP users matched', report.message)
+        assertEquals(['mkwiatkowski', 'pbakiera'], report.items*.login)
+        Map rendered = (Map) new JsonSlurper().parseText(
+            JenkinsOperatorReport.fromPayload(report).renderJson(new Redaction(repository))
+        )
+        assertEquals([false, true], rendered.items*.jenkins_user)
+        assertEquals('mkwiat*|pbakier*', rendered.query)
+        String script = calls[0].form.script.toString()
+        assertFalse(script.contains('mkwiat*|pbakier*'))
+        assertFalse(script.contains('__TERMS__'))
+        assertTrue(script.contains('int limit = 50'))
+    }
+
+    void testOperatorLdapSearchTruncatedIsDegraded() {
+        writeProperties(defaultProperties())
+        JenkinsAdapter adapter = adapterWithMocks([:], null, ldapClient([]) {
+            [code: 200, body: JsonOutputWrapper.json([
+                status: 'ok', realm: 'hudson.security.LDAPSecurityRealm', truncated: true,
+                items: [[login: 'a1', display_name: 'A', mail: null, dn: 'CN=A', server: 'ldap://x', jenkins_user: false]]
+            ]), error: '']
+        })
+        Map report = adapter.operatorLdapSearch('primary', 'daszew', 1, 5)
+        assertEquals(Status.DEGRADED, report.status)
+        assertEquals('LDAP results truncated at 1; refine --query or raise --limit', report.message)
+    }
+
+    void testOperatorLdapSearchErrorsAndBlocks() {
+        writeProperties(defaultProperties())
+        Map cases = [
+            (JsonOutputWrapper.json([status: 'error', code: 'realm_not_ldap', realm: 'hudson.security.HudsonPrivateSecurityRealm'])):
+                'Controller security realm is not LDAP (hudson.security.HudsonPrivateSecurityRealm)',
+            (JsonOutputWrapper.json([status: 'error', code: 'search_failed', exception_class: 'javax.naming.CommunicationException'])):
+                'LDAP search failed: javax.naming.CommunicationException',
+            'not json': 'Malformed Jenkins LDAP response',
+            (JsonOutputWrapper.json([status: 'ok', truncated: false, items: [[login: 'a', display_name: null, mail: null, dn: 5, server: 'x', jenkins_user: false]]])):
+                'Malformed Jenkins LDAP response'
+        ]
+        cases.each { String body, String message ->
+            JenkinsAdapter adapter = adapterWithMocks([:], null, ldapClient([]) { [code: 200, body: body, error: ''] })
+            Map report = adapter.operatorLdapSearch('primary', 'daszew', 50, 5)
+            assertEquals(Status.ERROR, report.status)
+            assertEquals(message, report.message)
+        }
+        JenkinsAdapter forbidden = adapterWithMocks([:], null, ldapClient([]) { [code: 403, body: '', error: ''] })
+        assertEquals(Status.BLOCKED, forbidden.operatorLdapSearch('primary', 'daszew', 50, 5).status)
+        Map unknown = adapterWithMocks([:], null, ldapClient([]) { [code: 200, body: '{}', error: ''] })
+            .operatorLdapSearch('missing', 'daszew', 50, 5)
+        assertEquals(Status.ERROR, unknown.status)
+        assertTrue(unknown.message.contains("Controller 'missing' not found"))
+    }
+
+    void testOperatorLdapSearchRejectsInvalidQueryBeforeRequest() {
+        writeProperties(defaultProperties())
+        List<Map> calls = []
+        JenkinsAdapter adapter = adapterWithMocks([:], null, ldapClient(calls) { [code: 200, body: '{}', error: ''] })
+        shouldFail(IllegalArgumentException) {
+            adapter.operatorLdapSearch('primary', '*', 50, 5)
+        }
+        assertEquals([], calls)
+    }
+
+    private static JenkinsScriptConsoleClient ldapClient(List<Map> calls, Closure<Map> response) {
+        ReadOnlyHttp readHttp = new ReadOnlyHttp()
+        readHttp.requestHandler = { method, url, headers, timeout ->
+            [code: 404, body: '', error: '']
+        }
+        FormHttp formHttp = new FormHttp()
+        formHttp.requestHandler = { url, headers, form, timeout, maxCharacters ->
+            calls << [url: url, form: form, max: maxCharacters]
+            response.call()
+        }
+        new JenkinsScriptConsoleClient(readHttp, formHttp)
+    }
+
     private static JenkinsScriptConsoleClient scriptClient(
         Closure<Map> response
     ) {

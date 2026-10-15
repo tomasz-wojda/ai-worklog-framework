@@ -5,6 +5,7 @@ import ai.worklog.framework.core.GlobalConfig
 import ai.worklog.framework.core.JsonFiles
 import ai.worklog.framework.core.Status
 import ai.worklog.framework.jenkins.JenkinsCredentialSecretScript
+import ai.worklog.framework.jenkins.JenkinsLdapSearchScript
 import ai.worklog.framework.jenkins.JenkinsScriptGuard
 import ai.worklog.framework.jenkins.JenkinsVersioning
 import ai.worklog.framework.setup.SetupResolver
@@ -25,6 +26,7 @@ class JenkinsAdapter {
     private static final Pattern JOB_NAME_PART = ~/^[A-Za-z0-9_~][A-Za-z0-9._~-]{0,127}$/
     private static final int CREDENTIAL_SECRET_MAX_BYTES = 8388608
     private static final int CREDENTIAL_SECRET_RESPONSE_MAX_CHARACTERS = 12582912
+    private static final int LDAP_SEARCH_RESPONSE_MAX_CHARACTERS = 4194304
 
     final FrameworkPaths paths
     final ReadOnlyHttp http
@@ -76,6 +78,7 @@ class JenkinsAdapter {
             script_timeout_seconds: (operatorRules.script_console?.timeout_seconds ?: 60) as int,
             script_max_bytes: (operatorRules.script_console?.script_max_bytes ?: 1048576L) as long,
             script_output_max_bytes: (operatorRules.script_console?.output_max_bytes ?: 1048576) as int,
+            ldap_timeout_seconds: (operatorRules.script_console?.ldap_timeout_seconds ?: 30) as int,
             script_star_imports: (operatorRules.script_console?.default_star_imports ?:
                 ['jenkins', 'jenkins.model', 'hudson', 'hudson.model']) as List,
             vulnerabilities: jenkins.vulnerabilities instanceof Map ?
@@ -860,6 +863,111 @@ class JenkinsAdapter {
                 items: items
             ]
         }
+    }
+
+    Map operatorLdapSearch(String controller, String query, int limit, int timeout) {
+        String operation = 'ldap-search'
+        String fetchedAt = utcNow()
+        validateControllerId(controller)
+        Map limits = operatorLimits()
+        List<String> terms = JenkinsLdapSearchScript.terms(query, limits.ldap_query_max_length as int)
+        int effectiveLimit = validateLimit(
+            limit,
+            'limit',
+            limits.ldap_search_default as int,
+            limits.ldap_search_max as int
+        )
+        Map controllers = loadControllers()
+        if (!controllers[controller]) {
+            return errorReport(operation, controller, fetchedAt, "Controller '${controller}' not found")
+        }
+        Map info = (Map) controllers[controller]
+        if (!info.url?.toString() || !info.user?.toString() || !info.token?.toString()) {
+            return blockedReport(operation, controller, fetchedAt, 'Controller credentials unavailable')
+        }
+        Map settings = settings()
+        Map response = scriptConsole.execute(
+            info.url.toString(),
+            info.user.toString(),
+            info.token.toString(),
+            JenkinsLdapSearchScript.render(terms, effectiveLimit, (settings.ldap_timeout_seconds as int) * 1000),
+            settings.script_timeout_seconds as int,
+            LDAP_SEARCH_RESPONSE_MAX_CHARACTERS
+        )
+        int statusCode = (response.code ?: 0) as int
+        if (accessBlocked(statusCode)) {
+            return blockedReport(operation, controller, fetchedAt, "Jenkins returned HTTP ${statusCode}")
+        }
+        if (statusCode != 200) {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                statusCode ? "Jenkins returned HTTP ${statusCode}" : 'Jenkins LDAP search failed'
+            )
+        }
+        Object parsed
+        try {
+            parsed = new JsonSlurper().parseText(response.body?.toString() ?: '')
+        } catch (Exception ignored) {
+            parsed = null
+        }
+        if (!(parsed instanceof Map)) {
+            return errorReport(operation, controller, fetchedAt, 'Malformed Jenkins LDAP response')
+        }
+        Map payload = (Map) parsed
+        if (payload.status == 'error' && payload.code == 'realm_not_ldap') {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                "Controller security realm is not LDAP (${payload.realm ?: 'unknown'})"
+            )
+        }
+        if (payload.status == 'error' && payload.code == 'search_failed') {
+            return errorReport(
+                operation,
+                controller,
+                fetchedAt,
+                "LDAP search failed: ${payload.exception_class ?: 'unknown'}"
+            )
+        }
+        List rows = payload.items instanceof List ? (List) payload.items : null
+        if (payload.status != 'ok' || rows == null || !rows.every { validLdapRow(it) }) {
+            return errorReport(operation, controller, fetchedAt, 'Malformed Jenkins LDAP response')
+        }
+        List<Map> items = rows.collect { Map row ->
+            [
+                login: row.login,
+                display_name: row.display_name,
+                mail: row.mail,
+                dn: row.dn,
+                server: row.server,
+                jenkins_user: row.jenkins_user
+            ]
+        }
+        boolean truncated = payload.truncated == true
+        [
+            operation: operation,
+            controller: controller,
+            fetched_at: fetchedAt,
+            status: truncated ? Status.DEGRADED : Status.READY,
+            message: truncated ?
+                "LDAP results truncated at ${effectiveLimit}; refine --query or raise --limit".toString() :
+                "${items.size()} LDAP users matched".toString(),
+            query: query,
+            items: items
+        ]
+    }
+
+    private static boolean validLdapRow(Object row) {
+        if (!(row instanceof Map)) {
+            return false
+        }
+        Map map = (Map) row
+        ['login', 'display_name', 'mail', 'dn', 'server'].every { key ->
+            map[key] == null || map[key] instanceof String
+        } && map.jenkins_user instanceof Boolean
     }
 
     Map operatorWhoami(String controller, int timeout) {
@@ -1886,7 +1994,10 @@ class JenkinsAdapter {
             jobs_max: (limits.jobs_max ?: 100) as int,
             jobs_max_depth: (limits.jobs_max_depth ?: limits.jobs_depth_max ?: 2) as int,
             jobs_query_max_length: (limits.jobs_query_max_length ?: limits.query_max_length ?: 128) as int,
-            artifacts_max: (limits.artifacts_max ?: 200) as int
+            artifacts_max: (limits.artifacts_max ?: 200) as int,
+            ldap_search_default: (limits.ldap_search_default ?: 50) as int,
+            ldap_search_max: (limits.ldap_search_max ?: 500) as int,
+            ldap_query_max_length: (limits.ldap_query_max_length ?: 128) as int
         ]
     }
 
@@ -2242,7 +2353,10 @@ class JenkinsAdapter {
                 jobs_max: 100,
                 jobs_max_depth: 2,
                 jobs_query_max_length: 128,
-                artifacts_max: 200
+                artifacts_max: 200,
+                ldap_search_default: 50,
+                ldap_search_max: 500,
+                ldap_query_max_length: 128
             ],
             api_trees: [
                 health: 'mode,quietingDown,numExecutors,nodeDescription',

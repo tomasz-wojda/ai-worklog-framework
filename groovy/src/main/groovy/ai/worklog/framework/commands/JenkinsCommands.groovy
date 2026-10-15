@@ -91,6 +91,9 @@ class JenkinsCommands {
             if (dispatchAction == 'run-script') {
                 validateRunScriptSource(parsed)
             }
+            if (dispatchAction == 'ldap-search') {
+                validateLdapSearchQuery(parsed)
+            }
             payload = dispatch(dispatchAction, parsed, adapter, settings, scriptInput)
         } catch (UsageError exception) {
             JenkinsOperatorReport report = errorReport(
@@ -280,6 +283,13 @@ class JenkinsCommands {
                     parsed.positional('controller'),
                     settings.timeout_seconds as int
                 )
+            case 'ldap-search':
+                return adapter.operatorLdapSearch(
+                    parsed.positional('controller'),
+                    parsed.value('--query').toString(),
+                    parsed.value('--limit').toString() as int,
+                    settings.timeout_seconds as int
+                )
             default:
                 throw new UsageError(
                     "Unknown action for service jenkins: ${action}",
@@ -327,6 +337,16 @@ class JenkinsCommands {
                 'run-script requires exactly one of <script_file>, - (stdin), or --script',
                 'service jenkins',
                 'run-script'
+            )
+        }
+    }
+
+    private static void validateLdapSearchQuery(ParsedArguments parsed) {
+        if (!parsed.value('--query')?.toString()?.trim()) {
+            throw new UsageError(
+                'ldap-search requires --query',
+                'service jenkins',
+                'ldap-search'
             )
         }
     }
