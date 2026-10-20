@@ -9,7 +9,9 @@
     "worklogs_max": 1000,
     "comments_max": 1000,
     "comment_max_characters": 4096,
+    "issue_comment_max_characters": 32767,
     "error_body_max_characters": 1024,
+    "write_response_max_characters": 65536,
     "assets_search_default": 50,
     "assets_search_max": 500,
     "assets_page_size": 50,
@@ -22,6 +24,7 @@
     "issue": "/rest/api/2/issue",
     "search": "/rest/api/2/search",
     "myself": "/rest/api/2/myself",
+    "user": "/rest/api/2/user",
     "tempo_worklogs": "/rest/tempo-timesheets/3/worklogs",
     "assets_base": "/rest/insight/1.0",
     "assets_object_schemas": "/objectschema/list",
@@ -32,6 +35,9 @@
   },
   "api_params": {
     "assets_search_query": "iql"
+  },
+  "comment": {
+    "mention_pattern": "\\[~([^\\]\\s]+)\\]"
   },
   "summary_jql": "assignee = currentUser() ORDER BY status ASC, updated DESC",
   "summary_fields": [

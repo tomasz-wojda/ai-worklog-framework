@@ -317,6 +317,10 @@ class JiraOperatorAdapter {
         [items: items.take(maximum).sort { it.started }, truncated: total > items.size()]
     }
 
+    Map comments(String ticketKey, Map credentials) {
+        fetchComments(ticketKey, credentials)
+    }
+
     private Map fetchComments(String ticketKey, Map credentials) {
         List<Map> items = []
         int startAt = 0
@@ -339,6 +343,7 @@ class JiraOperatorAdapter {
             List<Map> page = (List<Map>) payload.comments
             items.addAll(page.collect { Map comment ->
                 [
+                    id: comment.id?.toString() ?: '',
                     author: comment.author?.displayName?.toString() ?: '',
                     body: comment.body?.toString() ?: '',
                     created: comment.created?.toString() ?: ''
