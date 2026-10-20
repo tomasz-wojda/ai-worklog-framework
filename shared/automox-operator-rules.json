@@ -10,7 +10,7 @@
     "response_body_max_characters": 1048576,
     "error_body_max_characters": 4096,
     "devices_default": 500,
-    "devices_max": 500,
+    "devices_max": 5000,
     "groups_default": 500,
     "groups_max": 500,
     "policies_default": 500,
@@ -22,6 +22,8 @@
     "activity_max": 20000,
     "patch_summary_default": 500,
     "patch_summary_max": 20000,
+    "org_packages_default": 500,
+    "org_packages_max": 20000,
     "queue_default": 50,
     "queue_max": 200,
     "inventory_max": 500,
@@ -30,7 +32,8 @@
   "pagination": {
     "page_size": 500,
     "events_page_size": 100,
-    "max_pages": 100
+    "max_pages": 100,
+    "org_packages_max_pages": 1000
   },
   "polling": {
     "default_interval_seconds": 5,
@@ -41,6 +44,7 @@
     "servers": "/servers",
     "server": "/servers/{id}",
     "server_packages": "/servers/{id}/packages",
+    "org_packages": "/orgs/{org}/packages",
     "groups": "/servergroups",
     "group": "/servergroups/{id}",
     "policies": "/policies",
@@ -196,6 +200,18 @@
       "requires_reboot",
       "repo",
       "outcome"
+    ],
+    "org_packages": [
+      "server_id",
+      "hostname",
+      "name",
+      "version",
+      "installed",
+      "severity",
+      "cve_score",
+      "cves",
+      "kev_cves",
+      "requires_reboot"
     ]
   }
 }

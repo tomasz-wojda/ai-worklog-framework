@@ -76,6 +76,7 @@ class AutomoxAdapter {
             packages_limit: (automox.packages_limit ?: limits.packages_default ?: 500) as int,
             activity_limit: (automox.activity_limit ?: limits.activity_default ?: 500) as int,
             patch_summary_limit: (automox.patch_summary_limit ?: limits.patch_summary_default ?: 500) as int,
+            org_packages_limit: (automox.org_packages_limit ?: limits.org_packages_default ?: 500) as int,
             queue_limit: (automox.queue_limit ?: limits.queue_default ?: 50) as int,
             history_max: (automox.history_max ?: limits.history_max ?: 50000) as int,
             response_body_max: (limits.response_body_max_characters ?: 1048576) as int,
@@ -312,6 +313,66 @@ class AutomoxAdapter {
             device: reference, query: query, truncated: truncated,
             filters: [state: state ?: 'all'],
             totals: [packages: totalPackages, returned: packages.size(), page: page, pages: pages]
+        ])
+    }
+
+    Map operatorOrgPackages(
+        String profile,
+        String name,
+        boolean awaiting,
+        String severity,
+        int limit,
+        int timeout
+    ) {
+        String fetchedAt = utcNow()
+        AutomoxCredentials.Resolved credentials = requireCredentials(profile)
+        Integer maxPages = operatorRules.pagination?.org_packages_max_pages as Integer
+        List packages = fetchArray('org_packages', credentials, timeout, [org: credentials.org],
+            awaiting ? [awaiting: 1] : [:], maxPages ?: 1000)
+        if (name) {
+            String lower = name.toLowerCase()
+            packages = packages.findAll { Map pkg ->
+                (pkg.name ?: '').toString().toLowerCase().contains(lower) ||
+                    (pkg.display_name ?: '').toString().toLowerCase().contains(lower)
+            }
+        }
+        List<Map> rows = packages.collect { Map pkg ->
+            [
+                server_id: pkg.server_id,
+                name: pkg.name,
+                version: pkg.version,
+                installed: pkg.installed == true,
+                severity: pkg.severity?.toString() ?: severityLabel(pkg),
+                cve_score: pkg.cve_score,
+                cves: pkg.cves instanceof List ? pkg.cves.join(';') : pkg.cves,
+                kev_cves: pkg.kev_cves instanceof List ? pkg.kev_cves.join(';') : pkg.kev_cves,
+                requires_reboot: pkg.requires_reboot == true
+            ]
+        }
+        if (severity && severity != 'all') {
+            rows = rows.findAll { it.severity == severity }
+        }
+        Map hostnames = rows ? fetchArray('servers', credentials, timeout, [:], [o: credentials.org])
+            .collectEntries { Map server -> [(server.id?.toString()): server.name] } : [:]
+        rows = rows.collect { Map row ->
+            Map named = [server_id: row.server_id, hostname: hostnames[row.server_id?.toString()]]
+            named.putAll(row)
+            named
+        }.sort { a, b ->
+            (a.hostname ?: '').toString().toLowerCase() <=> (b.hostname ?: '').toString().toLowerCase() ?:
+                (a.name ?: '').toString().toLowerCase() <=> (b.name ?: '').toString().toLowerCase()
+        }
+        int totalRows = rows.size()
+        Set hosts = rows*.server_id as Set
+        Set distinctPackages = rows*.name as Set
+        boolean truncated = totalRows > limit
+        if (truncated) {
+            rows = rows.take(limit)
+        }
+        report('org-packages', Status.READY, rows, [
+            fetched_at: fetchedAt, profile: credentials.id, org: credentials.org, truncated: truncated,
+            filters: [name: name, awaiting: awaiting, severity: severity ?: 'all'],
+            totals: [rows: totalRows, hosts: hosts.size(), packages: distinctPackages.size()]
         ])
     }
 
@@ -1038,16 +1099,18 @@ class AutomoxAdapter {
             limits: [
                 response_body_max_characters: 1048576,
                 error_body_max_characters: 4096,
-                devices_default: 500, devices_max: 500,
+                devices_default: 500, devices_max: 5000,
                 groups_default: 500, groups_max: 500,
                 policies_default: 500, policies_max: 500,
                 packages_default: 500, packages_max: 500,
                 activity_default: 500, activity_max: 20000,
                 patch_summary_default: 500, patch_summary_max: 20000,
+                org_packages_default: 500, org_packages_max: 20000,
                 queue_default: 50, queue_max: 200,
                 inventory_max: 500, history_max: 50000
             ],
-            pagination: [page_size: 500, events_page_size: 100, max_pages: 100],
+            pagination: [page_size: 500, events_page_size: 100, max_pages: 100, org_packages_max_pages: 1000],
+            api_paths: [org_packages: '/orgs/{org}/packages'],
             polling: [default_interval_seconds: 5, max_wait_seconds: 900],
             success_codes: [read: [200], mutation: [200, 201, 204], group_create: [200, 201]],
             queue_terminal_statuses: ['completed', 'failed', 'cancelled', 'error', 'timed_out'],
@@ -1119,11 +1182,12 @@ class AutomoxAdapter {
         AutomoxCredentials.Resolved credentials,
         int timeout,
         Map pathBindings,
-        Map query = [:]
+        Map query = [:],
+        Integer maxPagesOverride = null
     ) {
         List collected = []
         int pageSize = (operatorRules.pagination?.page_size ?: 500) as int
-        int maxPages = (operatorRules.pagination?.max_pages ?: 100) as int
+        int maxPages = (maxPagesOverride ?: operatorRules.pagination?.max_pages ?: 100) as int
         for (int page = 0; page < maxPages; page++) {
             Map pageQuery = new LinkedHashMap(query)
             pageQuery.limit = pageSize

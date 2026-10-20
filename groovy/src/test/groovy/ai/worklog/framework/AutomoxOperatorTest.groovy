@@ -1043,6 +1043,60 @@ class AutomoxOperatorTest extends GroovyTestCase {
         assertEquals([], validateReport(applied))
     }
 
+    void testOrgPackagesFiltersPagesResolvesHostnamesAndTotals() {
+        writeProperties(defaultProperties())
+        Map rulesOverride = [pagination: [page_size: 2, org_packages_max_pages: 1000]]
+        List packages = [
+            orgPackage(10, 'docker-ce', 'critical', ['CVE-1', 'CVE-2'], ['CVE-1']),
+            orgPackage(10, 'openssl', 'high', ['CVE-3'], null),
+            orgPackage(11, 'Docker-Compose', 'medium', null, null),
+            orgPackage(12, 'docker-ce', 'critical', ['CVE-1'], ['CVE-1']),
+            orgPackage(12, 'bash', 'no_known_cves', null, null)
+        ]
+        List<String> urls = []
+        Closure router = { method, url, headers, timeout, max ->
+            urls << url
+            if (url.contains('/orgs/121224/packages')) {
+                return packageRouter(packages).call(method, url, headers, timeout, max)
+            }
+            response([server(10, 'beta.example.internal'), server(11, 'alpha.example.internal'),
+                      server(12, 'gamma.example.internal')])
+        }
+        AutomoxAdapter adapter = automoxAdapter([:], router, null, false, rulesOverride)
+        Map named = adapter.operatorOrgPackages('default', 'DOCKER', true, 'all', 2, 5)
+        List<String> packageUrls = urls.findAll { it.contains('/packages') }
+        assertEquals(3, packageUrls.size())
+        assertTrue(packageUrls.every { it.contains('awaiting=1') && !it.contains('name=') })
+        assertEquals(['alpha.example.internal', 'beta.example.internal'], named.items*.hostname)
+        assertEquals(['Docker-Compose', 'docker-ce'], named.items*.name)
+        assertEquals('CVE-1;CVE-2', named.items[1].cves)
+        assertEquals('CVE-1', named.items[1].kev_cves)
+        assertEquals([rows: 3, hosts: 3, packages: 2], named.totals)
+        assertTrue(named.truncated)
+        assertEquals([name: 'DOCKER', awaiting: true, severity: 'all'], named.filters)
+        assertEquals([], validateReport(named))
+        urls.clear()
+        Map critical = adapter.operatorOrgPackages('default', null, false, 'critical', 50, 5)
+        assertTrue(urls.findAll { it.contains('/packages') }.every { !it.contains('awaiting') })
+        assertEquals([10, 12], critical.items*.server_id)
+        assertEquals([rows: 2, hosts: 2, packages: 1], critical.totals)
+        assertFalse(critical.truncated)
+    }
+
+    void testOrgPackagesContractLimitsAndCsvColumns() {
+        writeProperties(defaultProperties())
+        Map action = CommandContract.load(repository).node(['service', 'automox', 'org-packages'])
+        List<String> optionNames = ((List<Map>) action.options).findAll { it.name }*.name
+        assertEquals(['--json', '--profile', '--org', '--name', '--awaiting', '--severity', '--limit', '--csv'],
+            optionNames)
+        assertEquals(20000, ((List<Map>) action.options).find { it.name == '--limit' }.value.integer_max)
+        Map devices = CommandContract.load(repository).node(['service', 'automox', 'devices'])
+        assertEquals(5000, ((List<Map>) devices.options).find { it.name == '--limit' }.value.integer_max)
+        assertEquals(5000, rules.limits.devices_max)
+        assertEquals(['server_id', 'hostname', 'name', 'version', 'installed', 'severity', 'cve_score',
+                      'cves', 'kev_cves', 'requires_reboot'], rules.csv_columns.org_packages)
+    }
+
     void testReportSchemaShapeForOperations() {
         writeProperties(defaultProperties())
         AutomoxAdapter adapter = automoxAdapter([:], fullRouter())
@@ -1296,6 +1350,21 @@ class AutomoxOperatorTest extends GroovyTestCase {
             cve_score: installed ? null : '8.5',
             cves: installed ? null : ['CVE-1'],
             repo: 'main',
+            requires_reboot: false
+        ]
+    }
+
+    private static Map orgPackage(int serverId, String name, String severity, List cves, List kevCves) {
+        [
+            server_id: serverId,
+            name: name,
+            display_name: name,
+            version: '1.0',
+            installed: false,
+            severity: severity,
+            cve_score: cves ? '9.8' : null,
+            cves: cves,
+            kev_cves: kevCves,
             requires_reboot: false
         ]
     }

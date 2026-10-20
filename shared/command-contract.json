@@ -81,6 +81,11 @@
           "help_values": "ID"
         }
       },
+      "automox_csv": {
+        "name": "--csv",
+        "description": "Emit RFC 4180 CSV to stdout",
+        "takes_value": false
+      },
       "automox_policy": {
         "name": "--policy",
         "description": "Filter by policy id",
@@ -625,7 +630,7 @@
                   "default_from": "limits.devices_default",
                   "value": {
                     "integer_min": 1,
-                    "integer_max": 500,
+                    "integer_max": 5000,
                     "help_values": "COUNT"
                   }
                 }
@@ -696,11 +701,58 @@
                     "help_values": "PAGE"
                   }
                 },
+                {"use": "automox_csv"}
+              ]
+            },
+            {
+              "name": "org-packages",
+              "description": "List packages across all organization devices with name, awaiting, and severity filters",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {"use": "json"},
+                {"use": "automox_profile"},
+                {"use": "automox_org"},
                 {
-                  "name": "--csv",
-                  "description": "Emit RFC 4180 CSV to stdout",
+                  "name": "--name",
+                  "description": "Filter package names by a case-insensitive substring",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--awaiting",
+                  "description": "Only packages awaiting installation",
                   "takes_value": false
-                }
+                },
+                {
+                  "name": "--severity",
+                  "description": "Filter packages by Automox severity",
+                  "takes_value": true,
+                  "value": {
+                    "choices": [
+                      "critical",
+                      "high",
+                      "medium",
+                      "low",
+                      "all"
+                    ],
+                    "help_values": "critical | high | medium | low | all"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum number of package rows",
+                  "takes_value": true,
+                  "default_from": "limits.org_packages_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 20000,
+                    "help_values": "COUNT"
+                  }
+                },
+                {"use": "automox_csv"}
               ]
             },
             {
@@ -804,11 +856,7 @@
                     "help_values": "COUNT"
                   }
                 },
-                {
-                  "name": "--csv",
-                  "description": "Emit RFC 4180 CSV to stdout",
-                  "takes_value": false
-                }
+                {"use": "automox_csv"}
               ]
             },
             {

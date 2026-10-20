@@ -10,6 +10,8 @@ ai-worklog service automox devices --query hostname
 ai-worklog service automox device hostname
 ai-worklog service automox device-packages hostname --state pending
 ai-worklog service automox device-packages hostname --limit 500 --page 2
+ai-worklog service automox org-packages --name docker --awaiting
+ai-worklog service automox org-packages --awaiting --severity critical --limit 20000 --csv
 ai-worklog service automox activity --since 2026-09-01 --event system.patch.failed
 ai-worklog service automox patch-summary --since 2026-09-01 --csv
 ai-worklog service automox policies
@@ -36,7 +38,8 @@ overrides are `AUTOMOX_PROFILE`, `AUTOMOX_API_TOKEN`,
 `AUTOMOX_ENROLLMENT_KEY`, `AUTOMOX_ORG`, and `AUTOMOX_API_BASE_URL`. Legacy
 `token` and `server-id` files are read as non-executable fallbacks.
 
-`device-packages` and `patch-summary` support RFC 4180 CSV output. Every
+`device-packages`, `patch-summary`, and `org-packages` support RFC 4180 CSV
+output. Every
 external mutation is a dry run unless `--apply` is supplied. Policy-wide runs
 also require `--confirm-all` to match the policy id, and deletion requires
 `--confirm-name` to match the current policy name. SSH agent operations, batch
@@ -71,3 +74,11 @@ returns every event type.
 `device-packages` returns at most `--limit` packages per call. Use `--page`,
 starting at 1, to read later pages; `totals.page` and `totals.pages` show the
 position, and a page past the last one is rejected.
+
+`org-packages` reads every page of the organization package inventory, up to
+`pagination.org_packages_max_pages`. Automox ignores a server-side name
+filter, so `--name` matches `name` and `display_name` on the client;
+`--awaiting` is sent as `awaiting=1` and is filtered by Automox, which keeps
+the read to a fraction of the full inventory.
+`--severity` matches the Automox `severity` field. `totals` counts all
+matching rows, distinct hosts, and distinct packages before `--limit` applies.

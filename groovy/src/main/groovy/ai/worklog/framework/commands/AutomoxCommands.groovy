@@ -20,7 +20,7 @@ class AutomoxCommands {
         'device-move', 'policy-add-group', 'policy-run', 'worklet-create', 'policy-delete',
         'group-create', 'policy-remove-group', 'policy-set-groups'
     ]
-    private static final List<String> CSV_ACTIONS = ['device-packages', 'patch-summary']
+    private static final List<String> CSV_ACTIONS = ['device-packages', 'patch-summary', 'org-packages']
 
     static int run(
         String action,
@@ -81,9 +81,7 @@ class AutomoxCommands {
             AutomoxOperatorReport report = AutomoxOperatorReport.fromPayload(payload)
             if (csv) {
                 Map csvColumns = rules.csv_columns instanceof Map ? (Map) rules.csv_columns : [:]
-                List<String> columns = action == 'device-packages' ?
-                    (List<String>) (csvColumns.device_packages ?: []) :
-                    (List<String>) (csvColumns.patch_summary ?: [])
+                List<String> columns = (List<String>) (csvColumns[action.replace('-', '_')] ?: [])
                 print AutomoxCsvRenderer.render(columns, report.items)
             } else {
                 print json ? report.renderJson(redaction) : report.renderHuman(redaction)
@@ -171,6 +169,15 @@ class AutomoxCommands {
                     parseLimit(parsed.value('--limit'), settings.packages_limit as int, adapter.operatorRules, 'packages'),
                     timeout,
                     parsed.value('--page') ? parsed.value('--page').toString() as int : 1
+                )
+            case 'org-packages':
+                return adapter.operatorOrgPackages(
+                    profile,
+                    parsed.value('--name')?.toString(),
+                    parsed.flag('--awaiting'),
+                    parsed.value('--severity')?.toString() ?: 'all',
+                    parseLimit(parsed.value('--limit'), settings.org_packages_limit as int, adapter.operatorRules, 'org_packages'),
+                    timeout
                 )
             case 'activity':
                 return adapter.operatorActivity(
@@ -339,6 +346,7 @@ class AutomoxCommands {
             packages_limit: settings.packages_limit,
             activity_limit: settings.activity_limit,
             patch_summary_limit: settings.patch_summary_limit,
+            org_packages_limit: settings.org_packages_limit,
             queue_limit: settings.queue_limit
         ]
     }

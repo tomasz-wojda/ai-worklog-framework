@@ -15,6 +15,7 @@
         "devices",
         "device",
         "device-packages",
+        "org-packages",
         "activity",
         "patch-summary",
         "policies",
