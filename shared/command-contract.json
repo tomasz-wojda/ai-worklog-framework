@@ -124,6 +124,15 @@
       }
     },
     "positionals": {
+      "jira_ticket_key": {
+        "name": "ticket_key",
+        "description": "Jira ticket key",
+        "required": true,
+        "value": {
+          "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
+          "help_values": "TICKET-KEY"
+        }
+      },
       "artifactory_repository": {
         "name": "repository",
         "description": "Repository key",
@@ -1779,15 +1788,7 @@
               "description": "Show full Jira ticket details, comments, links, assignment, and worklogs",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "ticket_key",
-                  "description": "Jira ticket key",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
-                    "help_values": "TICKET-KEY"
-                  }
-                }
+                {"use": "jira_ticket_key"}
               ],
               "options": [
                 {"use": "json"}
@@ -1885,15 +1886,7 @@
               "description": "Log Tempo time; dry-run unless --apply is supplied",
               "kind": "action",
               "positionals": [
-                {
-                  "name": "ticket_key",
-                  "description": "Jira ticket key",
-                  "required": true,
-                  "value": {
-                    "pattern": "^[A-Z][A-Z0-9_]*-[1-9][0-9]*$",
-                    "help_values": "TICKET-KEY"
-                  }
-                },
+                {"use": "jira_ticket_key"},
                 {
                   "name": "date",
                   "description": "Worklog date",
@@ -1927,6 +1920,81 @@
                 {
                   "name": "--apply",
                   "description": "Create the Tempo worklog",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "comment",
+              "description": "Add a Jira issue comment; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {"use": "jira_ticket_key"},
+                {
+                  "name": "text",
+                  "description": "Comment body in Jira wiki markup",
+                  "required": false,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--file",
+                  "description": "Read the comment body from a UTF-8 file",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Create the Jira comment",
+                  "takes_value": false
+                }
+              ]
+            },
+            {
+              "name": "comment-edit",
+              "description": "Replace the body of an own Jira issue comment; dry-run unless --apply is supplied",
+              "kind": "action",
+              "positionals": [
+                {"use": "jira_ticket_key"},
+                {
+                  "name": "comment_id",
+                  "description": "Jira comment ID",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "COMMENT-ID"
+                  }
+                },
+                {
+                  "name": "text",
+                  "description": "Comment body in Jira wiki markup",
+                  "required": false,
+                  "variadic": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--file",
+                  "description": "Read the comment body from a UTF-8 file",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "PATH"
+                  }
+                },
+                {
+                  "name": "--apply",
+                  "description": "Update the Jira comment",
                   "takes_value": false
                 }
               ]

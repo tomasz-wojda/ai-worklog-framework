@@ -39,6 +39,17 @@ class JsonWriteHttp {
         return send('PUT', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters)
     }
 
+    Map put(
+        String url,
+        Map headers,
+        Map payload,
+        int timeoutSeconds,
+        int errorBodyMaxCharacters,
+        int responseBodyMaxCharacters
+    ) {
+        return send('PUT', url, headers, payload, timeoutSeconds, errorBodyMaxCharacters, responseBodyMaxCharacters)
+    }
+
     Map delete(
         String url,
         Map headers,

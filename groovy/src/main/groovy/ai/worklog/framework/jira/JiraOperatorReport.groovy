@@ -9,6 +9,7 @@ class JiraOperatorReport extends OperatorReport {
     private static final JsonGenerator HUMAN_JSON = new JsonGenerator.Options()
         .disableUnicodeEscaping()
         .build()
+    private static final List<String> WRITE_OPERATIONS = ['log-time', 'comment', 'comment-edit']
 
     String ticketKey
     String date
@@ -72,7 +73,7 @@ class JiraOperatorReport extends OperatorReport {
         if (typeId != null) {
             result.type_id = typeId
         }
-        if (operation == 'log-time') {
+        if (operation in WRITE_OPERATIONS) {
             result.dry_run = dryRun
             result.applied = applied
         }
@@ -117,7 +118,7 @@ class JiraOperatorReport extends OperatorReport {
         if (message) {
             output.append("  Message: ${redaction.redact(message)}").append(System.lineSeparator())
         }
-        if (operation == 'log-time') {
+        if (operation in WRITE_OPERATIONS) {
             output.append("  Dry run: ${dryRun}").append(System.lineSeparator())
             output.append("  Applied: ${applied}").append(System.lineSeparator())
         }

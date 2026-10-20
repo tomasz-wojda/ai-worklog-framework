@@ -1,6 +1,7 @@
 package ai.worklog.framework.commands
 
 import ai.worklog.framework.adapters.JiraAssetsAdapter
+import ai.worklog.framework.adapters.JiraIssueWriteAdapter
 import ai.worklog.framework.adapters.JiraOperatorAdapter
 import ai.worklog.framework.adapters.JsonWriteHttp
 import ai.worklog.framework.adapters.ReadOnlyHttp
@@ -18,6 +19,10 @@ import ai.worklog.framework.core.Status
 import ai.worklog.framework.jira.JiraOperatorReport
 import ai.worklog.framework.jira.JiraWorklogVerifier
 
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 
 class JiraCommands {
@@ -56,7 +61,8 @@ class JiraCommands {
             JiraOperatorAdapter jira = new JiraOperatorAdapter(paths, new ReadOnlyHttp(), rules)
             TempoOperatorAdapter tempo = new TempoOperatorAdapter(jira, new JsonWriteHttp(), rules)
             JiraAssetsAdapter assets = new JiraAssetsAdapter(jira, rules)
-            Map payload = dispatch(action, parsed, jira, tempo, assets, paths)
+            JiraIssueWriteAdapter writer = new JiraIssueWriteAdapter(jira, new JsonWriteHttp(), rules)
+            Map payload = dispatch(action, parsed, jira, tempo, assets, writer, paths)
             JiraOperatorReport report = JiraOperatorReport.fromPayload(payload)
             print json ? report.renderJson(redaction) : report.renderHuman(redaction)
             return JiraOperatorReport.exitCodeFor(report, exitCodes)
@@ -103,6 +109,7 @@ class JiraCommands {
         JiraOperatorAdapter jira,
         TempoOperatorAdapter tempo,
         JiraAssetsAdapter assets,
+        JiraIssueWriteAdapter writer,
         FrameworkPaths paths
     ) {
         switch (action) {
@@ -132,6 +139,19 @@ class JiraCommands {
                     parsed.variadic('comment').join(' '),
                     parsed.flag('--apply')
                 )
+            case 'comment':
+                return writer.comment(
+                    parsed.positional('ticket_key'),
+                    commentBody(parsed, 'comment'),
+                    parsed.flag('--apply')
+                )
+            case 'comment-edit':
+                return writer.editComment(
+                    parsed.positional('ticket_key'),
+                    parsed.positional('comment_id'),
+                    commentBody(parsed, 'comment-edit'),
+                    parsed.flag('--apply')
+                )
             case 'assets-schemas':
                 return assets.schemas()
             case 'assets-types':
@@ -158,6 +178,30 @@ class JiraCommands {
                     'service jira',
                     action
                 )
+        }
+    }
+
+    private static String commentBody(ParsedArguments parsed, String action) {
+        List<String> words = parsed.variadic('text')
+        String path = parsed.value('--file')?.toString()
+        if (!words == !path) {
+            throw new UsageError("${action} requires exactly one of <text...> or --file", 'service jira', action)
+        }
+        path ? readUtf8(new File(path)) : words.join(' ')
+    }
+
+    private static String readUtf8(File file) {
+        if (!file.isFile()) {
+            throw new IllegalArgumentException("Comment file not found: ${file.path}")
+        }
+        try {
+            StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(file.bytes))
+                .toString()
+        } catch (CharacterCodingException ignored) {
+            throw new IllegalArgumentException("Comment file is not valid UTF-8: ${file.path}")
         }
     }
 

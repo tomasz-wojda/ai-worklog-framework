@@ -10,6 +10,11 @@ ai-worklog service jira verify 2026-09-09
 ai-worklog service jira whoami
 ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary"
 ai-worklog service jira log-time PROJ-1234 2026-09-09 3600 "Work summary" --apply
+ai-worklog service jira comment PROJ-1234 "Deployed to STAGE"
+ai-worklog service jira comment PROJ-1234 --file comment.txt
+ai-worklog service jira comment PROJ-1234 --file comment.txt --apply
+ai-worklog service jira comment-edit PROJ-1234 10001 --file comment.txt
+ai-worklog service jira comment-edit PROJ-1234 10001 --file comment.txt --apply
 ```
 
 Jira and Tempo use `integrations/jira/jira.properties`. Ticket reads include
@@ -21,6 +26,20 @@ JSON output. Board-specific status IDs belong in
 Tempo logging is a dry-run unless `--apply` is supplied. Verification compares
 Tempo entries with primary files directly under `worklog/`; archived files and
 `_jira.log` or `_raw.log` companions are excluded.
+
+`comment` takes the body as text words or from a UTF-8 `--file`, in Jira wiki
+markup, and is a dry-run unless `--apply` is supplied. Every run checks the
+issue, resolves each `[~username]` mention through `/rest/api/2/user`, and
+refuses inactive or unknown users and a body identical to an existing comment.
+Bodies are limited to `limits.issue_comment_max_characters` (32767). After
+posting, the body Jira returns must match the one sent; the report then carries
+`comment_id` and `comment_url`.
+
+`comment-edit` replaces the body of a comment whose author matches
+`/rest/api/2/myself`, and refuses comments by other authors and a body equal to
+the current one. It applies the same mention and length checks, verifies that
+Jira returns the same comment ID and body, and reports the old and new body
+sha256 and character counts.
 
 ```bash
 ai-worklog service jira assets-schemas
