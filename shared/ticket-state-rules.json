@@ -1,6 +1,9 @@
 {
+  "current_schema_version": 1,
+  "supported_schema_versions": [1],
   "required": ["ticket_key", "created_at", "updated_at"],
   "allowed_top_level": [
+    "schema_version",
     "ticket_key",
     "summary",
     "created_at",
@@ -62,5 +65,5 @@
     "synchronization.state": ["unknown", "out_of_sync", "synced", "forced_sync_required", "verified"],
     "verification.state": ["not_started", "partial", "complete", "failed"]
   },
-  "immutable_paths": ["ticket_key", "created_at", "updated_at"]
+  "immutable_paths": ["schema_version", "ticket_key", "created_at", "updated_at"]
 }

@@ -16,6 +16,15 @@ class StateManager {
         if (stateFile.isFile()) {
             Object loaded = JsonFiles.read(stateFile, [:])
             if (loaded instanceof Map) {
+                Object version = ((Map) loaded).containsKey('schema_version') ?
+                    ((Map) loaded).schema_version : 1
+                List supported = (List) rules().supported_schema_versions
+                if (!supported.contains(version)) {
+                    throw new IllegalArgumentException(
+                        "Unsupported ticket state schema_version ${version} in ${stateFile}; " +
+                            "supported: ${supported}"
+                    )
+                }
                 return (Map) loaded
             }
         }
@@ -35,6 +44,9 @@ class StateManager {
     }
 
     void save(Map state) {
+        if (!state.containsKey('schema_version')) {
+            state.schema_version = rules().current_schema_version
+        }
         state.updated_at = Instant.now().toString()
         JsonFiles.write(paths.ticketStateFile(state.ticket_key.toString()), state)
     }
@@ -72,6 +84,13 @@ class StateManager {
         decision.status = 'resolved'
         decision.resolution = resolution
         state.updated_at = Instant.now().toString()
+    }
+
+    private Map rules() {
+        (Map) JsonFiles.read(
+            new File(frameworkRoot, 'shared/ticket-state-rules.json'),
+            [:]
+        )
     }
 
     List<String> activeTickets() {
