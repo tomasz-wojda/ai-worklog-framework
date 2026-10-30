@@ -43,9 +43,24 @@ class StateManager {
         state
     }
 
+    Map migrateToCurrent(Map state) {
+        int current = rules().current_schema_version as int
+        Map defaults = (Map) JsonFiles.read(
+            new File(frameworkRoot, 'shared/ticket-state-defaults.json'),
+            [:]
+        )
+        defaults.each { key, value ->
+            if (!state.containsKey(key)) {
+                state[key] = value
+            }
+        }
+        state.schema_version = current
+        state
+    }
+
     void save(Map state) {
         if (!state.containsKey('schema_version')) {
-            state.schema_version = rules().current_schema_version
+            state.schema_version = rules().legacy_schema_version
         }
         state.updated_at = Instant.now().toString()
         JsonFiles.write(paths.ticketStateFile(state.ticket_key.toString()), state)

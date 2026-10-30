@@ -9,7 +9,7 @@
       "enum": [
         "ticket", "summary", "rejected", "reporter", "tempo", "verify", "whoami", "log-time", "comment", "comment-edit",
         "assets-schemas", "assets-types", "assets-attributes", "assets-object", "assets-search",
-        "get-ci", "get-cis", "boards", "board"
+        "get-ci", "get-cis", "boards", "board", "backlog"
       ]
     },
     "fetched_at": {"type": "string", "format": "date-time"},

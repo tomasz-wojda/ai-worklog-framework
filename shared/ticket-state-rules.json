@@ -1,6 +1,7 @@
 {
-  "current_schema_version": 1,
-  "supported_schema_versions": [1],
+  "legacy_schema_version": 1,
+  "current_schema_version": 2,
+  "supported_schema_versions": [1, 2],
   "required": ["ticket_key", "created_at", "updated_at"],
   "allowed_top_level": [
     "schema_version",
@@ -21,7 +22,14 @@
     "blockers",
     "next_action",
     "services",
-    "repositories"
+    "repositories",
+    "lifecycle",
+    "phase",
+    "jira",
+    "progress",
+    "lock",
+    "sessions",
+    "summary_ste"
   ],
   "path_types": {
     "ticket_key": "string",
@@ -55,7 +63,14 @@
     "blockers": "array",
     "next_action": "string",
     "services": "array",
-    "repositories": "array"
+    "repositories": "array",
+    "lifecycle": "string",
+    "phase": "string",
+    "jira": "object",
+    "progress": "object",
+    "lock": "object",
+    "sessions": "array",
+    "summary_ste": "object"
   },
   "enums": {
     "governance_mode": ["research", "innovate", "plan", "execute"],
@@ -63,7 +78,9 @@
     "implementation.state": ["not_started", "in_progress", "complete", "blocked"],
     "gitops.state": ["not_applicable", "pending", "committed", "merged"],
     "synchronization.state": ["unknown", "out_of_sync", "synced", "forced_sync_required", "verified"],
-    "verification.state": ["not_started", "partial", "complete", "failed"]
+    "verification.state": ["not_started", "partial", "complete", "failed"],
+    "lifecycle": ["queued", "active", "waiting_decision", "parked", "done", "archived"],
+    "phase": ["intake", "research", "innovate", "plan", "execute", "verify", "closeout"]
   },
   "immutable_paths": ["schema_version", "ticket_key", "created_at", "updated_at"]
 }

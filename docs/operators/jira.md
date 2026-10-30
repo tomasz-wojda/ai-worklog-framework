@@ -66,10 +66,16 @@ serves AQL sets `api_paths.assets_search` to `/aql/objects` and
 ai-worklog service jira boards --project PROJ
 ai-worklog service jira boards --name "Team Board" --limit 20
 ai-worklog service jira board 123
+ai-worklog service jira backlog 123 --columns "To Do"
+ai-worklog service jira backlog 123 --quick-filter 7 --columns "Open,Ready" --limit 200
 ```
 
 Board reads are GET-only calls to the Agile REST API at
 `/rest/agile/1.0/board`. `boards` lists boards with type and project. `board`
 shows one board's columns with their statuses and, for scrum boards, the active
 sprints. Its `status_ids` output has the same shape as `board.status_ids` in
-`integrations/jira/jira-operator.json` and can be copied there.
+`integrations/jira/jira-operator.json` and can be copied there. `backlog` lists the
+issues that wait in the chosen board columns (default: the first column), read from
+the board's work data (`/rest/greenhopper/1.0/xboard/work/allData.json`). With
+`--quick-filter` the board applies that quick filter, so the list matches the board
+page.

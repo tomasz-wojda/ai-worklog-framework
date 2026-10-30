@@ -108,6 +108,89 @@ class JiraBoardAdapter {
         JiraOperatorAdapter.report('board', Status.READY, [item], context)
     }
 
+    Map backlog(long boardId, Long quickFilterId, List<String> columns, int limit) {
+        Map context = [board_id: boardId]
+        if (quickFilterId != null) {
+            context = context + [quick_filter_id: quickFilterId]
+        }
+        Map credentials = jira.credentials()
+        if (!credentials) {
+            return JiraOperatorAdapter.blocked('backlog', 'Jira credentials unavailable', context)
+        }
+        String url = "${jira.apiPath('agile_work_data')}?rapidViewId=${boardId}"
+        if (quickFilterId != null) {
+            url += "&activeQuickFilters=${quickFilterId}"
+        }
+        Map result = jira.get(url, credentials)
+        if (result.failure) {
+            return JiraOperatorAdapter.failure('backlog', result, context)
+        }
+        Map data = result.data instanceof Map ? (Map) result.data : [:]
+        Map columnsData = data.columnsData instanceof Map ? (Map) data.columnsData : [:]
+        Map issuesData = data.issuesData instanceof Map ? (Map) data.issuesData : [:]
+        Map entities = data.entityData instanceof Map ? (Map) data.entityData : [:]
+        if (!(columnsData.columns instanceof List) || !(issuesData.issues instanceof List)) {
+            return malformed('backlog', context)
+        }
+        List<Map> boardColumns = (List<Map>) columnsData.columns
+        List<String> wanted = columns ?: (boardColumns ? [boardColumns[0].name?.toString() ?: ''] : [])
+        List<String> unknown = wanted.findAll { String name ->
+            !boardColumns.any { it.name?.toString()?.equalsIgnoreCase(name) }
+        }
+        if (unknown) {
+            return JiraOperatorAdapter.report(
+                'backlog', Status.ERROR, [],
+                context + [message: "Board column not found: ${unknown.join(', ')}", error_kind: 'user']
+            )
+        }
+        Map<String, String> columnByStatus = [:]
+        boardColumns.each { Map column ->
+            if (wanted.any { it.equalsIgnoreCase(column.name?.toString() ?: '') }) {
+                (column.statusIds instanceof List ? (List) column.statusIds : []).each {
+                    columnByStatus[it.toString()] = column.name?.toString() ?: ''
+                }
+            }
+        }
+        Map statuses = entities.statuses instanceof Map ? (Map) entities.statuses : [:]
+        Map priorities = entities.priorities instanceof Map ? (Map) entities.priorities : [:]
+        Map types = entities.types instanceof Map ? (Map) entities.types : [:]
+        List<Map> matching = ((List<Map>) issuesData.issues)
+            .findAll { Map issue -> columnByStatus.containsKey(issue.statusId?.toString()) }
+            .collect { Map issue -> backlogItem(issue, boardId, columnByStatus, statuses, priorities, types) }
+        int bounded = Math.min(limit, limitValue('backlog_max'))
+        JiraOperatorAdapter.report(
+            'backlog',
+            Status.READY,
+            matching.take(bounded),
+            context + [columns: wanted] + (matching.size() > bounded ? [truncated: true] : [:])
+        )
+    }
+
+    private static Map backlogItem(Map issue, long boardId, Map<String, String> columnByStatus,
+                                   Map statuses, Map priorities, Map types) {
+        String statusId = issue.statusId?.toString() ?: ''
+        Map status = statuses[statusId] instanceof Map ? (Map) statuses[statusId] : [:]
+        Map statusDetail = status.status instanceof Map ? (Map) status.status : [:]
+        Map category = statusDetail.statusCategory instanceof Map ? (Map) statusDetail.statusCategory : [:]
+        Map priority = priorities[issue.priorityId?.toString()] instanceof Map ?
+            (Map) priorities[issue.priorityId?.toString()] : [:]
+        Map type = types[issue.typeId?.toString()] instanceof Map ? (Map) types[issue.typeId?.toString()] : [:]
+        String key = issue.key?.toString() ?: ''
+        [
+            key: key,
+            summary: issue.summary?.toString() ?: '',
+            status: status.statusName?.toString() ?: '',
+            status_id: statusId,
+            status_category: category.key?.toString() ?: '',
+            column: columnByStatus[statusId] ?: '',
+            type: type.typeName?.toString() ?: '',
+            priority: priority.priorityName?.toString() ?: '',
+            project: key.contains('-') ? key.substring(0, key.lastIndexOf('-')) : '',
+            assignee: issue.assigneeName?.toString() ?: '',
+            board_id: boardId
+        ]
+    }
+
     private String boardsUrl(int startAt, int pageSize, String project, String name) {
         StringBuilder url = new StringBuilder("${jira.apiPath('agile_board')}?startAt=${startAt}&maxResults=${pageSize}")
         if (project) {

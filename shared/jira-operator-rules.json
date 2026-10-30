@@ -21,7 +21,9 @@
     "ci_list_page_size": 200,
     "boards_default": 50,
     "boards_max": 500,
-    "board_page_size": 50
+    "board_page_size": 50,
+    "backlog_default": 100,
+    "backlog_max": 500
   },
   "api_paths": {
     "issue": "/rest/api/2/issue",
@@ -36,6 +38,7 @@
     "assets_object": "/object/{id}",
     "assets_search": "/iql/objects",
     "agile_board": "/rest/agile/1.0/board",
+    "agile_work_data": "/rest/greenhopper/1.0/xboard/work/allData.json",
     "status": "/rest/api/2/status"
   },
   "api_params": {

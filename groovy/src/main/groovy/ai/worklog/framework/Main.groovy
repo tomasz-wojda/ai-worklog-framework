@@ -6,6 +6,7 @@ import ai.worklog.framework.cli.UsageRenderer
 import ai.worklog.framework.commands.CatalogCommands
 import ai.worklog.framework.commands.CloseoutCommands
 import ai.worklog.framework.commands.DailyCommands
+import ai.worklog.framework.commands.DashboardCommands
 import ai.worklog.framework.commands.DeliveryCommands
 import ai.worklog.framework.commands.DiagnosticsCommands
 import ai.worklog.framework.commands.GlobalConfigCommands
@@ -104,6 +105,8 @@ class Main {
                 return DiagnosticsCommands.run(action, args, frameworkRoot, paths)
             case 'toolchain':
                 return ToolchainCommands.run(action, args, frameworkRoot, config)
+            case 'dashboard':
+                return DashboardCommands.run(action, args, paths)
             case 'reconcile':
                 return ReconciliationCommands.run(
                     action, args, frameworkRoot, paths, config, catalog, states
@@ -129,7 +132,7 @@ class Main {
         List<String> commands = [
             'workspace', 'config', 'catalog', 'ticket', 'state',
             'preflight', 'reconcile', 'service', 'day', 'delivery',
-            'closeout', 'diag', 'toolchain', 'help'
+            'closeout', 'diag', 'toolchain', 'dashboard', 'help'
         ]
         int index = args.findIndexOf { it in commands }
         index >= 0 ? index : args.size()

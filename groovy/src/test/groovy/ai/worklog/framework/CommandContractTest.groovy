@@ -93,14 +93,14 @@ class CommandContractTest extends GroovyTestCase {
     void testMainCommandsAndContractCommandsAgree() {
         Set expected = [
             'workspace', 'config', 'catalog', 'ticket', 'state', 'preflight', 'reconcile',
-            'service', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'help'
+            'service', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'dashboard', 'help'
         ] as Set
         assertEquals(expected, contract.commands()*.name as Set)
     }
 
     void testRootRenderingMatchesPreviousMainHelp() {
         String expected = '''usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]
-                  {config,workspace,catalog,ticket,state,preflight,reconcile,service,day,delivery,closeout,diag,toolchain} ...
+                  {config,workspace,catalog,ticket,state,preflight,reconcile,service,day,delivery,closeout,diag,toolchain,dashboard} ...
 
 DevOps daily workflow automation framework
 
@@ -118,6 +118,7 @@ commands:
   closeout     Close-out and handover
   diag         Diagnostic packs
   toolchain    Python/Java/Groovy detection and routing
+  dashboard    Local ticket dashboard (start, status, stop, open)
 '''
         assertEquals(expected, new UsageRenderer(contract).renderRoot())
     }
@@ -222,10 +223,10 @@ commands:
         }
     }
 
-    void testJiraRenderingListsNineteenActions() {
+    void testJiraRenderingListsTwentyActions() {
         List<Map> actions = contract.children(['service', 'jira'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])
-        assertEquals(19, actions.size())
+        assertEquals(20, actions.size())
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
         assertTrue(
             new UsageRenderer(contract)

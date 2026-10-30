@@ -587,6 +587,99 @@ class JiraOperatorTest extends GroovyTestCase {
         assertEquals('Jira item not found', missing.message)
     }
 
+    void testBacklogFiltersByColumnsAppliesQuickFilterAndTruncates() {
+        List<String> urls = []
+        Closure read = boardRouter(urls, [
+            '/rest/greenhopper/1.0/xboard/work/allData.json?rapidViewId=7&activeQuickFilters=9':
+                response(workData())
+        ])
+        JiraBoardAdapter boards = new JiraBoardAdapter(adapter(read), rules)
+        Map report = boards.backlog(7L, 9L, ['Open', 'Ready'], 10)
+        assertEquals(Status.READY, report.status)
+        assertEquals(['PROJ-1', 'PROJ-2', 'PROJ-3'], report.items*.key)
+        assertEquals(['Open', 'Ready', 'Ready'], report.items*.column)
+        assertEquals('Open', report.items[0].status)
+        assertEquals('Wysoki', report.items[0].priority)
+        assertEquals('Task', report.items[0].type)
+        assertEquals('PROJ', report.items[0].project)
+        assertEquals('Last, First', report.items[0].assignee)
+        assertEquals(7L, report.board_id)
+        assertEquals(9L, report.quick_filter_id)
+        assertEquals(['Open', 'Ready'], report.columns)
+        assertNull(report.truncated)
+        Map truncated = boards.backlog(7L, 9L, ['Open', 'Ready'], 2)
+        assertEquals(['PROJ-1', 'PROJ-2'], truncated.items*.key)
+        assertTrue(truncated.truncated)
+        assertTrue(urls.every { it.contains('activeQuickFilters=9') })
+    }
+
+    void testBacklogDefaultsToFirstColumnWithoutQuickFilter() {
+        List<String> urls = []
+        Closure read = boardRouter(urls, [
+            '/rest/greenhopper/1.0/xboard/work/allData.json?rapidViewId=7': response(workData())
+        ])
+        Map report = new JiraBoardAdapter(adapter(read), rules).backlog(7L, null, [], 10)
+        assertEquals(['PROJ-1'], report.items*.key)
+        assertEquals(['Open'], report.columns)
+        assertNull(report.quick_filter_id)
+        assertFalse(urls.any { it.contains('activeQuickFilters') })
+    }
+
+    void testBacklogUnknownColumnMissingBoardAndMalformed() {
+        Closure read = boardRouter([], [
+            '/rest/greenhopper/1.0/xboard/work/allData.json?rapidViewId=7': response(workData())
+        ])
+        Map unknown = new JiraBoardAdapter(adapter(read), rules).backlog(7L, null, ['Nope'], 10)
+        assertEquals(Status.ERROR, unknown.status)
+        assertEquals('user', unknown.error_kind)
+        assertEquals('Board column not found: Nope', unknown.message)
+        Map missing = new JiraBoardAdapter(adapter(boardRouter([], [:])), rules).backlog(99L, null, [], 10)
+        assertEquals('user', missing.error_kind)
+        Map broken = new JiraBoardAdapter(
+            adapter({ method, url, headers, timeout -> response([columnsData: [:]]) }), rules
+        ).backlog(7L, null, [], 10)
+        assertEquals(Status.ERROR, broken.status)
+        assertEquals('Malformed Jira board response', broken.message)
+    }
+
+    void testBacklogCliRejectsInvalidArguments() {
+        ExitCodes exitCodes = new ExitCodes(repository)
+        assertEquals(exitCodes.userError, JiraCommands.run('backlog', ['abc'], repository, paths))
+        assertEquals(exitCodes.userError, JiraCommands.run('backlog', ['7', '--limit', '0'], repository, paths))
+        assertEquals(exitCodes.userError, JiraCommands.run('backlog', ['7', '--quick-filter', 'x'], repository, paths))
+    }
+
+    private static Map workData() {
+        [
+            columnsData: [columns: [
+                [name: 'Open', statusIds: [1]],
+                [name: 'Ready', statusIds: [2, 3]],
+                [name: 'Doing', statusIds: [4]]
+            ]],
+            issuesData: [issues: [
+                workIssue('PROJ-1', 1, 2),
+                workIssue('PROJ-2', 2, 4),
+                workIssue('PROJ-3', 3, 2),
+                workIssue('PROJ-4', 4, 2)
+            ]],
+            entityData: [
+                statuses: [
+                    '1': [statusName: 'Open', status: [id: 1, name: 'Open', statusCategory: [key: 'new']]],
+                    '2': [statusName: 'Ready', status: [id: 2, name: 'Ready', statusCategory: [key: 'new']]],
+                    '3': [statusName: 'Waiting', status: [id: 3, name: 'Waiting', statusCategory: [key: 'new']]],
+                    '4': [statusName: 'Doing', status: [id: 4, name: 'Doing', statusCategory: [key: 'indeterminate']]]
+                ],
+                priorities: ['2': [priorityName: 'Wysoki'], '4': [priorityName: 'Niski']],
+                types: ['10': [typeName: 'Task']]
+            ]
+        ]
+    }
+
+    private static Map workIssue(String key, int statusId, int priorityId) {
+        [key: key, summary: "Summary ${key}".toString(), statusId: statusId, priorityId: priorityId,
+         typeId: 10, assigneeName: 'Last, First']
+    }
+
     void testBoardCliRejectsInvalidIdAndLimit() {
         ExitCodes exitCodes = new ExitCodes(repository)
         assertEquals(exitCodes.userError, JiraCommands.run('board', ['abc'], repository, paths))

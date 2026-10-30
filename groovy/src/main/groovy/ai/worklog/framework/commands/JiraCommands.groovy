@@ -183,6 +183,14 @@ class JiraCommands {
                 )
             case 'board':
                 return boards.board(parsed.positional('board_id') as long)
+            case 'backlog':
+                return boards.backlog(
+                    parsed.positional('board_id') as long,
+                    parsed.value('--quick-filter') ? parsed.value('--quick-filter').toString() as long : null,
+                    parsed.value('--columns') ?
+                        parsed.value('--columns').toString().split(',').collect { it.trim() }.findAll { it } : [],
+                    parsed.value('--limit').toString() as int
+                )
             default:
                 throw new UsageError(
                     "Unknown action for service jira: ${action}",

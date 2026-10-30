@@ -2198,6 +2198,53 @@
               "options": [
                 {"use": "json"}
               ]
+            },
+            {
+              "name": "backlog",
+              "description": "List issues waiting in chosen columns of one Jira agile board",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "board_id",
+                  "description": "Jira agile board ID",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "BOARD-ID"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--quick-filter",
+                  "description": "Apply this board quick filter",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "QUICK-FILTER-ID"
+                  }
+                },
+                {
+                  "name": "--columns",
+                  "description": "Board columns to include, comma separated (default: first column)",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "COLUMN[,COLUMN]"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum issues to include",
+                  "takes_value": true,
+                  "default_from": "limits.backlog_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
             }
           ]
         },
@@ -3152,6 +3199,12 @@
     {
       "name": "toolchain",
       "description": "Python/Java/Groovy detection and routing",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
+      "name": "dashboard",
+      "description": "Local ticket dashboard (start, status, stop, open)",
       "kind": "command",
       "subcommands": []
     },

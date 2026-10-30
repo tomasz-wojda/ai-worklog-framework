@@ -8,7 +8,7 @@
     "schema_version": {
       "type": "integer",
       "minimum": 1,
-      "description": "Ticket state format version; absent means 1"
+      "description": "Ticket state format version; absent means 1 (legacy). Version 2 adds scale-up fields."
     },
     "ticket_key": { "type": "string" },
     "summary": { "type": "string" },
@@ -117,7 +117,12 @@
           "description": { "type": "string" },
           "status": { "type": "string", "enum": ["open", "resolved", "superseded"] },
           "resolution": { "type": "string" },
-          "owner": { "type": "string" }
+          "owner": { "type": "string" },
+          "asked_at": { "type": "string" },
+          "stops": { "type": "array", "items": { "type": "string" } },
+          "proposed_answer": { "type": "string" },
+          "evidence_refs": { "type": "array", "items": { "type": "string" } },
+          "waiting_on": { "type": ["string", "null"] }
         }
       }
     },
@@ -143,6 +148,65 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "Repository local_dir names involved"
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": ["queued", "active", "waiting_decision", "parked", "done", "archived"]
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["intake", "research", "innovate", "plan", "execute", "verify", "closeout"]
+    },
+    "jira": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "column": { "type": "string" },
+        "board": { "type": ["integer", "null"] },
+        "priority": { "type": "string" },
+        "assignee": { "type": "string" },
+        "updated": { "type": "string" }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "properties": {
+        "percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "phase_base": { "type": "number" },
+        "phase_fraction": { "type": "number" },
+        "capped_reason": { "type": ["string", "null"] }
+      }
+    },
+    "lock": {
+      "type": ["object", "null"],
+      "properties": {
+        "holder": { "type": "string" },
+        "pid": { "type": "integer" },
+        "host": { "type": "string" },
+        "acquired_at": { "type": "string" },
+        "heartbeat_at": { "type": "string" }
+      }
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": { "type": "string", "enum": ["claude", "cursor"] },
+          "id": { "type": "string" },
+          "worktree": { "type": "string" },
+          "started_at": { "type": "string" },
+          "last_resume_at": { "type": "string" }
+        }
+      }
+    },
+    "summary_ste": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "ste_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "remaining": { "type": "string" }
+      }
     }
   },
   "additionalProperties": false

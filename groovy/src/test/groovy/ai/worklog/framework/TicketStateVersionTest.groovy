@@ -26,11 +26,14 @@ class TicketStateVersionTest extends GroovyTestCase {
         workspace.deleteDir()
     }
 
-    void testDefaultStateHasSchemaVersionOne() {
-        assertEquals(1, manager.defaultState('TEST-1').schema_version)
+    void testDefaultStateHasCurrentSchemaVersion() {
+        Map state = manager.defaultState('TEST-1')
+        assertEquals(2, state.schema_version)
+        assertEquals('queued', state.lifecycle)
+        assertEquals('intake', state.phase)
     }
 
-    void testStateWithoutVersionLoadsAndSaveStampsVersionOne() {
+    void testStateWithoutVersionLoadsAndSaveStampsLegacyVersionOne() {
         Map legacy = manager.defaultState('TEST-1')
         legacy.remove('schema_version')
         JsonFiles.write(paths.ticketStateFile('TEST-1'), legacy)
@@ -48,7 +51,33 @@ class TicketStateVersionTest extends GroovyTestCase {
             manager.load('TEST-1')
         }
         assertTrue(message.startsWith('Unsupported ticket state schema_version 99 in '))
-        assertTrue(message.endsWith('; supported: [1]'))
+        assertTrue(message.endsWith('; supported: [1, 2]'))
+    }
+
+    void testMigrateAddsVersionTwoFieldsAndKeepsExistingValues() {
+        Map legacy = manager.defaultState('TEST-1')
+        ['schema_version', 'lifecycle', 'phase', 'jira', 'progress', 'sessions', 'summary_ste'].each {
+            legacy.remove(it)
+        }
+        legacy.summary = 'kept'
+        Map migrated = manager.migrateToCurrent(legacy)
+        assertEquals(2, migrated.schema_version)
+        assertEquals('queued', migrated.lifecycle)
+        assertEquals('kept', migrated.summary)
+        assertEquals([], new TicketStateValidator(repository).validate(migrated))
+    }
+
+    void testVersionTwoFieldsAreSettableAndValidated() {
+        Map state = manager.defaultState('TEST-1')
+        StatePatch patch = new StatePatch(repository)
+        patch.applyPath(state, 'lifecycle', 'active')
+        patch.applyPath(state, 'phase', 'plan')
+        patch.applyPath(state, 'sessions', [[tool: 'claude', id: 'abc']])
+        assertEquals('active', state.lifecycle)
+        String message = shouldFail(IllegalArgumentException) {
+            patch.applyPath(state, 'lifecycle', 'bogus')
+        }
+        assertTrue(message.startsWith('lifecycle must be one of'))
     }
 
     void testValidatorAcceptsSchemaVersion() {

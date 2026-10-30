@@ -144,6 +144,7 @@ class StateCommands {
             return 2
         }
         println "Saved: ${manager.paths.ticketStateFile(state.ticket_key.toString())}"
+        ai.worklog.framework.core.DashboardNotifier.notifyChange(manager.paths, state.ticket_key.toString())
         0
     }
 
