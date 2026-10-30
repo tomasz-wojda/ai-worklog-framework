@@ -1,5 +1,6 @@
 package ai.worklog.framework
 
+import ai.worklog.framework.adapters.JiraBoardAdapter
 import ai.worklog.framework.adapters.JiraIssueWriteAdapter
 import ai.worklog.framework.adapters.JiraOperatorAdapter
 import ai.worklog.framework.adapters.JsonWriteHttp
@@ -512,6 +513,119 @@ class JiraOperatorTest extends GroovyTestCase {
             System.setErr(original)
         }
         assertTrue(captured.toString('UTF-8').contains('comment-edit requires exactly one of <text...> or --file'))
+    }
+
+    void testBoardsPaginatesFiltersAndTruncates() {
+        rules.limits.board_page_size = 2
+        List<String> urls = []
+        String filters = '&projectKeyOrId=PROJ&name=Team%20Board'
+        Closure read = boardRouter(urls, [
+            ("/rest/agile/1.0/board?startAt=0&maxResults=2${filters}".toString()):
+                response([isLast: false, values: [boardEntry(1, 'kanban'), boardEntry(2, 'kanban')]]),
+            ("/rest/agile/1.0/board?startAt=2&maxResults=2${filters}".toString()):
+                response([isLast: true, values: [boardEntry(3, 'scrum'), boardEntry(4, 'kanban')]])
+        ])
+        JiraBoardAdapter boards = new JiraBoardAdapter(adapter(read), rules)
+        Map truncated = boards.boards('PROJ', 'Team Board', 3)
+        assertEquals(Status.READY, truncated.status)
+        assertEquals([1L, 2L, 3L], truncated.items*.id)
+        assertTrue(truncated.truncated)
+        assertEquals('PROJ', truncated.items[0].project_key)
+        assertEquals('Project', truncated.items[0].project_name)
+        assertEquals(2, urls.size())
+        assertTrue(urls[0].contains('projectKeyOrId=PROJ'))
+        assertTrue(urls[0].contains('name=Team%20Board'))
+        Map complete = boards.boards('PROJ', 'Team Board', 10)
+        assertEquals(4, complete.items.size())
+        assertNull(complete.truncated)
+    }
+
+    void testBoardsMalformedAndAuthFailure() {
+        JiraBoardAdapter malformed = new JiraBoardAdapter(
+            adapter({ method, url, headers, timeout -> response([isLast: true]) }),
+            rules
+        )
+        Map broken = malformed.boards(null, null, 5)
+        assertEquals(Status.ERROR, broken.status)
+        assertEquals('Malformed Jira board response', broken.message)
+        JiraBoardAdapter unauthorized = new JiraBoardAdapter(
+            adapter({ method, url, headers, timeout -> [code: 401, body: '', error: 'HTTP 401'] }),
+            rules
+        )
+        assertEquals(Status.BLOCKED, unauthorized.boards(null, null, 5).status)
+    }
+
+    void testBoardShowsColumnsStatusesAndActiveSprintsForScrum() {
+        List<String> urls = []
+        Map report = new JiraBoardAdapter(adapter(boardRouter(urls, boardResponses('scrum'))), rules).board(7L)
+        assertEquals(Status.READY, report.status)
+        assertEquals(7L, report.board_id)
+        Map item = report.items[0]
+        assertEquals('Board 7', item.name)
+        assertEquals('42', item.filter_id)
+        assertEquals(['To Do', 'Done'], item.columns*.name)
+        assertEquals(
+            [[id: '1', name: 'Open', category: 'new'], [id: '2', name: 'Blocked', category: 'indeterminate']],
+            item.columns[0].statuses
+        )
+        assertEquals(['1': 'To Do', '2': 'To Do', '3': 'Done'], item.status_ids)
+        assertEquals(['Sprint 5'], item.active_sprints*.name)
+        assertEquals('active', item.active_sprints[0].state)
+        assertTrue(urls.any { it.endsWith('/rest/agile/1.0/board/7/sprint?state=active') })
+        String rendered = JiraOperatorReport.fromPayload(report).renderJson(new Redaction(repository))
+        assertTrue(rendered.contains('"board_id": 7'))
+    }
+
+    void testBoardKanbanSkipsSprintsAndMissingBoardIsUserError() {
+        List<String> urls = []
+        Map report = new JiraBoardAdapter(adapter(boardRouter(urls, boardResponses('kanban'))), rules).board(7L)
+        assertEquals(Status.READY, report.status)
+        assertEquals([], report.items[0].active_sprints)
+        assertFalse(urls.any { it.contains('/sprint') })
+        Map missing = new JiraBoardAdapter(adapter(boardRouter([], [:])), rules).board(99L)
+        assertEquals('user', missing.error_kind)
+        assertEquals('Jira item not found', missing.message)
+    }
+
+    void testBoardCliRejectsInvalidIdAndLimit() {
+        ExitCodes exitCodes = new ExitCodes(repository)
+        assertEquals(exitCodes.userError, JiraCommands.run('board', ['abc'], repository, paths))
+        assertEquals(exitCodes.userError, JiraCommands.run('boards', ['--limit', '0'], repository, paths))
+        assertEquals(exitCodes.userError, JiraCommands.run('boards', ['--limit', '501'], repository, paths))
+    }
+
+    private static Map boardEntry(long id, String type) {
+        [id: id, name: "Board ${id}".toString(), type: type, location: [projectKey: 'PROJ', projectName: 'Project']]
+    }
+
+    private static Map boardResponses(String type) {
+        [
+            '/rest/agile/1.0/board/7': response(boardEntry(7, type)),
+            '/rest/agile/1.0/board/7/configuration': response([
+                filter: [id: '42'],
+                columnConfig: [columns: [
+                    [name: 'To Do', statuses: [[id: '1'], [id: '2']]],
+                    [name: 'Done', statuses: [[id: '3']]]
+                ]]
+            ]),
+            '/rest/api/2/status': response([
+                [id: '1', name: 'Open', statusCategory: [key: 'new']],
+                [id: '2', name: 'Blocked', statusCategory: [key: 'indeterminate']],
+                [id: '3', name: 'Closed', statusCategory: [key: 'done']]
+            ]),
+            '/rest/agile/1.0/board/7/sprint?state=active': response([
+                values: [[id: 5, name: 'Sprint 5', state: 'active', startDate: '2026-10-26', endDate: '2026-11-09', goal: '']]
+            ])
+        ]
+    }
+
+    private static Closure<Map> boardRouter(List<String> urls, Map<String, Map> responses) {
+        List<String> suffixes = responses.keySet().sort { -it.size() }
+        return { method, url, headers, timeout ->
+            urls << url
+            String match = suffixes.find { url.endsWith(it) }
+            match ? responses[match] : [code: 404, body: '', error: '']
+        }
     }
 
     private static final String FIRST_USER = 'first.last@example.internal'

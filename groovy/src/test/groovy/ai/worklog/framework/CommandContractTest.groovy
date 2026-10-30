@@ -222,10 +222,10 @@ commands:
         }
     }
 
-    void testJiraRenderingListsSeventeenActions() {
+    void testJiraRenderingListsNineteenActions() {
         List<Map> actions = contract.children(['service', 'jira'])
         String rendered = new UsageRenderer(contract).renderPath(['service', 'jira'])
-        assertEquals(17, actions.size())
+        assertEquals(19, actions.size())
         actions*.name.each { assertTrue(rendered.contains(it.toString())) }
         assertTrue(
             new UsageRenderer(contract)

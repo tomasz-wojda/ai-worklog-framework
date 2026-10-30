@@ -2142,6 +2142,62 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "boards",
+              "description": "List Jira agile boards",
+              "kind": "action",
+              "positionals": [],
+              "options": [
+                {"use": "json"},
+                {
+                  "name": "--project",
+                  "description": "Only boards of this project",
+                  "takes_value": true,
+                  "value": {
+                    "pattern": "^[A-Z][A-Z0-9_]*$",
+                    "help_values": "PROJECT"
+                  }
+                },
+                {
+                  "name": "--name",
+                  "description": "Only boards whose name contains this text",
+                  "takes_value": true,
+                  "value": {
+                    "help_values": "TEXT"
+                  }
+                },
+                {
+                  "name": "--limit",
+                  "description": "Maximum boards to include",
+                  "takes_value": true,
+                  "default_from": "limits.boards_default",
+                  "value": {
+                    "integer_min": 1,
+                    "integer_max": 500,
+                    "help_values": "COUNT"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "board",
+              "description": "Show one Jira agile board with columns, statuses, and active sprints",
+              "kind": "action",
+              "positionals": [
+                {
+                  "name": "board_id",
+                  "description": "Jira agile board ID",
+                  "required": true,
+                  "value": {
+                    "pattern": "^[1-9][0-9]*$",
+                    "help_values": "BOARD-ID"
+                  }
+                }
+              ],
+              "options": [
+                {"use": "json"}
+              ]
             }
           ]
         },

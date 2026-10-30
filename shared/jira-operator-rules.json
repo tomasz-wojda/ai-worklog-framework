@@ -18,7 +18,10 @@
     "assets_values_max": 50,
     "ci_list_default": 1000,
     "ci_list_max": 5000,
-    "ci_list_page_size": 200
+    "ci_list_page_size": 200,
+    "boards_default": 50,
+    "boards_max": 500,
+    "board_page_size": 50
   },
   "api_paths": {
     "issue": "/rest/api/2/issue",
@@ -31,7 +34,9 @@
     "assets_object_types": "/objectschema/{id}/objecttypes/flat",
     "assets_type_attributes": "/objecttype/{id}/attributes",
     "assets_object": "/object/{id}",
-    "assets_search": "/iql/objects"
+    "assets_search": "/iql/objects",
+    "agile_board": "/rest/agile/1.0/board",
+    "status": "/rest/api/2/status"
   },
   "api_params": {
     "assets_search_query": "iql"

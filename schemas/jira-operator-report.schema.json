@@ -9,7 +9,7 @@
       "enum": [
         "ticket", "summary", "rejected", "reporter", "tempo", "verify", "whoami", "log-time", "comment", "comment-edit",
         "assets-schemas", "assets-types", "assets-attributes", "assets-object", "assets-search",
-        "get-ci", "get-cis"
+        "get-ci", "get-cis", "boards", "board"
       ]
     },
     "fetched_at": {"type": "string", "format": "date-time"},
@@ -27,6 +27,7 @@
     "env": {"type": "string"},
     "schema_id": {"type": "integer"},
     "type_id": {"type": "integer"},
+    "board_id": {"type": "integer"},
     "dry_run": {"type": "boolean"},
     "applied": {"type": "boolean"},
     "truncated": {"type": "boolean"},

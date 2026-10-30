@@ -1,6 +1,7 @@
 package ai.worklog.framework.commands
 
 import ai.worklog.framework.adapters.JiraAssetsAdapter
+import ai.worklog.framework.adapters.JiraBoardAdapter
 import ai.worklog.framework.adapters.JiraIssueWriteAdapter
 import ai.worklog.framework.adapters.JiraOperatorAdapter
 import ai.worklog.framework.adapters.JsonWriteHttp
@@ -62,7 +63,8 @@ class JiraCommands {
             TempoOperatorAdapter tempo = new TempoOperatorAdapter(jira, new JsonWriteHttp(), rules)
             JiraAssetsAdapter assets = new JiraAssetsAdapter(jira, rules)
             JiraIssueWriteAdapter writer = new JiraIssueWriteAdapter(jira, new JsonWriteHttp(), rules)
-            Map payload = dispatch(action, parsed, jira, tempo, assets, writer, paths)
+            JiraBoardAdapter boards = new JiraBoardAdapter(jira, rules)
+            Map payload = dispatch(action, parsed, jira, tempo, assets, writer, boards, paths)
             JiraOperatorReport report = JiraOperatorReport.fromPayload(payload)
             print json ? report.renderJson(redaction) : report.renderHuman(redaction)
             return JiraOperatorReport.exitCodeFor(report, exitCodes)
@@ -110,6 +112,7 @@ class JiraCommands {
         TempoOperatorAdapter tempo,
         JiraAssetsAdapter assets,
         JiraIssueWriteAdapter writer,
+        JiraBoardAdapter boards,
         FrameworkPaths paths
     ) {
         switch (action) {
@@ -172,6 +175,14 @@ class JiraCommands {
                     parsed.value('--env')?.toString(),
                     parsed.value('--limit').toString() as int
                 )
+            case 'boards':
+                return boards.boards(
+                    parsed.value('--project')?.toString(),
+                    parsed.value('--name')?.toString(),
+                    parsed.value('--limit').toString() as int
+                )
+            case 'board':
+                return boards.board(parsed.positional('board_id') as long)
             default:
                 throw new UsageError(
                     "Unknown action for service jira: ${action}",

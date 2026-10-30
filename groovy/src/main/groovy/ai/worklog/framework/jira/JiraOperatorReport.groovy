@@ -19,6 +19,7 @@ class JiraOperatorReport extends OperatorReport {
     String env
     Integer schemaId
     Integer typeId
+    Long boardId
     boolean dryRun
     boolean applied
     boolean truncated
@@ -34,6 +35,7 @@ class JiraOperatorReport extends OperatorReport {
             env: payload.env?.toString(),
             schemaId: payload.schema_id == null ? null : payload.schema_id as Integer,
             typeId: payload.type_id == null ? null : payload.type_id as Integer,
+            boardId: payload.board_id == null ? null : payload.board_id as Long,
             dryRun: payload.dry_run as boolean,
             applied: payload.applied as boolean,
             truncated: payload.truncated as boolean,
@@ -73,6 +75,9 @@ class JiraOperatorReport extends OperatorReport {
         if (typeId != null) {
             result.type_id = typeId
         }
+        if (boardId != null) {
+            result.board_id = boardId
+        }
         if (operation in WRITE_OPERATIONS) {
             result.dry_run = dryRun
             result.applied = applied
@@ -109,6 +114,9 @@ class JiraOperatorReport extends OperatorReport {
         }
         if (typeId != null) {
             output.append("  Type: ${typeId}").append(System.lineSeparator())
+        }
+        if (boardId != null) {
+            output.append("  Board: ${boardId}").append(System.lineSeparator())
         }
         if (env) {
             output.append("  Env: ${env}").append(System.lineSeparator())

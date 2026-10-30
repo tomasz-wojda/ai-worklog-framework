@@ -61,3 +61,15 @@ serves AQL sets `api_paths.assets_search` to `/aql/objects` and
 `api_params.assets_search_query` to `qlQuery` in
 `integrations/jira/jira-operator.json`, which can also override `ci.fields`,
 `ci.search_iql`, and `ci.env_search_iql`.
+
+```bash
+ai-worklog service jira boards --project PROJ
+ai-worklog service jira boards --name "Team Board" --limit 20
+ai-worklog service jira board 123
+```
+
+Board reads are GET-only calls to the Agile REST API at
+`/rest/agile/1.0/board`. `boards` lists boards with type and project. `board`
+shows one board's columns with their statuses and, for scrum boards, the active
+sprints. Its `status_ids` output has the same shape as `board.status_ids` in
+`integrations/jira/jira-operator.json` and can be copied there.
