@@ -134,7 +134,9 @@
           "description": { "type": "string" },
           "status": { "type": "string", "enum": ["active", "resolved"] },
           "owner": { "type": "string" },
-          "since": { "type": "string", "format": "date-time" }
+          "since": { "type": "string", "format": "date-time" },
+          "resolution": { "type": "string" },
+          "resolved_at": { "type": "string", "format": "date-time" }
         }
       }
     },
