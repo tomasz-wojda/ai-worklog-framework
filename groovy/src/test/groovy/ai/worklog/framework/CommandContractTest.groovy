@@ -93,14 +93,14 @@ class CommandContractTest extends GroovyTestCase {
     void testMainCommandsAndContractCommandsAgree() {
         Set expected = [
             'workspace', 'config', 'catalog', 'ticket', 'state', 'preflight', 'reconcile',
-            'service', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'dashboard', 'help'
+            'service', 'day', 'delivery', 'closeout', 'diag', 'toolchain', 'dashboard', 'memory', 'help'
         ] as Set
         assertEquals(expected, contract.commands()*.name as Set)
     }
 
     void testRootRenderingMatchesPreviousMainHelp() {
         String expected = '''usage: ai-worklog [--runtime groovy|python] [--workspace PATH] [-w NAME] [--workspace-name NAME] [--version]
-                  {config,workspace,catalog,ticket,state,preflight,reconcile,service,day,delivery,closeout,diag,toolchain,dashboard} ...
+                  {config,workspace,catalog,ticket,state,preflight,reconcile,service,day,delivery,closeout,diag,toolchain,dashboard,memory} ...
 
 DevOps daily workflow automation framework
 
@@ -119,6 +119,7 @@ commands:
   diag         Diagnostic packs
   toolchain    Python/Java/Groovy detection and routing
   dashboard    Local ticket dashboard (start, status, stop, open)
+  memory       Local memory service (serve, status, stop, doctor, reindex, eval)
 '''
         assertEquals(expected, new UsageRenderer(contract).renderRoot())
     }

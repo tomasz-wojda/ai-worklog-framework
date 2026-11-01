@@ -3209,6 +3209,12 @@
       "subcommands": []
     },
     {
+      "name": "memory",
+      "description": "Local memory service (serve, status, stop, doctor, reindex, eval)",
+      "kind": "command",
+      "subcommands": []
+    },
+    {
       "name": "help",
       "description": "Command usage and machine-readable descriptions",
       "kind": "command",

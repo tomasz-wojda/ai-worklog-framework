@@ -7,6 +7,7 @@ import ai.worklog.framework.commands.CatalogCommands
 import ai.worklog.framework.commands.CloseoutCommands
 import ai.worklog.framework.commands.DailyCommands
 import ai.worklog.framework.commands.DashboardCommands
+import ai.worklog.framework.commands.MemoryCommands
 import ai.worklog.framework.commands.DeliveryCommands
 import ai.worklog.framework.commands.DiagnosticsCommands
 import ai.worklog.framework.commands.GlobalConfigCommands
@@ -107,6 +108,8 @@ class Main {
                 return ToolchainCommands.run(action, args, frameworkRoot, config)
             case 'dashboard':
                 return DashboardCommands.run(action, args, paths)
+            case 'memory':
+                return MemoryCommands.run(action, args, paths)
             case 'reconcile':
                 return ReconciliationCommands.run(
                     action, args, frameworkRoot, paths, config, catalog, states
