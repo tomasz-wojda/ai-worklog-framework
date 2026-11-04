@@ -139,21 +139,38 @@ class TempoOperatorAdapter {
             )
         }
         String url = "${credentials.url.replaceAll(/\/+$/, '')}${jira.apiPath('tempo_worklogs')}"
+        Map userResult = jira.get('/rest/api/2/myself', credentials)
+        String authorName = ''
+        if (!userResult.failure && userResult.data instanceof Map) {
+            Map user = (Map) userResult.data
+            authorName = user.name?.toString() ?: user.key?.toString() ?: ''
+        }
+        String started = date.contains('T') ? date : "${date}T10:00:00.000"
+        Map payload = [
+            comment: comment,
+            dateStarted: started,
+            timeSpentSeconds: seconds,
+            issue: [key: ticketKey],
+            worklogAttributes: [[key: '_Kategoria_', value: 'DEVOPS']]
+        ]
+        if (authorName) {
+            payload.author = [name: authorName]
+        }
         Map response = writeHttp.post(
             url,
             jira.headers(credentials),
-            [
-                issueKey: ticketKey,
-                dateStarted: date,
-                timeSpentSeconds: seconds,
-                comment: comment
-            ],
+            payload,
             jira.timeout(),
             ((Map) rules.limits).error_body_max_characters as int
         )
         int code = (response.code ?: 0) as int
         if (code < 200 || code >= 300) {
             Status status = code in [401, 403] ? Status.BLOCKED : Status.ERROR
+            String detail = response.body?.toString()?.trim() ?: ''
+            String message = code ? "Tempo returned HTTP ${code}" : 'Tempo request failed'
+            if (detail) {
+                message = "${message}: ${detail}"
+            }
             return JiraOperatorAdapter.report(
                 'log-time',
                 status,
@@ -163,7 +180,7 @@ class TempoOperatorAdapter {
                     date: date,
                     dry_run: false,
                     applied: false,
-                    message: code ? "Tempo returned HTTP ${code}" : 'Tempo request failed'
+                    message: message
                 ]
             )
         }

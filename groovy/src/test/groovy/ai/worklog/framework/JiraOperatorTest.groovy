@@ -214,7 +214,12 @@ class JiraOperatorTest extends GroovyTestCase {
         )
         Map report = tempo.logTime('PROJ-1', '2026-09-09', 3600, 'Work', true)
         assertEquals(1, writes)
-        assertEquals('PROJ-1', posted.issueKey)
+        assertEquals('PROJ-1', posted.issue.key)
+        assertEquals('2026-09-09T10:00:00.000', posted.dateStarted)
+        assertEquals(3600, posted.timeSpentSeconds)
+        assertEquals('Work', posted.comment)
+        assertEquals('_Kategoria_', posted.worklogAttributes[0].key)
+        assertEquals('DEVOPS', posted.worklogAttributes[0].value)
         assertEquals(Status.READY, report.status)
         assertTrue(report.applied)
     }
